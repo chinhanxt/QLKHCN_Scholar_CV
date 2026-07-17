@@ -1,0 +1,186 @@
+[project]
+name = "edu_ecosystem"
+version = "0.1.0"
+description = "Django Management System Boilerplate"
+readme = "README.md"
+license = { text = "Not open source" }
+authors = [
+  { name = "Anh", email = "admin@example.com" },
+]
+requires-python = "==3.13.*"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+  # Django
+  "django>=5.1,<7.0",
+  "django-environ>=0.13.0",
+  "django-model-utils>=5.0.0",
+  "django-redis>=6.0.0",
+  "whitenoise>=6.12.0",
+  "gunicorn>=25.1.0",
+  "psycopg[c]>=3.3.0",
+  "argon2-cffi>=25.1.0",
+  "pillow>=12.1.0",
+  "python-slugify>=8.0.0",
+  "hiredis>=3.3.0",
+  "redis>=7.3.0",
+  # Django REST Framework
+  "djangorestframework>=3.15.0",
+  "djangorestframework-simplejwt>=5.4.0",
+  "django-filter>=25.0",
+  "django-cors-headers>=4.7.0",
+  "drf-spectacular>=0.28.0",
+  # Admin UI
+  "django-unfold>=0.50.0",
+  # Celery
+  "celery>=5.6.0",
+  "django-celery-beat>=2.9.0",
+  "flower>=2.0.0",
+  # Observability
+  "django-structlog>=9.1.0",
+  "django-health-check>=3.18.0",
+  # Audit
+  "django-auditlog>=3.0.0",
+  # Channels
+  "channels>=4.2.0",
+  "channels-redis>=4.2.0",
+  "daphne>=4.1.0",
+  # Scholarly and crawling dependencies
+  "arrow",
+  "beautifulsoup4",
+  "bibtexparser",
+  "deprecated",
+  "fake_useragent",
+  "free-proxy",
+  "httpx",
+  "python-dotenv",
+  "requests[socks]",
+  "selenium",
+  "stem",
+]
+
+
+[dependency-groups]
+dev = [
+  "coverage>=7.13.0",
+  "django-coverage-plugin>=3.2.0",
+  "django-debug-toolbar>=6.2.0",
+  "django-extensions>=4.1",
+  "factory-boy>=3.3.0",
+  "ipdb>=0.13.0",
+  "pre-commit>=4.5.0",
+  "psycopg[c]>=3.3.0",
+  "pytest>=9.0.0",
+  "pytest-django>=4.12.0",
+  "pytest-sugar>=1.1.0",
+  "ruff>=0.15.0",
+  "watchfiles>=1.1.0",
+  "werkzeug[watchdog]>=3.1.0",
+  "sphinx>=9.1.0",
+  "sphinx-autobuild>=2025.8.0",
+]
+
+[tool.ruff]
+extend-exclude = [
+  "*/migrations/*.py",
+  "staticfiles/*",
+]
+
+lint.select = [
+  "A",
+  "ASYNC",
+  "B",
+  "BLE",
+  "C4",
+  "C90",
+  "COM",
+  "DJ",
+  "DTZ",
+  "E",
+  "EM",
+  "ERA",
+  "EXE",
+  "F",
+  "FA",
+  "FBT",
+  "FLY",
+  "G",
+  "I",
+  "ICN",
+  "INP",
+  "INT",
+  "ISC",
+  "N",
+  "PD",
+  "PERF",
+  "PGH",
+  "PIE",
+  "PL",
+  "PT",
+  "PTH",
+  "PYI",
+  "Q",
+  "RET",
+  "RSE",
+  "RUF",
+  "S",
+  "SIM",
+  "SLF",
+  "SLOT",
+  "T10",
+  "T20",
+  "TC",
+  "TID",
+  "TRY",
+  "UP",
+  "W",
+  "YTT",
+]
+lint.ignore = [
+  "RUF012",
+  "S101",
+  "SIM102",
+]
+lint.isort.force-single-line = true
+lint.isort.known-first-party = ["apps", "config"]
+
+[tool.pyproject-fmt]
+keep_full_version = true
+
+# ==== pytest ====
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--ds=config.settings.test --reuse-db --import-mode=importlib"
+python_files = [
+  "tests.py",
+  "test_*.py",
+]
+
+# ==== Coverage ====
+
+[tool.coverage.run]
+include = ["apps/**"]
+omit = ["*/migrations/*", "*/tests/*"]
+plugins = ["django_coverage_plugin"]
+
+# ==== djLint ====
+
+[tool.djlint]
+blank_line_after_tag = "load,extends"
+close_void_tags = true
+format_css = true
+format_js = true
+ignore = "H006,H030,H031,T002"
+include = "H017,H035"
+indent = 2
+max_line_length = 119
+profile = "django"
+
+[tool.djlint.css]
+indent_size = 2
+
+[tool.djlint.js]
+indent_size = 2

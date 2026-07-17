@@ -1,0 +1,83 @@
+volumes:
+  edu_ecosystem_local_postgres_data: {}
+  edu_ecosystem_local_postgres_data_backups: {}
+  edu_ecosystem_local_redis_data: {}
+
+services:
+  django: &django
+    build:
+      context: .
+      dockerfile: ./compose/local/django/Dockerfile
+    image: edu_ecosystem_local_django
+    container_name: edu_ecosystem_local_django
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    volumes:
+      - /app/.venv
+      - .:/app:z
+    env_file:
+      - ./.envs/.local/.django
+      - ./.envs/.local/.postgres
+    ports:
+      - '8000:8000'
+    command: /start
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/production/postgres/Dockerfile
+    image: edu_ecosystem_production_postgres
+    container_name: edu_ecosystem_local_postgres
+    volumes:
+      - edu_ecosystem_local_postgres_data:/var/lib/postgresql/data
+      - edu_ecosystem_local_postgres_data_backups:/backups
+    env_file:
+      - ./.envs/.local/.postgres
+
+  mailpit:
+    image: docker.io/axllent/mailpit:latest
+    container_name: edu_ecosystem_local_mailpit
+    ports:
+      - "8025:8025"
+
+  redis:
+    image: docker.io/redis:7.2
+    container_name: edu_ecosystem_local_redis
+    volumes:
+      - edu_ecosystem_local_redis_data:/data
+
+  celeryworker:
+    <<: *django
+    image: edu_ecosystem_local_celeryworker
+    container_name: edu_ecosystem_local_celeryworker
+    depends_on:
+      - redis
+      - postgres
+      - mailpit
+    ports: []
+    command: /start-celeryworker
+
+  celerybeat:
+    <<: *django
+    image: edu_ecosystem_local_celerybeat
+    container_name: edu_ecosystem_local_celerybeat
+    depends_on:
+      - redis
+      - postgres
+      - mailpit
+    ports: []
+    command: /start-celerybeat
+
+  flower:
+    <<: *django
+    image: edu_ecosystem_local_flower
+    container_name: edu_ecosystem_local_flower
+    ports:
+      - '5555:5555'
+    command: /start-flower
+  # NOTE: The React SPA frontend is intentionally NOT a Docker service.
+  # It runs locally on the host via `npm run dev` (see `make front`), so adding
+  # an npm dependency does not require rebuilding/restarting any container.
+  # Vite proxies "/api" to Django on http://localhost:8000 (published above).

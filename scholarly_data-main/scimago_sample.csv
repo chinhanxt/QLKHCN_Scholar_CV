@@ -1,0 +1,11 @@
+Rank;Sourceid;Title;Type;Issn;SJR;SJR Best Quartile;H-index;Total Docs.;Country;Publisher;Categories
+1;10001;Nature;journal;00280836;20.5;Q1;1200;1200;United Kingdom;Nature Publishing Group;Multidisciplinary
+2;10002;Journal of Machine Learning Research;journal;15324435;4.2;Q1;180;300;United States;Microtome Publishing;Computer Science, Artificial Intelligence
+3;10003;IEEE Transactions on Pattern Analysis and Machine Intelligence;journal;01628828;4.5;Q1;350;250;United States;IEEE Computer Society;Computer Science, Artificial Intelligence
+4;10004;Bioinformatics;journal;13674803;1.8;Q1;220;1000;United Kingdom;Oxford University Press;Computational Biology
+5;10005;ACM Computing Surveys;journal;03600300;2.5;Q1;140;60;United States;ACM;Computer Science, General
+6;10006;Neural Networks;journal;08936080;1.5;Q2;120;200;United Kingdom;Elsevier;Computer Science, Cognitive Science
+7;10007;IEEE Transactions on Neural Networks and Learning Systems;journal;2162237X;3.8;Q1;190;400;United States;IEEE;Computer Science, Artificial Intelligence
+8;10008;Pattern Recognition;journal;00313203;1.9;Q1;160;500;United Kingdom;Elsevier;Computer Science, Computer Vision
+9;10009;Knowledge-Based Systems;journal;09507051;1.4;Q1;110;600;Netherlands;Elsevier;Computer Science, Artificial Intelligence
+10;10010;Information Sciences;journal;00200255;1.6;Q1;180;700;United States;Elsevier;Computer Science, Information Systems

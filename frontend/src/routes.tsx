@@ -1,0 +1,40 @@
+import { createBrowserRouter } from 'react-router-dom'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { AppLayout } from '@/components/layout/AppLayout'
+import { LoginPage } from '@/pages/LoginPage'
+import { DashboardPage } from '@/pages/DashboardPage'
+import { UsersPage } from '@/pages/UsersPage'
+import { ScholarScraperPage } from '@/pages/ScholarScraperPage'
+import { BioxbioCrawlerPage } from '@/pages/BioxbioCrawlerPage'
+import { ScimagoCrawlerPage } from '@/pages/ScimagoCrawlerPage'
+import { ClarivateCrawlerPage } from '@/pages/ClarivateCrawlerPage'
+import { ScoreIntegratorPage } from '@/pages/ScoreIntegratorPage'
+import { ProfileManagerPage } from '@/pages/ProfileManagerPage'
+import { SettingsPage } from '@/pages/SettingsPage'
+import { DatabasePage } from '@/pages/DatabasePage'
+import { HelpPage } from '@/pages/HelpPage'
+
+export const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
+  {
+    element: <ProtectedRoute />,
+    children: [
+      {
+        element: <AppLayout />,
+        children: [
+          { path: '/', element: <DashboardPage /> },
+          { path: '/scholar/scraper', element: <ScholarScraperPage /> },
+          { path: '/scholar/bioxbio', element: <BioxbioCrawlerPage /> },
+          { path: '/scholar/scimago', element: <ScimagoCrawlerPage /> },
+          { path: '/scholar/clarivate', element: <ClarivateCrawlerPage /> },
+          { path: '/scholar/integrator', element: <ScoreIntegratorPage /> },
+          { path: '/scholar/profiles', element: <ProfileManagerPage /> },
+          { path: '/users', element: <UsersPage /> },
+          { path: '/settings', element: <SettingsPage /> },
+          { path: '/database', element: <DatabasePage /> },
+          { path: '/help', element: <HelpPage /> },
+        ],
+      },
+    ],
+  },
+])
