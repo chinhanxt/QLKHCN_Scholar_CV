@@ -601,9 +601,17 @@ export function ScholarScraperPage() {
                         <span className="font-medium">WoS Core:</span>
                         <span>{profile.publications.filter(p => p.wos !== 'N/A').length}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 bg-emerald-50 border border-[#b8d4e9] rounded-lg px-2.5 py-0.5 text-emerald-700">
+                      <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-0.5 text-emerald-700">
                         <span className="font-medium">Q1/Q2 SCImago:</span>
                         <span>{profile.publications.filter(p => p.sjr_q === 'Q1' || p.sjr_q === 'Q2').length}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-0.5 text-sky-700">
+                        <span className="font-medium">Bài có IF:</span>
+                        <span>{profile.publications.filter(p => p.if_val !== 'N/A').length}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-100 rounded-lg px-2.5 py-0.5 text-purple-700">
+                        <span className="font-medium">Có cả IF & SJR:</span>
+                        <span>{profile.publications.filter(p => p.if_val !== 'N/A' && p.sjr_q !== 'N/A').length}</span>
                       </div>
                     </div>
                   </div>
