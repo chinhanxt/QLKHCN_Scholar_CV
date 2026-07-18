@@ -169,3 +169,24 @@ class ClarivateJournalSerializer(serializers.ModelSerializer):
         ]
 
 
+class UnifiedCrawlRequestSerializer(serializers.Serializer):
+    # SCImago
+    scimago_years = serializers.ListField(
+        child=serializers.IntegerField(), required=False, allow_null=True,
+        help_text="Danh sách năm cần cào (trống = toàn bộ từ 1999)"
+    )
+    scimago_workers = serializers.IntegerField(default=5, min_value=1, max_value=20)
+    scimago_delay   = serializers.FloatField(default=1.0, min_value=0.1, max_value=10.0)
+
+    # Clarivate
+    clarivate_max_pages = serializers.IntegerField(required=False, allow_null=True,
+        help_text="Giới hạn trang (trống = tất cả)")
+    clarivate_workers   = serializers.IntegerField(default=3, min_value=1, max_value=10)
+    clarivate_delay     = serializers.FloatField(default=1.5, min_value=0.1, max_value=10.0)
+
+    # BioxBio
+    bioxbio_start_url = serializers.URLField(default="https://www.bioxbio.com/journal/")
+    bioxbio_workers   = serializers.IntegerField(default=10, min_value=1, max_value=30)
+    bioxbio_delay     = serializers.FloatField(default=2.0, min_value=0.1, max_value=10.0)
+
+

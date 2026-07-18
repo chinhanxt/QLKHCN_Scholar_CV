@@ -441,8 +441,18 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_workers=1
         return {'error': f"Failed to connect to BioxBio: {str(e)}"}
         
     subject_links = []
-    if 'subject/' in start_url or start_url.rstrip('/').endswith('/journal'):
+    if 'subject/' in start_url:
         subject_links = [start_url]
+    elif start_url.rstrip('/').endswith('/journal'):
+        logger.info("Smart BioxBio URL detected: looking for letter links (A-Z)...")
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            full_href = href if href.startswith('http') else f"https://www.bioxbio.com{href}"
+            path = full_href.replace("https://www.bioxbio.com", "").rstrip('/')
+            parts = path.split('/')
+            if len(parts) >= 3 and parts[1] == 'journal' and len(parts[2]) == 1 and parts[2].isalpha():
+                subject_links.append(full_href)
+        subject_links = sorted(list(set(subject_links)))
     else:
         for a in soup.find_all('a', href=True):
             href = a['href']
@@ -454,9 +464,17 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_workers=1
     if not subject_links:
         subject_links = [start_url]
 
+    import random
+    import threading
+
     total_subjects = len(subject_links)
     logger.info(f"Found {total_subjects} subjects to crawl.")
     journals_scraped_count = 0
+
+    crawler_state = {
+        'sleep_until': 0.0
+    }
+    state_lock = threading.Lock()
 
     for sub_idx, target_url in enumerate(subject_links):
         subject_name = target_url.rstrip('/').split('/')[-1]
@@ -475,11 +493,27 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_workers=1
         self.update_state(state='PROGRESS', meta={'message': f"Crawling subject: {subject_name} (Page {page_num})", 'progress': int(5 + (sub_idx / total_subjects) * 90)})
         
         while True:
+            # Check circuit breaker before requesting listing page
+            while True:
+                with state_lock:
+                    sleep_needed = crawler_state['sleep_until'] - time.time()
+                if sleep_needed > 0:
+                    logger.warning(f"BioxBio Circuit Breaker active. Thread sleeping for {sleep_needed:.1f}s...")
+                    time.sleep(sleep_needed)
+                else:
+                    break
+
             sep = '&' if '?' in target_url else '?'
             page_url = f"{target_url}{sep}page={page_num}"
             
             try:
                 page_res = requests.get(page_url, headers=headers, timeout=15)
+                if page_res.status_code in [403, 429]:
+                    with state_lock:
+                        crawler_state['sleep_until'] = time.time() + 30.0
+                    logger.warning(f"Rate limited on index page {page_url}. Pausing crawler for 30s...")
+                    time.sleep(30)
+                    continue
                 if page_res.status_code != 200:
                     break
                 page_soup = BeautifulSoup(page_res.text, 'html.parser')
@@ -516,8 +550,26 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_workers=1
             if active_batch:
                 def fetch_detail(item):
                     title_str, link_str = item
+                    
+                    # Wait if circuit breaker is active
+                    while True:
+                        with state_lock:
+                            sleep_needed = crawler_state['sleep_until'] - time.time()
+                        if sleep_needed > 0:
+                            time.sleep(sleep_needed)
+                        else:
+                            break
+                            
+                    # Add random human-like jitter
+                    time.sleep(random.uniform(delay * 0.25, delay * 0.75))
+
                     try:
                         res_det = requests.get(link_str, headers=headers, timeout=15)
+                        if res_det.status_code in [403, 429]:
+                            with state_lock:
+                                crawler_state['sleep_until'] = time.time() + 30.0
+                            logger.error(f"Rate limit / IP block (Status {res_det.status_code}) on {link_str}. Pausing crawler for 30s...")
+                            return None
                         if res_det.status_code != 200:
                             return None
                         soup_det = BeautifulSoup(res_det.text, 'html.parser')
@@ -639,14 +691,24 @@ def crawl_scimago_task(self, years=None, max_workers=5, delay=1.0):
         self.update_state(state='PROGRESS', meta={'message': f"Downloading SCImago CSV for year {year}...", 'progress': int((idx / total_years) * 100)})
         
         url = f"https://www.scimagojr.com/journalrank.php?year={year}&out=xls"
-        try:
-            r = requests.get(url, headers=headers, timeout=60)
-            if r.status_code != 200:
-                logger.error(f"Failed to download SCImago CSV for {year}: Status {r.status_code}")
-                continue
+        r = None
+        for attempt in range(3):
+            try:
+                r = requests.get(url, headers=headers, timeout=60)
+                if r.status_code == 200:
+                    break
+                logger.warning(f"Failed to download SCImago CSV for {year}: Status {r.status_code}. Retrying in {(attempt+1)*5}s...")
+                time.sleep((attempt + 1) * 5)
+            except Exception as e:
+                logger.warning(f"Failed to download SCImago CSV for {year}: {e}. Retrying in {(attempt+1)*5}s...")
+                time.sleep((attempt + 1) * 5)
                 
+        if not r or r.status_code != 200:
+            logger.error(f"Failed to download SCImago CSV for {year} after 3 attempts.")
+            continue
+            
+        try:
             import pandas as pd
-            # SCImago file uses semicolon separation
             df = pd.read_csv(io.StringIO(r.text), sep=';', low_memory=False)
         except Exception as e:
             logger.exception(f"Error parsing SCImago CSV for year {year}")
@@ -799,6 +861,7 @@ def crawl_clarivate_task(self, max_pages=None, max_workers=3, delay=1.5):
     """
     Celery task to scrape the Clarivate Web of Science Master Journal List page-by-page.
     """
+    import random
     self.update_state(state='PROGRESS', meta={'message': 'Connecting to Clarivate REST API...', 'progress': 5})
     url = "https://mjl.clarivate.com/api/mjl/jprof/public/rank-search"
     headers = {
@@ -863,17 +926,35 @@ def crawl_clarivate_task(self, max_pages=None, max_workers=3, delay=1.5):
     processed_pages = 0
     data_lock = threading.Lock()
     
+    crawler_state = {
+        'sleep_until': 0.0
+    }
+    state_lock = threading.Lock()
+    
     def fetch_page(page_num):
         page_payload = payload.copy()
         page_payload["pageNum"] = page_num
         page_payload["pageSize"] = page_size
         page_payload["searchIdentifier"] = str(hashlib.md5(f"{time.time()}_{page_num}".encode()).hexdigest())
         
+        while True:
+            with state_lock:
+                sleep_needed = crawler_state['sleep_until'] - time.time()
+            if sleep_needed > 0:
+                time.sleep(sleep_needed)
+            else:
+                break
+                
         if delay > 0:
-            time.sleep(delay)
+            time.sleep(random.uniform(delay * 0.25, delay * 0.75))
             
         try:
             res = requests.post(url, headers=headers, json=page_payload, timeout=20)
+            if res.status_code in [403, 429]:
+                with state_lock:
+                    crawler_state['sleep_until'] = time.time() + 30.0
+                logger.error(f"Clarivate API rate limited (Status {res.status_code}). Pausing for 30s...")
+                return page_num, None
             if res.status_code == 200:
                 return page_num, res.json()
         except Exception as e:
@@ -959,7 +1040,7 @@ def crawl_clarivate_task(self, max_pages=None, max_workers=3, delay=1.5):
                 
             scraped_count += len(records_to_create)
             
-    return {'status': 'success', 'scraped_journals': scraped_count}
+    return {'status': 'success', 'scraped_journals': scraped_count, 'total_expected': total_records}
 
 
 # ==============================================================================
@@ -1133,3 +1214,192 @@ def integrate_scores_task(self):
 
     logger.info(f"Integrated Academic Scores finished successfully. Processed {total_count} journals.")
     return {'status': 'success', 'integrated_count': total_count}
+
+
+# ==============================================================================
+# 8. UNIFIED PARALLEL COORDINATOR TASK
+# ==============================================================================
+@shared_task(bind=True)
+def crawl_and_integrate_all_task(
+    self,
+    scimago_years=None,
+    clarivate_max_pages=None,
+    clarivate_workers=3,
+    clarivate_delay=1.5,
+    scimago_workers=5,
+    scimago_delay=1.0,
+    bioxbio_start_url="https://www.bioxbio.com/journal/",
+    bioxbio_workers=10,
+    bioxbio_delay=2.0,
+):
+    """
+    Task điều phối tổng hợp:
+    1. Khởi chạy song song 3 task cào (Clarivate, SCImago, BioxBio).
+    2. Poller Loop: Kiểm tra tiến độ 5s/lần, cập nhật metadata.
+    3. Self-Healing: Đếm số lượng DB, cào bù nếu thiếu.
+    4. Kích hoạt integrate_scores_task khi đủ 100%.
+    """
+    from celery.result import AsyncResult
+
+    self.update_state(state='PROGRESS', meta={
+        'message': 'Khởi chạy 3 tiến trình cào dữ liệu song song...',
+        'progress': 2,
+        'clarivate': {'status': 'PENDING', 'progress': 0, 'message': ''},
+        'scimago':   {'status': 'PENDING', 'progress': 0, 'message': ''},
+        'bioxbio':   {'status': 'PENDING', 'progress': 0, 'message': ''},
+        'mapping':   {'status': 'PENDING', 'progress': 0, 'message': ''},
+    })
+
+    # --- Phase 1: Launch 3 crawlers in parallel ---
+    cl_task = crawl_clarivate_task.delay(
+        max_pages=clarivate_max_pages,
+        max_workers=clarivate_workers,
+        delay=clarivate_delay
+    )
+    sc_task = crawl_scimago_task.delay(
+        years=scimago_years,
+        max_workers=scimago_workers,
+        delay=scimago_delay
+    )
+    bb_task = crawl_bioxbio_task.delay(
+        start_url=bioxbio_start_url,
+        max_workers=bioxbio_workers,
+        delay=bioxbio_delay
+    )
+
+    task_ids = {'clarivate': cl_task.id, 'scimago': sc_task.id, 'bioxbio': bb_task.id}
+
+    # --- Phase 2: Poller Loop ---
+    POLL_INTERVAL = 5  # seconds
+    MAX_WAIT = 60 * 60 * 12  # 12 giờ timeout tối đa
+    waited = 0
+
+    while waited < MAX_WAIT:
+        time.sleep(POLL_INTERVAL)
+        waited += POLL_INTERVAL
+
+        cl_res = AsyncResult(task_ids['clarivate'])
+        sc_res = AsyncResult(task_ids['scimago'])
+        bb_res = AsyncResult(task_ids['bioxbio'])
+
+        def _get_info(res):
+            status = res.status
+            info = res.info or {} if status == 'PROGRESS' else {}
+            if not isinstance(info, dict):
+                info = {}
+            progress = info.get('progress', 0) if status == 'PROGRESS' else \
+                       (100 if status == 'SUCCESS' else 0)
+            message = info.get('message', '') if status == 'PROGRESS' else status
+            return {'status': status, 'progress': progress, 'message': message}
+
+        cl_info = _get_info(cl_res)
+        sc_info = _get_info(sc_res)
+        bb_info = _get_info(bb_res)
+
+        avg_crawler_pct = (cl_info['progress'] + sc_info['progress'] + bb_info['progress']) // 3
+        master_pct = int(avg_crawler_pct * 0.75)  # Crawlers chiếm 0–75%
+
+        self.update_state(state='PROGRESS', meta={
+            'message': f"Đang cào song song... Tiến độ trung bình: {avg_crawler_pct}%",
+            'progress': master_pct,
+            'clarivate': cl_info,
+            'scimago': sc_info,
+            'bioxbio': bb_info,
+            'mapping': {'status': 'PENDING', 'progress': 0, 'message': 'Đang chờ hoàn tất giai đoạn 1...'},
+        })
+
+        all_done = all(r.status in ('SUCCESS', 'FAILURE')
+                       for r in [cl_res, sc_res, bb_res])
+        if all_done:
+            break
+
+    # --- Phase 3: Self-Healing Check ---
+    self.update_state(state='PROGRESS', meta={
+        'message': 'Đang kiểm tra số lượng dữ liệu đã cào...',
+        'progress': 76,
+        'clarivate': {'status': 'SUCCESS', 'progress': 100, 'message': 'Checking...'},
+        'scimago':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Checking...'},
+        'bioxbio':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Checking...'},
+        'mapping':   {'status': 'PENDING', 'progress': 0, 'message': 'Đang kiểm tra dữ liệu...'},
+    })
+
+    # Clarivate self-heal: So sánh DB count với totalRecords từ API
+    cl_res = AsyncResult(task_ids['clarivate'])
+    cl_result = cl_res.result if cl_res.status == 'SUCCESS' else {}
+    if not isinstance(cl_result, dict):
+        cl_result = {}
+    cl_expected = cl_result.get('total_expected', 0)
+    cl_in_db = ClarivateJournal.objects.count()
+
+    if cl_expected > 0 and cl_in_db < cl_expected * 0.98:  # Chấp nhận sai lệch 2%
+        logger.warning(f"Self-Healing Clarivate: DB={cl_in_db}, Expected={cl_expected}. Đang cào bù...")
+        retry_cl = crawl_clarivate_task.delay(
+            max_pages=clarivate_max_pages,
+            max_workers=clarivate_workers,
+            delay=clarivate_delay
+        )
+        # Wait for recovery sync
+        while not retry_cl.ready():
+            time.sleep(5)
+
+    # Bioxbio self-heal: Kiểm tra xem còn subject nào incomplete không
+    bioxbio_retry_count = 0
+    while bioxbio_retry_count < 3:
+        incomplete_biox = BioxbioCrawlerProgress.objects.filter(is_completed=False).count()
+        if incomplete_biox > 0:
+            logger.warning(f"Self-Healing BioxBio: {incomplete_biox} incomplete subjects. Rerunning...")
+            bb_heal = crawl_bioxbio_task.delay(
+                start_url=bioxbio_start_url,
+                max_workers=bioxbio_workers,
+                delay=bioxbio_delay
+            )
+            while not bb_heal.ready():
+                time.sleep(5)
+            bioxbio_retry_count += 1
+        else:
+            break
+
+    # --- Phase 4: Trigger Mapping ---
+    self.update_state(state='PROGRESS', meta={
+        'message': 'Giai đoạn 1 hoàn tất! Bắt đầu tích hợp và mapping dữ liệu...',
+        'progress': 78,
+        'clarivate': {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
+        'scimago':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
+        'bioxbio':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
+        'mapping': {'status': 'PROGRESS', 'progress': 5, 'message': 'Đang khởi chạy integrate_scores_task...'},
+    })
+
+    map_task = integrate_scores_task.delay()
+    map_task_id = map_task.id
+
+    # Poller loop cho mapping (78% → 100%)
+    while True:
+        time.sleep(5)
+        map_res = AsyncResult(map_task_id)
+        map_info = map_res.info or {} if map_res.status == 'PROGRESS' else {}
+        if not isinstance(map_info, dict):
+            map_info = {}
+        map_pct = map_info.get('progress', 0) if map_res.status == 'PROGRESS' else \
+                  (100 if map_res.status == 'SUCCESS' else 0)
+        master_pct = 78 + int(map_pct * 0.22)
+
+        self.update_state(state='PROGRESS', meta={
+            'message': f"Mapping & tích hợp điểm số... {map_pct}%",
+            'progress': master_pct,
+            'clarivate': {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
+            'scimago':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
+            'bioxbio':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
+            'mapping': {'status': map_res.status, 'progress': map_pct,
+                        'message': map_info.get('message', '')},
+        })
+
+        if map_res.status in ('SUCCESS', 'FAILURE'):
+            break
+
+    return {
+        'status': 'success',
+        'clarivate_in_db': ClarivateJournal.objects.count(),
+        'scimago_in_db':   ScimagoJournal.objects.count(),
+        'bioxbio_in_db':   BioxbioJournal.objects.count(),
+        'mapped_journals': Journal.objects.count(),
+    }

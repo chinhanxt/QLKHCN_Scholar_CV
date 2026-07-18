@@ -13,21 +13,22 @@ interface CrawlerStoreState {
   scimago: CrawlerTaskState
   clarivate: CrawlerTaskState
   integrator: CrawlerTaskState
+  unified: CrawlerTaskState
 
   // Actions
   setTaskState: (
-    key: 'scholar' | 'bioxbio' | 'scimago' | 'clarivate' | 'integrator',
+    key: 'scholar' | 'bioxbio' | 'scimago' | 'clarivate' | 'integrator' | 'unified',
     state: Partial<CrawlerTaskState>
   ) => void
   addConsoleLog: (
-    key: 'scholar' | 'bioxbio' | 'scimago' | 'clarivate' | 'integrator',
+    key: 'scholar' | 'bioxbio' | 'scimago' | 'clarivate' | 'integrator' | 'unified',
     log: string
   ) => void
   clearLogs: (
-    key: 'scholar' | 'bioxbio' | 'scimago' | 'clarivate' | 'integrator'
+    key: 'scholar' | 'bioxbio' | 'scimago' | 'clarivate' | 'integrator' | 'unified'
   ) => void
   resetTask: (
-    key: 'scholar' | 'bioxbio' | 'scimago' | 'clarivate' | 'integrator'
+    key: 'scholar' | 'bioxbio' | 'scimago' | 'clarivate' | 'integrator' | 'unified'
   ) => void
 }
 
@@ -44,6 +45,7 @@ export const useCrawlerStore = create<CrawlerStoreState>((set) => ({
   scimago: { ...initialTaskState },
   clarivate: { ...initialTaskState },
   integrator: { ...initialTaskState },
+  unified: { ...initialTaskState },
 
   setTaskState: (key, state) =>
     set((prev) => ({

@@ -13,13 +13,15 @@ import {
   Server,
   LogOut,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Layers
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
 import { fullName } from '@/lib/utils'
 
 const TOOLS_NAV = [
+  { to: '/scholar/unified', label: 'Bộ cào tổng hợp', icon: Layers },
   { to: '/scholar/scraper', label: 'Scholar Scraper', icon: GraduationCap },
   { to: '/scholar/bioxbio', label: 'BioxBio Crawler', icon: Globe },
   { to: '/scholar/scimago', label: 'SCImago Crawler', icon: BarChart3 },

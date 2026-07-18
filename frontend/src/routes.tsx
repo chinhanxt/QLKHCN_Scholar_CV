@@ -10,6 +10,7 @@ import { ScimagoCrawlerPage } from '@/pages/ScimagoCrawlerPage'
 import { ClarivateCrawlerPage } from '@/pages/ClarivateCrawlerPage'
 import { ScoreIntegratorPage } from '@/pages/ScoreIntegratorPage'
 import { ProfileManagerPage } from '@/pages/ProfileManagerPage'
+import { UnifiedCrawlerPage } from '@/pages/UnifiedCrawlerPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { DatabasePage } from '@/pages/DatabasePage'
 import { HelpPage } from '@/pages/HelpPage'
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { path: '/', element: <DashboardPage /> },
+          { path: '/scholar/unified', element: <UnifiedCrawlerPage /> },
           { path: '/scholar/scraper', element: <ScholarScraperPage /> },
           { path: '/scholar/bioxbio', element: <BioxbioCrawlerPage /> },
           { path: '/scholar/scimago', element: <ScimagoCrawlerPage /> },

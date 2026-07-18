@@ -13,6 +13,7 @@ from apps.scholar.api.serializers import (
     BioxbioCrawlRequestSerializer,
     ScimagoCrawlRequestSerializer,
     ClarivateCrawlRequestSerializer,
+    UnifiedCrawlRequestSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -230,6 +231,30 @@ class CrawlerViewSet(viewsets.ViewSet):
         """
         from apps.scholar.tasks import integrate_scores_task
         task = integrate_scores_task.delay()
+        return Response({"task_id": task.id, "status": "PENDING"}, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=False, methods=["post"], url_path="unified")
+    def unified(self, request):
+        """
+        Kích hoạt toàn bộ pipeline: cào song song (Clarivate + SCImago + BioxBio)
+        rồi tự động chạy mapping khi cả 3 luồng hoàn tất.
+        """
+        serializer = UnifiedCrawlRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        from apps.scholar.tasks import crawl_and_integrate_all_task
+        task = crawl_and_integrate_all_task.delay(
+            scimago_years=d.get('scimago_years'),
+            clarivate_max_pages=d.get('clarivate_max_pages'),
+            clarivate_workers=d.get('clarivate_workers', 3),
+            clarivate_delay=d.get('clarivate_delay', 1.5),
+            scimago_workers=d.get('scimago_workers', 5),
+            scimago_delay=d.get('scimago_delay', 1.0),
+            bioxbio_start_url=d.get('bioxbio_start_url', 'https://www.bioxbio.com/journal/'),
+            bioxbio_workers=d.get('bioxbio_workers', 10),
+            bioxbio_delay=d.get('bioxbio_delay', 2.0),
+        )
         return Response({"task_id": task.id, "status": "PENDING"}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=False, methods=["get"], url_path="status/(?P<task_id>[^/.]+)")
