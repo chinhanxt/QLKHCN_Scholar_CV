@@ -267,7 +267,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
         for title in venue_raw_titles:
             norm = normalize_title(title)
             # Find the journal
-            j_match = Journal.objects.filter(title_normalized=norm).first()
+            j_match = Journal.objects.filter(title_normalized=norm, is_staging=False).first()
             if j_match:
                 journal_cache[norm] = j_match
                 
@@ -1060,6 +1060,7 @@ def integrate_scores_task(self):
     Identical double-matching flow as the desktop Tool 5.
     """
     self.update_state(state='PROGRESS', meta={'message': 'Loading raw databases into memory cache...', 'progress': 5})
+    Journal.objects.filter(is_staging=True).delete()
     
     # 1. Cache BioxBio and SCImago raw databases in memory for fast local lookup
     biox_cache_by_id = {obj.source_id: obj for obj in BioxbioJournal.objects.exclude(source_id__isnull=True)}
@@ -1147,9 +1148,10 @@ def integrate_scores_task(self):
                         scimago_q = latest_s_rank.sjr_quartile
                         scimago_h = latest_s_rank.h_index
 
-                # Create or update Mapped Journal
+                # Create or update Mapped Journal in staging
                 journal, created = Journal.objects.update_or_create(
                     title_normalized=title_norm,
+                    is_staging=True,
                     defaults={
                         "clarivate_title": raw_j.title,
                         "issn": raw_j.issn,

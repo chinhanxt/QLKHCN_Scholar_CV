@@ -159,9 +159,10 @@ class CrawlerViewSet(viewsets.ViewSet):
         total_bioxbio = BioxbioJournal.objects.count()
         total_scimago = ScimagoJournal.objects.count()
         total_clarivate = ClarivateJournal.objects.count()
-        total_mapped = Journal.objects.count()
+        total_mapped = Journal.objects.filter(is_staging=False).count()
+        total_staging = Journal.objects.filter(is_staging=True).count()
         
-        mapped_with_raw = Journal.objects.filter(
+        mapped_with_raw = Journal.objects.filter(is_staging=False).filter(
             Q(bioxbio_journal__isnull=False) | Q(scimago_journal__isnull=False)
         ).count()
         match_rate = round((mapped_with_raw / total_mapped * 100), 1) if total_mapped > 0 else 0
@@ -173,6 +174,7 @@ class CrawlerViewSet(viewsets.ViewSet):
             "scimago_journals": total_scimago,
             "clarivate_journals": total_clarivate,
             "mapped_journals": total_mapped,
+            "staging_journals": total_staging,
             "match_rate": match_rate
         })
 
@@ -259,6 +261,39 @@ class CrawlerViewSet(viewsets.ViewSet):
             bioxbio_delay=d.get('bioxbio_delay', 2.0),
         )
         return Response({"task_id": task.id, "status": "PENDING"}, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=False, methods=["post"], url_path="confirm-staging")
+    def confirm_staging(self, request):
+        """
+        Xác nhận đè dữ liệu staging lên DB hiện tại.
+        1. Xóa toàn bộ Journal where is_staging=False.
+        2. Cập nhật tất cả Journal where is_staging=True thành is_staging=False.
+        """
+        from apps.scholar.models import Journal
+        from django.db import transaction
+        
+        try:
+            with transaction.atomic():
+                # Delete confirmed journals (cascade deletes confirmed ISSNs & rankings)
+                Journal.objects.filter(is_staging=False).delete()
+                # Update staging journals to confirmed
+                updated_count = Journal.objects.filter(is_staging=True).update(is_staging=False)
+                
+            return Response({"status": "success", "confirmed_count": updated_count}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=["post"], url_path="delete-staging")
+    def delete_staging(self, request):
+        """
+        Xóa toàn bộ dữ liệu staging.
+        """
+        from apps.scholar.models import Journal
+        try:
+            deleted_count, _ = Journal.objects.filter(is_staging=True).delete()
+            return Response({"status": "success", "deleted_count": deleted_count}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=["get"], url_path="status/(?P<task_id>[^/.]+)")
     def status_check(self, request, task_id=None):
@@ -384,7 +419,8 @@ class CrawlerViewSet(viewsets.ViewSet):
         from apps.scholar.models import Journal
         from apps.scholar.api.serializers import JournalShortSerializer
 
-        queryset = Journal.objects.all()
+        staging = request.query_params.get("staging", "").strip() == "true"
+        queryset = Journal.objects.filter(is_staging=staging)
 
         q = request.query_params.get("q", "").strip()
         if q:

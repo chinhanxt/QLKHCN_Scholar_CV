@@ -3,7 +3,7 @@ import { scholarApi } from '@/api/endpoints/scholar'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { Layers, Play, Square, Loader2, Zap, Trash2, Copy, Terminal, CheckCircle2, AlertCircle, ChevronUp, ChevronDown } from 'lucide-react'
+import { Layers, Play, Square, Loader2, Zap, Trash2, Copy, Terminal, CheckCircle2, AlertCircle, ChevronUp, ChevronDown, Database, AlertTriangle, Eye, RefreshCw } from 'lucide-react'
 import { useCrawlerStore } from '@/stores/crawler.store'
 
 export function UnifiedCrawlerPage() {
@@ -26,6 +26,15 @@ export function UnifiedCrawlerPage() {
   const [showConfig, setShowConfig] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
 
+  // Staging preview states
+  const [stats, setStats] = useState<any>(null)
+  const [activeStagingTab, setActiveStagingTab] = useState<'clarivate' | 'scimago' | 'bioxbio' | 'staging_mapped'>('staging_mapped')
+  const [previewData, setPreviewData] = useState<any[]>([])
+  const [previewSearch, setPreviewSearch] = useState<string>('')
+  const [loadingPreview, setLoadingPreview] = useState<boolean>(false)
+  const [actionConfirmMode, setActionConfirmMode] = useState<'none' | 'confirm' | 'delete'>('none')
+  const [submittingAction, setSubmittingAction] = useState<boolean>(false)
+
   // Sub-task progress states parsed from task status info
   const [clProgress, setClProgress] = useState<any>({ status: 'PENDING', progress: 0, message: 'Đang chờ...' })
   const [scProgress, setScProgress] = useState<any>({ status: 'PENDING', progress: 0, message: 'Đang chờ...' })
@@ -40,7 +49,44 @@ export function UnifiedCrawlerPage() {
 
   const consoleEndRef = useRef<HTMLDivElement>(null)
 
+  // Fetch Database Stats
+  const fetchStats = async () => {
+    try {
+      const res = await scholarApi.getStats()
+      setStats(res.data)
+    } catch (err) {
+      console.error('Lỗi tải stats:', err)
+    }
+  }
+
+  // Load preview data dynamically
+  const fetchPreview = async (tab: typeof activeStagingTab, searchVal: string) => {
+    setLoadingPreview(true)
+    try {
+      let res: any
+      if (tab === 'clarivate') {
+        res = await scholarApi.getClarivateData({ q: searchVal })
+      } else if (tab === 'scimago') {
+        res = await scholarApi.getScimagoData({ q: searchVal })
+      } else if (tab === 'bioxbio') {
+        res = await scholarApi.getBioxbioData({ q: searchVal })
+      } else {
+        res = await scholarApi.getMappedData({ q: searchVal, staging: true })
+      }
+      setPreviewData(res.data || [])
+    } catch (err) {
+      console.error('Lỗi tải dữ liệu xem trước:', err)
+      toast.error('Không thể tải dữ liệu xem trước.')
+    } finally {
+      setLoadingPreview(false)
+    }
+  }
+
   // Polling logic
+  useEffect(() => {
+    fetchStats()
+  }, [])
+
   useEffect(() => {
     if (!taskId) return
 
@@ -61,6 +107,7 @@ export function UnifiedCrawlerPage() {
           setScProgress({ status: 'SUCCESS', progress: 100, message: 'Hoàn tất tải và import CSV' })
           setBbProgress({ status: 'SUCCESS', progress: 100, message: 'Hoàn tất cào dữ liệu' })
           setMapProgress({ status: 'SUCCESS', progress: 100, message: 'Đồng bộ mapping thành công!' })
+          fetchStats()
         } else if (res.status === 'PROGRESS' && res.message) {
           addConsoleLog('unified', res.message)
         }
@@ -71,6 +118,11 @@ export function UnifiedCrawlerPage() {
 
     return () => clearInterval(pollInterval)
   }, [taskId])
+
+  // Trigger preview fetch when tab or query search changes
+  useEffect(() => {
+    fetchPreview(activeStagingTab, previewSearch)
+  }, [activeStagingTab, previewSearch])
 
   // Auto-scroll logic
   useEffect(() => {
@@ -178,6 +230,39 @@ export function UnifiedCrawlerPage() {
     toast.info('Đã xóa logs.')
   }
 
+  // Staging Action handlers
+  const handleConfirmStaging = async () => {
+    setSubmittingAction(true)
+    try {
+      const res = await scholarApi.confirmStaging()
+      toast.success(`Ghi đè DB thành công! Đã cập nhật ${res.data.confirmed_count} bản ghi chính thức.`);
+      setActionConfirmMode('none')
+      fetchStats()
+      fetchPreview(activeStagingTab, previewSearch)
+    } catch (err: any) {
+      console.error(err)
+      toast.error('Lỗi khi xác nhận ghi đè dữ liệu.')
+    } finally {
+      setSubmittingAction(false)
+    }
+  }
+
+  const handleDeleteStaging = async () => {
+    setSubmittingAction(true)
+    try {
+      const res = await scholarApi.deleteStaging()
+      toast.info(`Đã hủy bỏ và xóa sạch ${res.data.deleted_count} bản ghi staging nháp.`);
+      setActionConfirmMode('none')
+      fetchStats()
+      fetchPreview(activeStagingTab, previewSearch)
+    } catch (err) {
+      console.error(err)
+      toast.error('Lỗi khi xóa dữ liệu nháp.')
+    } finally {
+      setSubmittingAction(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'SUCCESS':
@@ -224,6 +309,13 @@ export function UnifiedCrawlerPage() {
               <Play className="w-3.5 h-3.5" /> Kích Hoạt Hệ Thống
             </button>
           )}
+          <button
+            onClick={fetchStats}
+            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-500 cursor-pointer bg-white"
+            title="Đồng bộ lại Stats"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       </Card>
 
@@ -590,6 +682,274 @@ export function UnifiedCrawlerPage() {
             </div>
           )}
         </div>
+      </Card>
+
+      {/* Staging Data Preview & Action Card (Draft Preview & Database Overwrite Sync Manager) */}
+      <Card className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+        <div className="p-4 px-6 border-b border-slate-100 flex items-center justify-between text-slate-800 font-semibold text-sm bg-white">
+          <div className="flex items-center gap-2">
+            <Database className="w-4.5 h-4.5 text-[#005b9a]" /> Quản lý & Xem trước Dữ liệu Staging (Chờ xác nhận)
+          </div>
+          {stats?.staging_journals > 0 && actionConfirmMode === 'none' && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActionConfirmMode('confirm')}
+                className="inline-flex items-center justify-center px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 transition-colors text-white text-xs font-bold gap-1.5 shadow-xs cursor-pointer"
+              >
+                Xác Nhận Đè Dữ Liệu
+              </button>
+              <button
+                onClick={() => setActionConfirmMode('delete')}
+                className="inline-flex items-center justify-center px-4 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors text-rose-600 text-xs font-bold gap-1.5 border border-rose-200 cursor-pointer shadow-xs"
+              >
+                Hủy / Xóa Bản Nháp
+              </button>
+            </div>
+          )}
+        </div>
+
+        <CardContent className="p-6 space-y-6 bg-white">
+          {/* Action Warnings Confirmation dialog box */}
+          {actionConfirmMode !== 'none' && (
+            <div className={cn(
+              "p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 animate-[pulse_2s_infinite]",
+              actionConfirmMode === 'confirm' 
+                ? "bg-emerald-50 border-emerald-200 text-emerald-900" 
+                : "bg-rose-50 border-rose-200 text-rose-900"
+            )}>
+              <div className="flex items-center gap-3">
+                <AlertTriangle className={cn("w-8 h-8 shrink-0", actionConfirmMode === 'confirm' ? "text-emerald-600" : "text-rose-600")} />
+                <div>
+                  <h4 className="font-bold text-sm">
+                    {actionConfirmMode === 'confirm' 
+                      ? "⚠️ CẢNH BÁO: XÁC NHẬN GHI ĐÈ LÊN CƠ SỞ DỮ LIỆU CHÍNH THỨC" 
+                      : "⚠️ CẢNH BÁO: HỦY VÀ XÓA BẢN DỮ LIỆU NHÁP STAGING"
+                    }
+                  </h4>
+                  <p className="text-xs opacity-85 mt-1 font-semibold">
+                    {actionConfirmMode === 'confirm'
+                      ? `Hành động này sẽ XÓA TOÀN BỘ ${stats?.mapped_journals || 0} bản ghi tạp chí chính thức hiện tại và thay thế bằng ${stats?.staging_journals} bản ghi trong Staging. Thao tác này không thể hoàn tác.`
+                      : `Hành động này sẽ XÓA SẠCH toàn bộ ${stats?.staging_journals} bản ghi cào nháp tạm thời. Toàn bộ dữ liệu cào thô gốc của Clarivate, SCImago và BioxBio vẫn được giữ nguyên.`
+                    }
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 self-end md:self-auto">
+                <button
+                  disabled={submittingAction}
+                  onClick={actionConfirmMode === 'confirm' ? handleConfirmStaging : handleDeleteStaging}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-xs font-bold text-white shadow-sm cursor-pointer disabled:opacity-50",
+                    actionConfirmMode === 'confirm' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"
+                  )}
+                >
+                  {submittingAction ? (
+                    <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang xử lý...</span>
+                  ) : (
+                    actionConfirmMode === 'confirm' ? "Tôi Đồng Ý, Hãy Ghi Đè!" : "Tôi Đồng Ý, Hãy Xóa Sạch!"
+                  )}
+                </button>
+                <button
+                  disabled={submittingAction}
+                  onClick={() => setActionConfirmMode('none')}
+                  className="px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 cursor-pointer shadow-sm"
+                >
+                  Hủy Bỏ
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Staging Summary Info bar when empty */}
+          {(!stats || stats.staging_journals === 0) ? (
+            <div className="flex flex-col items-center justify-center py-8 text-slate-400 gap-2 text-center bg-slate-50/40 rounded-xl border border-dashed border-slate-200">
+              <Eye className="w-8 h-8 opacity-45 text-[#005b9a] animate-pulse" />
+              <h5 className="font-bold text-xs text-slate-700">Chưa có dữ liệu cào nháp (Staging) nào trong bộ nhớ tạm.</h5>
+              <p className="text-[10px] text-slate-400 max-w-md px-4">
+                Kích hoạt hệ thống cào song song. Khi giai đoạn mapping hoàn thành 100%, kết quả sẽ xuất hiện ở đây dưới dạng nháp để bạn xem trước, đối chiếu trước khi đồng bộ chính thức.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Tab Selector buttons */}
+              <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-3">
+                <button
+                  onClick={() => { setActiveStagingTab('staging_mapped'); setPreviewSearch(''); }}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-3xs",
+                    activeStagingTab === 'staging_mapped'
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+                  )}
+                >
+                  4. Kết quả Mapping Draft ({stats?.staging_journals} dòng)
+                </button>
+                <button
+                  onClick={() => { setActiveStagingTab('clarivate'); setPreviewSearch(''); }}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-3xs",
+                    activeStagingTab === 'clarivate'
+                      ? "bg-blue-50 text-blue-700 border border-blue-200"
+                      : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+                  )}
+                >
+                  1. Clarivate Raw ({stats?.clarivate_journals} dòng)
+                </button>
+                <button
+                  onClick={() => { setActiveStagingTab('scimago'); setPreviewSearch(''); }}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-3xs",
+                    activeStagingTab === 'scimago'
+                      ? "bg-amber-50 text-amber-700 border border-amber-200"
+                      : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+                  )}
+                >
+                  2. SCImago Raw ({stats?.scimago_journals} dòng)
+                </button>
+                <button
+                  onClick={() => { setActiveStagingTab('bioxbio'); setPreviewSearch(''); }}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-3xs",
+                    activeStagingTab === 'bioxbio'
+                      ? "bg-purple-50 text-purple-700 border border-purple-200"
+                      : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+                  )}
+                >
+                  3. BioxBio Raw ({stats?.bioxbio_journals} dòng)
+                </button>
+              </div>
+
+              {/* Tab specific search box */}
+              <div className="relative max-w-sm">
+                <input
+                  type="text"
+                  value={previewSearch}
+                  onChange={(e) => setPreviewSearch(e.target.value)}
+                  placeholder="Lọc nhanh kết quả xem trước..."
+                  className="w-full pl-3 pr-4 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#005b9a]/20 focus:border-[#005b9a] bg-white transition-all text-slate-855 font-bold shadow-3xs"
+                />
+                {loadingPreview && (
+                  <Loader2 className="absolute right-3 top-2.5 w-3.5 h-3.5 animate-spin text-slate-400" />
+                )}
+              </div>
+
+              {/* Grid View Table */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs bg-white">
+                <div className="overflow-x-auto max-h-[300px]">
+                  {loadingPreview ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-400">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#005b9a]" />
+                      <span className="text-xs font-semibold">Đang tải dữ liệu staging...</span>
+                    </div>
+                  ) : previewData.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 text-xs font-semibold">
+                      Không tìm thấy bản ghi nào khớp với từ khóa lọc.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10 select-none">
+                        {activeStagingTab === 'clarivate' && (
+                          <tr>
+                            <th className="p-3 pl-4">Tên Tạp Chí (WoS)</th>
+                            <th className="p-3">ISSN</th>
+                            <th className="p-3">eISSN</th>
+                            <th className="p-3">Nhà Xuất Bản</th>
+                            <th className="p-3">Quốc Gia</th>
+                            <th className="p-3 pr-4">Chỉ Mục Core</th>
+                          </tr>
+                        )}
+                        {activeStagingTab === 'scimago' && (
+                          <tr>
+                            <th className="p-3 pl-4">Tên Tạp Chí</th>
+                            <th className="p-3">Loại</th>
+                            <th className="p-3">Nhà Xuất Bản</th>
+                            <th className="p-3">Quốc Gia</th>
+                            <th className="p-3">SJR</th>
+                            <th className="p-3">Phân Nhóm Q</th>
+                            <th className="p-3 pr-4">H-Index</th>
+                          </tr>
+                        )}
+                        {activeStagingTab === 'bioxbio' && (
+                          <tr>
+                            <th className="p-3 pl-4">Tên Tạp Chí</th>
+                            <th className="p-3">ISSNs</th>
+                            <th className="p-3">Impact Factor</th>
+                            <th className="p-3">Bài Báo</th>
+                            <th className="p-3 pr-4">Trích Dẫn</th>
+                          </tr>
+                        )}
+                        {activeStagingTab === 'staging_mapped' && (
+                          <tr>
+                            <th className="p-3 pl-4">Tên Tạp Chí (WoS)</th>
+                            <th className="p-3">ISSN</th>
+                            <th className="p-3">eISSN</th>
+                            <th className="p-3">Impact Factor</th>
+                            <th className="p-3">SJR Score</th>
+                            <th className="p-3">Quartile</th>
+                            <th className="p-3">Khớp BioxBio</th>
+                            <th className="p-3 pr-4">Khớp SCImago</th>
+                          </tr>
+                        )}
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                        {previewData.slice(0, 100).map((row, idx) => (
+                          <tr key={row.id || idx} className="hover:bg-slate-50/50 transition-colors">
+                            {activeStagingTab === 'clarivate' && (
+                              <>
+                                <td className="p-3 pl-4 font-bold text-slate-800 truncate max-w-xs">{row.title}</td>
+                                <td className="p-3 font-semibold text-slate-500">{row.issn || '-'}</td>
+                                <td className="p-3 font-semibold text-slate-500">{row.eissn || '-'}</td>
+                                <td className="p-3 truncate max-w-[150px]">{row.publisher || '-'}</td>
+                                <td className="p-3">{row.country || '-'}</td>
+                                <td className="p-3 pr-4"><span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 font-bold rounded-md text-[10px]">{row.wos_core_collection}</span></td>
+                              </>
+                            )}
+                            {activeStagingTab === 'scimago' && (
+                              <>
+                                <td className="p-3 pl-4 font-bold text-slate-800 truncate max-w-xs">{row.title}</td>
+                                <td className="p-3 capitalize">{row.journal_type || '-'}</td>
+                                <td className="p-3 truncate max-w-[150px]">{row.publisher || '-'}</td>
+                                <td className="p-3">{row.country || '-'}</td>
+                                <td className="p-3 text-amber-700 font-bold">{row.rankings?.[0]?.sjr_score || '-'}</td>
+                                <td className="p-3"><span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-100 font-bold rounded-md text-[10px]">{row.rankings?.[0]?.sjr_quartile || '-'}</span></td>
+                                <td className="p-3 pr-4">{row.rankings?.[0]?.h_index || '-'}</td>
+                              </>
+                            )}
+                            {activeStagingTab === 'bioxbio' && (
+                              <>
+                                <td className="p-3 pl-4 font-bold text-slate-800 truncate max-w-xs">{row.title}</td>
+                                <td className="p-3">{row.issns?.join(', ') || '-'}</td>
+                                <td className="p-3 text-purple-700 font-bold">{row.rankings?.[0]?.impact_factor || '-'}</td>
+                                <td className="p-3">{row.rankings?.[0]?.total_articles || '-'}</td>
+                                <td className="p-3 pr-4">{row.rankings?.[0]?.total_cites || '-'}</td>
+                              </>
+                            )}
+                            {activeStagingTab === 'staging_mapped' && (
+                              <>
+                                <td className="p-3 pl-4 font-bold text-slate-800 truncate max-w-xs">{row.clarivate_title}</td>
+                                <td className="p-3 font-semibold text-slate-500">{row.issn || '-'}</td>
+                                <td className="p-3 font-semibold text-slate-500">{row.eissn || '-'}</td>
+                                <td className="p-3 text-purple-700 font-bold">{row.latest_if || '-'}</td>
+                                <td className="p-3 text-amber-750 font-bold">{row.latest_sjr || '-'}</td>
+                                <td className="p-3"><span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-100 font-bold rounded-md text-[10px]">{row.latest_quartile || '-'}</span></td>
+                                <td className="p-3"><span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold border", row.bioxbio_match ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-slate-50 text-slate-400 border-slate-100")}>{row.bioxbio_match || 'No Match'}</span></td>
+                                <td className="p-3 pr-4"><span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold border", row.scimago_match ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-slate-50 text-slate-400 border-slate-100")}>{row.scimago_match || 'No Match'}</span></td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="p-2.5 px-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400 font-bold">
+                  <span>HIỂN THỊ TỐI ĐA 100 DÒNG XEM TRƯỚC</span>
+                  <span className="text-[#005b9a]">PHÂN VÙNG DỮ LIỆU STAGING NHÁP</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
       </Card>
     </div>
   )

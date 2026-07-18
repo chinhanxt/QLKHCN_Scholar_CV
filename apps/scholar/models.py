@@ -127,6 +127,7 @@ class Journal(BaseModel):
     """
     clarivate_title = models.CharField(_("Clarivate Title"), max_length=1000, blank=True, null=True)
     title_normalized = models.CharField(_("Normalized Title"), max_length=1000, db_index=True)
+    is_staging = models.BooleanField(_("Is Staging"), default=False, db_index=True)
     issn = models.CharField(_("ISSN"), max_length=50, blank=True, null=True)
     eissn = models.CharField(_("eISSN"), max_length=50, blank=True, null=True)
     publisher = models.TextField(_("Publisher"), blank=True, null=True)

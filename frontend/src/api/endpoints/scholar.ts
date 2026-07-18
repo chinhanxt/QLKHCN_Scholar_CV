@@ -7,6 +7,7 @@ export interface DatabaseStats {
   scimago_journals: number
   clarivate_journals: number
   mapped_journals: number
+  staging_journals: number
   match_rate: number
 }
 
@@ -105,6 +106,12 @@ export const scholarApi = {
   startIntegration: () => 
     apiClient.post<{ task_id: string; status: string }>('/scholar/crawlers/integrate/'),
 
+  confirmStaging: () =>
+    apiClient.post<{ status: string; confirmed_count: number }>('/scholar/crawlers/confirm-staging/'),
+
+  deleteStaging: () =>
+    apiClient.post<{ status: string; deleted_count: number }>('/scholar/crawlers/delete-staging/'),
+
   startUnifiedCrawl: (payload: {
     scimago_start_url?: string;
     scimago_years?: number[];
@@ -139,7 +146,7 @@ export const scholarApi = {
   getClarivateData: (params: { q?: string; wos_index?: string }) => 
     apiClient.get<any[]>('/scholar/crawlers/clarivate-data/', { params }),
 
-  getMappedData: (params: { q?: string; wos_index?: string; quartile?: string; mapped_only?: boolean }) => 
+  getMappedData: (params: { q?: string; wos_index?: string; quartile?: string; mapped_only?: boolean; staging?: boolean }) => 
     apiClient.get<any[]>('/scholar/crawlers/mapped-data/', { params }),
 }
 
