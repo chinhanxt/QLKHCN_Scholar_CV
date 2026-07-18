@@ -19,6 +19,8 @@ from .publication_parser import PublicationParser
 from .data_types import Author, PublicationSource, ProxyMode
 
 
+import threading
+
 class Singleton(type):
     _instances = {}
 
@@ -37,14 +39,39 @@ class Navigator(object, metaclass=Singleton):
         self.logger = logging.getLogger('scholarly')
         self._TIMEOUT = 5
         self._max_retries = 5
+        self._local = threading.local()
         # A Navigator instance has two proxy managers, each with their session.
         # `pm1` manages the primary, premium proxy.
         # `pm2` manages the secondary, inexpensive proxy.
         self.pm1 = ProxyGenerator()
         self.pm2 = ProxyGenerator()
-        self._session1 = self.pm1.get_session()
-        self._session2 = self.pm2.get_session()
         self.got_403 = False
+
+    @property
+    def _session1(self):
+        return self.pm1.get_session()
+
+    @_session1.setter
+    def _session1(self, value):
+        self.pm1._session = value
+
+    @property
+    def _session2(self):
+        return self.pm2.get_session()
+
+    @_session2.setter
+    def _session2(self, value):
+        self.pm2._session = value
+
+    @property
+    def got_403(self):
+        if not hasattr(self._local, 'got_403'):
+            self._local.got_403 = False
+        return self._local.got_403
+
+    @got_403.setter
+    def got_403(self, value):
+        self._local.got_403 = value
 
 
     def set_logger(self, enable: bool):
@@ -143,6 +170,7 @@ class Navigator(object, metaclass=Singleton):
                                 self.logger.info("Will retry after %.2f seconds (with another session).", w)
                                 time.sleep(w)
                         self._new_session(premium=premium)
+                        session = self._session1 if premium else self._session2
                         self.got_403 = True
 
                         continue # Retry request within same session

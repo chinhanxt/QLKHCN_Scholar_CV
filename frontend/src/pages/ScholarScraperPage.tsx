@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { scholarApi } from '@/api/endpoints/scholar'
 import type { AuthorCandidate, AuthorProfileDetail } from '@/api/endpoints/scholar'
 import { Card, CardContent } from '@/components/ui/card'
@@ -36,6 +36,7 @@ export function ScholarScraperPage() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
   const [isL2Running, setIsL2Running] = useState(() => localStorage.getItem('scholar_isL2Running') === 'true')
   const [selectedPublication, setSelectedPublication] = useState<any | null>(null)
+  const lastNotifiedTaskId = useRef<string | null>(null)
 
   useEffect(() => {
     localStorage.setItem('scholar_isL2Running', isL2Running.toString())
@@ -86,6 +87,11 @@ export function ScholarScraperPage() {
             addConsoleLog('scholar', res.message)
           }
         } else if (res.status === 'SUCCESS') {
+          if (lastNotifiedTaskId.current === taskId) {
+            clearInterval(pollInterval)
+            return
+          }
+          lastNotifiedTaskId.current = taskId
           setTaskState('scholar', { progress: 100 })
           addConsoleLog('scholar', '>>> HOÀN THÀNH: Cào dữ liệu tác giả thành công!')
           setTaskState('scholar', { taskId: null })
@@ -111,6 +117,11 @@ export function ScholarScraperPage() {
           // Load the newly saved profile
           loadProfile(res.result?.author?.scholar_id)
         } else if (res.status === 'FAILURE') {
+          if (lastNotifiedTaskId.current === taskId) {
+            clearInterval(pollInterval)
+            return
+          }
+          lastNotifiedTaskId.current = taskId
           setTaskState('scholar', { taskId: null })
           clearInterval(pollInterval)
           const err = res.message || 'Lỗi không xác định.'
@@ -257,39 +268,373 @@ export function ScholarScraperPage() {
     }
   }
 
-  // Export report to CSV
-  const handleExport = () => {
+  // Export report to Excel (.xlsx)
+  const handleExport = async () => {
     if (!profile || profile.publications.length === 0) {
       toast.error('Không có dữ liệu bài báo để xuất báo cáo!')
       return
     }
-    
-    const headers = ['STT', 'Tên bài báo', 'Tác giả', 'Nơi xuất bản (Venue)', 'Năm', 'Trích dẫn', 'SJR Q', 'Impact Factor', 'Web of Science']
-    
-    const rows = profile.publications.map((pub, idx) => [
-      idx + 1,
-      `"${pub.title.replace(/"/g, '""')}"`,
-      `"${pub.authors_list.replace(/"/g, '""')}"`,
-      `"${pub.venue.replace(/"/g, '""')}"`,
-      pub.year,
-      pub.citations,
-      pub.sjr_q,
-      pub.if_val,
-      pub.wos
-    ])
-    
-    // Add UTF-8 BOM so Excel opens Vietnamese characters correctly
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `Scholar_Profile_${profile.name.replace(/\s+/g, '_')}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    toast.success('Xuất file báo cáo (CSV) thành công!')
+
+    try {
+      toast.info('Đang tạo file Excel (.xlsx) chuyên nghiệp...')
+      const ExcelJSModule = await import('exceljs')
+      const Workbook = ExcelJSModule.Workbook || (ExcelJSModule as any).default?.Workbook || (ExcelJSModule as any).default
+      const workbook = new Workbook()
+
+      // Determine if detailed scan (Lần 2) has been performed
+      const hasDetailedData = profile.publications.some(
+        (pub) => pub.cites_per_year && Object.keys(pub.cites_per_year).length > 0
+      )
+
+      // ----------------------------------------------------
+      // SHEET 1: TỔNG QUAN
+      // ----------------------------------------------------
+      const sheet1 = workbook.addWorksheet('Tổng quan')
+      sheet1.views = [{ showGridLines: true }]
+
+      // Set columns
+      sheet1.columns = [
+        { key: 'A', width: 35 },
+        { key: 'B', width: 45 },
+        { key: 'C', width: 15 },
+        { key: 'D', width: 15 }
+      ]
+
+      // 1. Title Banner
+      sheet1.mergeCells('A1:D2')
+      const banner = sheet1.getCell('A1')
+      banner.value = 'BÁO CÁO HỒ SƠ TÁC GIẢ KHOA HỌC (GOOGLE SCHOLAR)'
+      banner.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } }
+      banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF005B9A' } }
+      banner.alignment = { vertical: 'middle', horizontal: 'center' }
+
+      // 2. Section: Thông tin tác giả
+      sheet1.getCell('A4').value = 'I. THÔNG TIN CHUNG TÁC GIẢ'
+      sheet1.getCell('A4').font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF005B9A' } }
+      sheet1.mergeCells('A4:D4')
+
+      const infoFields = [
+        ['Họ và tên tác giả', profile.name],
+        ['Cơ quan công tác', profile.affiliation || 'Không rõ cơ quan công tác'],
+        ['Tổng số trích dẫn', profile.citedby || 0],
+        ['Chỉ số H-index', profile.hindex || 0],
+        ['Chỉ số i10-index', profile.i10index || 0]
+      ]
+
+      infoFields.forEach((field, i) => {
+        const rowIdx = 5 + i
+        const cellA = sheet1.getCell(`A${rowIdx}`)
+        const cellB = sheet1.getCell(`B${rowIdx}`)
+        
+        cellA.value = field[0]
+        cellA.font = { name: 'Calibri', size: 11, bold: true }
+        cellA.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }
+        cellA.border = {
+          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+        }
+
+        cellB.value = field[1]
+        cellB.font = { name: 'Calibri', size: 11 }
+        if (typeof field[1] === 'number') {
+          cellB.alignment = { horizontal: 'left' }
+        }
+        sheet1.mergeCells(`B${rowIdx}:D${rowIdx}`)
+
+        for (let col = 2; col <= 4; col++) {
+          const colLetter = String.fromCharCode(64 + col)
+          sheet1.getCell(`${colLetter}${rowIdx}`).border = {
+            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+          }
+        }
+      })
+
+      // 3. Section: Thống kê đối khớp danh mục
+      const totalPubs = profile.publications.length
+      const wosCount = profile.publications.filter(p => p.wos && p.wos !== 'N/A').length
+      const sjrCount = profile.publications.filter(p => p.sjr_q && (p.sjr_q.includes('Q1') || p.sjr_q.includes('Q2'))).length
+      const ifCount = profile.publications.filter(p => p.if_val && p.if_val !== 'N/A').length
+      const bothCount = profile.publications.filter(p => p.if_val && p.if_val !== 'N/A' && p.sjr_q && p.sjr_q !== 'N/A').length
+
+      const statStartRow = 11
+      sheet1.getCell(`A${statStartRow}`).value = 'II. THỐNG KÊ ĐỐI KHỚP DANH MỤC CƠ SỞ DỮ LIỆU'
+      sheet1.getCell(`A${statStartRow}`).font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF005B9A' } }
+      sheet1.mergeCells(`A${statStartRow}:D${statStartRow}`)
+
+      const statFields = [
+        ['Tổng số bài báo khoa học', totalPubs],
+        ['Bài báo thuộc danh mục WoS Core Collection', wosCount],
+        ['Bài báo phân hạng Q1/Q2 SCImago', sjrCount],
+        ['Bài báo có Impact Factor (IF)', ifCount],
+        ['Bài báo có cả chỉ số IF & SJR', bothCount]
+      ]
+
+      statFields.forEach((field, i) => {
+        const rowIdx = statStartRow + 1 + i
+        const cellA = sheet1.getCell(`A${rowIdx}`)
+        const cellB = sheet1.getCell(`B${rowIdx}`)
+        
+        cellA.value = field[0]
+        cellA.font = { name: 'Calibri', size: 11, bold: true }
+        cellA.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }
+        cellA.border = {
+          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+        }
+
+        cellB.value = field[1]
+        cellB.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF005B9A' } }
+        cellB.alignment = { horizontal: 'center' }
+        sheet1.mergeCells(`B${rowIdx}:D${rowIdx}`)
+
+        for (let col = 2; col <= 4; col++) {
+          const colLetter = String.fromCharCode(64 + col)
+          sheet1.getCell(`${colLetter}${rowIdx}`).border = {
+            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+          }
+        }
+      })
+
+      // 4. Section: Lịch sử trích dẫn tổng cộng
+      if (hasDetailedData) {
+        const chartStartRow = statStartRow + 7
+        sheet1.getCell(`A${chartStartRow}`).value = 'III. SƠ ĐỒ TRÍCH DẪN TỔNG CỘNG THEO NĂM'
+        sheet1.getCell(`A${chartStartRow}`).font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF005B9A' } }
+        sheet1.mergeCells(`A${chartStartRow}:D${chartStartRow}`)
+
+        const headerRowIdx = chartStartRow + 1
+        const cellA_Header = sheet1.getCell(`A${headerRowIdx}`)
+        const cellB_Header = sheet1.getCell(`B${headerRowIdx}`)
+        
+        cellA_Header.value = 'Năm'
+        cellA_Header.font = { name: 'Calibri', size: 11, bold: true }
+        cellA_Header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }
+        cellA_Header.alignment = { horizontal: 'center' }
+        cellA_Header.border = {
+          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+        }
+
+        cellB_Header.value = 'Số lượt trích dẫn tổng cộng'
+        cellB_Header.font = { name: 'Calibri', size: 11, bold: true }
+        cellB_Header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }
+        cellB_Header.alignment = { horizontal: 'center' }
+        sheet1.mergeCells(`B${headerRowIdx}:D${headerRowIdx}`)
+
+        for (let col = 2; col <= 4; col++) {
+          const colLetter = String.fromCharCode(64 + col)
+          sheet1.getCell(`${colLetter}${headerRowIdx}`).border = {
+            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+          }
+        }
+
+        citationValues.forEach((val, i) => {
+          const rowIdx = headerRowIdx + 1 + i
+          const cellA = sheet1.getCell(`A${rowIdx}`)
+          const cellB = sheet1.getCell(`B${rowIdx}`)
+          
+          cellA.value = parseInt(val.year, 10)
+          cellA.font = { name: 'Calibri', size: 11 }
+          cellA.alignment = { horizontal: 'center' }
+          cellA.border = {
+            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+          }
+
+          cellB.value = val.count
+          cellB.font = { name: 'Calibri', size: 11 }
+          cellB.alignment = { horizontal: 'center' }
+          sheet1.mergeCells(`B${rowIdx}:D${rowIdx}`)
+
+          for (let col = 2; col <= 4; col++) {
+            const colLetter = String.fromCharCode(64 + col)
+            sheet1.getCell(`${colLetter}${rowIdx}`).border = {
+              top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+              bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+              left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+              right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+            }
+          }
+        })
+
+        const sumRowIdx = headerRowIdx + 1 + citationValues.length
+        const cellA_Sum = sheet1.getCell(`A${sumRowIdx}`)
+        const cellB_Sum = sheet1.getCell(`B${sumRowIdx}`)
+
+        cellA_Sum.value = 'Tổng cộng trích dẫn'
+        cellA_Sum.font = { name: 'Calibri', size: 11, bold: true }
+        cellA_Sum.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }
+        cellA_Sum.border = {
+          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          bottom: { style: 'double', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+        }
+
+        cellB_Sum.value = { formula: `=SUM(B${headerRowIdx + 1}:B${sumRowIdx - 1})` }
+        cellB_Sum.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF005B9A' } }
+        cellB_Sum.alignment = { horizontal: 'center' }
+        sheet1.mergeCells(`B${sumRowIdx}:D${sumRowIdx}`)
+
+        for (let col = 2; col <= 4; col++) {
+          const colLetter = String.fromCharCode(64 + col)
+          sheet1.getCell(`${colLetter}${sumRowIdx}`).border = {
+            top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'double', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+          }
+        }
+      }
+
+      // ----------------------------------------------------
+      // SHEET 2: DANH SÁCH BÀI BÁO CHI TIẾT
+      // ----------------------------------------------------
+      const sheet2 = workbook.addWorksheet('Danh sách bài báo')
+      sheet2.views = [{ showGridLines: true }]
+
+      // Define columns
+      const pubCols: any[] = [
+        { header: 'STT', key: 'stt', width: 6 },
+        { header: 'Tên bài báo khoa học', key: 'title', width: 55 },
+        { header: 'Danh sách tác giả', key: 'authors', width: 38 },
+        { header: 'Nơi xuất bản (Venue)', key: 'venue', width: 32 },
+        { header: 'Năm', key: 'year', width: 8 },
+        { header: 'Tổng trích dẫn', key: 'citations', width: 15 },
+        { header: 'SJR Q', key: 'sjr_q', width: 10 },
+        { header: 'Impact Factor (IF)', key: 'if_val', width: 16 },
+        { header: 'Web of Science (WoS)', key: 'wos', width: 26 }
+      ]
+
+      if (hasDetailedData) {
+        citationYears.forEach((year) => {
+          pubCols.push({ header: year, key: `year_${year}`, width: 9 })
+        })
+      }
+
+      sheet2.columns = pubCols
+
+      // Format Header row
+      const headerRow = sheet2.getRow(1)
+      headerRow.height = 36
+      headerRow.eachCell((cell) => {
+        cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF005B9A' } }
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+        cell.border = {
+          top: { style: 'medium', color: { argb: 'FF002E5D' } },
+          bottom: { style: 'medium', color: { argb: 'FF002E5D' } },
+          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+        }
+      })
+
+      // Add data rows
+      profile.publications.forEach((pub, idx) => {
+        const rowData: any = {
+          stt: idx + 1,
+          title: pub.title,
+          authors: pub.authors_list,
+          venue: pub.venue,
+          year: pub.year === 'Không rõ' ? '' : parseInt(pub.year, 10) || pub.year,
+          citations: pub.citations || 0,
+          sjr_q: pub.sjr_q || 'N/A',
+          if_val: pub.if_val || 'N/A',
+          wos: pub.wos || 'N/A'
+        }
+
+        if (hasDetailedData) {
+          const citesMap = pub.cites_per_year || {}
+          citationYears.forEach((year) => {
+            const val = citesMap[year]
+            rowData[`year_${year}`] = val !== undefined ? val : null
+          })
+        }
+
+        const row = sheet2.addRow(rowData)
+        row.height = 30 // Double-line comfortable height
+
+        const isOdd = idx % 2 === 1
+        const zebraColor = isOdd ? 'FFF8FAFC' : 'FFFFFFFF'
+        
+        // Highlight logic
+        const isHighQuality = (pub.sjr_q && (pub.sjr_q.includes('Q1') || pub.sjr_q.includes('Q2'))) || 
+                              (pub.wos && pub.wos !== 'N/A') || 
+                              (pub.if_val && pub.if_val !== 'N/A')
+
+        row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+          cell.font = { name: 'Calibri', size: 10 }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: zebraColor } }
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+          }
+
+          const colKey = sheet2.columns[colNum - 1]?.key
+          if (!colKey) return
+          
+          // Alignments
+          if (colKey === 'stt' || colKey === 'year' || colKey === 'sjr_q' || colKey.startsWith('year_')) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' }
+          } else if (colKey === 'citations' || colKey === 'if_val') {
+            cell.alignment = { vertical: 'middle', horizontal: 'right' }
+          } else {
+            cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true }
+          }
+
+          // Format numbers
+          if (colKey === 'citations' || colKey.startsWith('year_')) {
+            if (typeof cell.value === 'number') {
+              cell.numFmt = '#,##0'
+            }
+          }
+
+          // Apply Excel Expert highlights
+          if (isHighQuality && (colKey === 'sjr_q' || colKey === 'if_val' || colKey === 'wos')) {
+            const valStr = String(cell.value || '')
+            if (valStr && valStr !== 'N/A') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F4EA' } } // soft green fill
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF137333' } } // bold green text
+            }
+          }
+        })
+      })
+
+      // Download file XLSX
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Scholar_Profile_${profile.name.replace(/\s+/g, '_')}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      toast.success('Xuất báo cáo Excel (.xlsx) chuyên nghiệp thành công!')
+    } catch (error: any) {
+      console.error('Error generating Excel file:', error)
+      toast.error(`Lỗi xuất Excel: ${error.message}`)
+    }
   }
 
   // Calculate Citation Histogram heights
@@ -807,7 +1152,7 @@ export function ScholarScraperPage() {
                   className="flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg bg-[#005b9a] hover:bg-[#004677] text-white font-bold text-xs shadow-3xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Xuất báo cáo (CSV)</span>
+                  <span>Xuất báo cáo (Excel)</span>
                 </button>
               </div>
             </div>

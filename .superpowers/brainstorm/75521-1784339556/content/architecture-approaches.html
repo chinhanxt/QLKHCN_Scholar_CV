@@ -1,0 +1,58 @@
+<h2>So sánh Phương án Kiến trúc Bộ Cào Song Song & Tự sửa lỗi (Self-Healing)</h2>
+<p class="subtitle">Đáp ứng yêu cầu: Tốc độ tối đa, An toàn cho IP (nghỉ ngẫu nhiên), cào sạch 100% và tự động cào tiếp nếu thiếu số lượng.</p>
+
+<div class="pros-cons" style="margin-bottom: 25px;">
+  <div class="pros" style="background: rgba(39, 174, 96, 0.05); border: 1px solid #27ae60; padding: 15px; border-radius: 8px;">
+    <h4 style="color: #27ae60; margin: 0 0 10px 0;">🛡️ Giải pháp an toàn IP (Human-like delays)</h4>
+    <ul style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.6;">
+      <li><strong>Random Jitter:</strong> Mỗi luồng con trước khi gửi request sẽ ngủ ngẫu nhiên từ 0.5s - 1.5s.</li>
+      <li><strong>Circuit Breaker (Ngắt mạch):</strong> Khi gặp lỗi 429/403, toàn bộ các luồng con sẽ dừng (Sleep) 30s và tự động kích hoạt Proxy dự phòng.</li>
+    </ul>
+  </div>
+  <div class="cons" style="background: rgba(155, 89, 182, 0.05); border: 1px solid #9b59b6; padding: 15px; border-radius: 8px;">
+    <h4 style="color: #9b59b6; margin: 0 0 10px 0;">🔄 Giải pháp tự sửa lỗi (Self-Healing Loop)</h4>
+    <ul style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.6;">
+      <li><strong>Verify Counts:</strong> Sau khi hoàn thành cào, DB checker sẽ đếm số lượng thực tế trong bảng và so sánh với tổng số của nguồn (Clarivate API total, BioxBio Subject total, SCImago CSV rows).</li>
+      <li><strong>Auto-Resume:</strong> Nếu đếm thấy thiếu (ví dụ do rớt mạng vài trang), hệ thống tự động sinh danh sách trang lỗi và chạy cào tiếp cho đến khi khớp 100%.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Các phương án kiến trúc điều phối (Chọn 1 phương án)</h3>
+</div>
+
+<div class="options">
+  <!-- Option A -->
+  <div class="option" data-choice="approach-poller" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>(Khuyên dùng) Coordinator Poller Task (Điều phối bằng Task giám sát ngầm)</h3>
+      <p style="font-size: 13px; margin: 5px 0 0 0; line-height: 1.5;">
+        Một Celery task điều phối chính (`crawl_and_integrate_all_task`) được kích hoạt. Task này sẽ kích hoạt song song 3 task cào thành phần (Clarivate, SCImago, BioxBio). 
+        Task điều phối này sẽ chạy liên tục để:
+        <br>1. Kiểm tra trạng thái của 3 luồng cào.
+        <br>2. Cập nhật tiến độ của từng luồng lên metadata để Frontend đọc hiển thị.
+        <br>3. Khi 3 luồng báo hoàn thành, Task điều phối kiểm tra đối sánh số lượng thực tế. Nếu phát hiện thiếu, nó sẽ tự động kích hoạt cào bù cho luồng bị thiếu.
+        <br>4. Khi đủ 100% dữ liệu, tự động chạy Task Mapping.
+      </p>
+      <div style="margin-top: 10px; font-size: 11px; color: #27ae60; font-weight: bold;">
+        👍 Ưu điểm: Hiển thị tiến độ siêu chi tiết cho Admin, tự sửa lỗi tập trung và dễ bảo trì code.
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="option" data-choice="approach-celery-chain" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Celery Group & Chords (Sử dụng luồng sự kiện thuần của Celery)</h3>
+      <p style="font-size: 13px; margin: 5px 0 0 0; line-height: 1.5;">
+        Sử dụng cấu trúc lập trình sự kiện của Celery (Group và Chords). 3 task cào sẽ được đẩy vào một Group chạy song song. Đầu ra của Group này được định hướng qua một Chord (hàm callback) để thực hiện kiểm tra số lượng và Mapping.
+      </p>
+      <div style="margin-top: 10px; font-size: 11px; color: #e67e22; font-weight: bold;">
+        ⚠️ Nhược điểm: Khó đẩy log chi tiết trạng thái tổng hợp của cả 3 luồng lên UI thời gian thực; việc tự cào bù (self-healing loop) khi phát hiện thiếu sẽ làm luồng Chord rất phức tạp và khó debug.
+      </div>
+    </div>
+  </div>
+</div>

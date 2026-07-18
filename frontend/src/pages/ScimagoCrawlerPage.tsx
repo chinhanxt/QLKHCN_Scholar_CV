@@ -55,6 +55,18 @@ export function ScimagoCrawlerPage() {
   const [isLoadingData, setIsLoadingData] = useState(false)
   const [selectedJournal, setSelectedJournal] = useState<any | null>(null)
   
+  // Stats state
+  const [dbStats, setDbStats] = useState<any>(null)
+
+  const fetchStats = async () => {
+    try {
+      const res = await scholarApi.getStats().then((r) => r.data)
+      setDbStats(res)
+    } catch (err) {
+      console.error('Error fetching stats:', err)
+    }
+  }
+  
   // Debounce search query
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -94,6 +106,7 @@ export function ScimagoCrawlerPage() {
       }
     }
     fetchData()
+    fetchStats()
     return () => {
       isMounted = false
     }
@@ -126,12 +139,14 @@ export function ScimagoCrawlerPage() {
           addConsoleLog('scimago', '>>> HOÀN THÀNH: Tải và nạp dữ liệu SCImago thành công!')
           addConsoleLog('scimago', `  Tổng số tạp chí đã lưu/cập nhật: ${res.result?.imported_journals || 0}`)
           toast.success('SCImago Crawler đã hoàn tất nạp dữ liệu!')
+          fetchStats()
         } else if (res.status === 'FAILURE') {
           setTaskState('scimago', { taskId: null })
           clearInterval(pollInterval)
           const err = res.message || 'Lỗi không xác định.'
           addConsoleLog('scimago', `>>> LỖI: ${err}`)
           toast.error(`Nạp dữ liệu SCImago thất bại: ${err}`)
+          fetchStats()
         }
       } catch (err: any) {
         console.error('Error polling crawler task:', err)
@@ -477,6 +492,29 @@ export function ScimagoCrawlerPage() {
       ) : (
         /* Data Viewer Tab */
         <Card className="border-slate-100 shadow-sm bg-white p-6 overflow-visible">
+
+          {/* Prominent Database Metric Card - Compact Version */}
+          <div className="mb-4 bg-gradient-to-r from-blue-50 to-[#e6f0f7]/50 border border-[#b8d4e9]/70 rounded-lg py-2 px-3.5 flex items-center justify-between shadow-3xs animate-in fade-in duration-300">
+            <div className="flex items-center gap-2.5">
+              <Database className="h-4 w-4 text-[#005b9a]" />
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-slate-550 uppercase tracking-wider">
+                  Cơ sở dữ liệu SCImago:
+                </span>
+                <span className="text-base font-extrabold text-[#005b9a]">
+                  {dbStats ? dbStats.scimago_journals.toLocaleString() : '---'}
+                </span>
+                <span className="text-[10px] text-slate-500 font-semibold">
+                  tạp chí đã nạp
+                </span>
+              </div>
+            </div>
+            <div className="hidden sm:block">
+              <span className="text-[10px] font-bold text-slate-400">
+                scimagojr_all.db
+              </span>
+            </div>
+          </div>
 
           {isLoadingData ? (
             <div className="flex flex-col items-center justify-center py-12 gap-2">

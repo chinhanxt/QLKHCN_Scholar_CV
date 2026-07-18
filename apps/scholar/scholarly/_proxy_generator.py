@@ -1,3 +1,4 @@
+import threading
 from typing import Callable
 from fp.fp import FreeProxy
 import random
@@ -42,11 +43,13 @@ class MaxTriesExceededException(Exception):
 
 
 class ProxyGenerator(object):
-    def __init__(self):
-        # setting up logger
-        self.logger = logging.getLogger('scholarly')
+    """
+    A class used to manage proxies and Tor connections
+    """
 
-        self._proxy_gen = None
+    def __init__(self):
+        self.logger = logging.getLogger('scholarly')
+        self._local = threading.local()
         # If we use a proxy or Tor, we set this to True
         self._proxy_works = False
         self.proxy_mode = None
@@ -61,13 +64,38 @@ class ProxyGenerator(object):
         self._TIMEOUT = 5
         self._new_session()
 
+    @property
+    def _session(self):
+        if not hasattr(self._local, 'session'):
+            self._local.session = None
+        return self._local.session
+
+    @_session.setter
+    def _session(self, value):
+        self._local.session = value
+
+    @property
+    def _webdriver(self):
+        if not hasattr(self._local, 'webdriver'):
+            self._local.webdriver = None
+        return self._local.webdriver
+
+    @_webdriver.setter
+    def _webdriver(self, value):
+        self._local.webdriver = value
+
     def __del__(self):
-        if self._tor_process:
+        if hasattr(self, '_tor_process') and self._tor_process:
             self._tor_process.kill()
             self._tor_process.wait()
-        self._close_session()
+        try:
+            self._close_session()
+        except Exception:
+            pass
 
     def get_session(self):
+        if not self._session:
+            self._new_session()
         return self._session
 
     def Luminati(self, usr, passwd, proxy_port):

@@ -114,7 +114,7 @@ export const scholarApi = {
 
   startUnifiedCrawl: (payload: {
     scimago_start_url?: string;
-    scimago_years?: number[];
+    scimago_years?: number[] | null;
     scimago_workers?: number;
     scimago_delay?: number;
     clarivate_start_url?: string;

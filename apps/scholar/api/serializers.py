@@ -6,6 +6,8 @@ from apps.scholar.models import (
 
 
 class JournalShortSerializer(serializers.ModelSerializer):
+    is_new = serializers.SerializerMethodField()
+
     class Meta:
         model = Journal
         fields = [
@@ -25,7 +27,14 @@ class JournalShortSerializer(serializers.ModelSerializer):
             "wos_core_collection",
             "bioxbio_match",
             "scimago_match",
+            "is_new",
         ]
+
+    def get_is_new(self, obj):
+        confirmed_titles = self.context.get("confirmed_titles")
+        if confirmed_titles is not None:
+            return obj.title_normalized not in confirmed_titles
+        return False
 
 
 

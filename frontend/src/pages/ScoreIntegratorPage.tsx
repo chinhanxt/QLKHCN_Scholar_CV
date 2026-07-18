@@ -91,6 +91,7 @@ const getQuartileBadge = (quartile: string | null) => {
 }
 
 export function ScoreIntegratorPage() {
+  // Inner tab and data viewer state
   const [activeTab, setActiveTab] = useState<'tool' | 'data'>('data')
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
@@ -100,6 +101,18 @@ export function ScoreIntegratorPage() {
   const [dataList, setDataList] = useState<any[]>([])
   const [isLoadingData, setIsLoadingData] = useState(false)
   const [selectedJournal, setSelectedJournal] = useState<any | null>(null)
+
+  // Stats state
+  const [dbStats, setDbStats] = useState<any>(null)
+
+  const fetchStats = async () => {
+    try {
+      const res = await scholarApi.getStats().then((r) => r.data)
+      setDbStats(res)
+    } catch (err) {
+      console.error('Error fetching stats:', err)
+    }
+  }
 
   // Integrator Task State from Zustand Store
   const { taskId, taskStatus, consoleLogs } = useCrawlerStore((state) => state.integrator)
@@ -147,6 +160,7 @@ export function ScoreIntegratorPage() {
       }
     }
     fetchData()
+    fetchStats()
     return () => {
       isMounted = false
     }
@@ -171,12 +185,14 @@ export function ScoreIntegratorPage() {
           addConsoleLog('integrator', '>>> HOÀN THÀNH: Tích hợp dữ liệu và đối khớp thành công!')
           addConsoleLog('integrator', `  Tổng số tạp chí đã cập nhật liên kết: ${res.result?.integrated_count || 0}`)
           toast.success('Đối khớp tích hợp CSDL đã hoàn tất!')
+          fetchStats()
         } else if (res.status === 'FAILURE') {
           setTaskState('integrator', { taskId: null })
           clearInterval(pollInterval)
           const err = res.message || 'Lỗi không xác định.'
           addConsoleLog('integrator', `>>> LỖI: ${err}`)
           toast.error(`Tích hợp CSDL thất bại: ${err}`)
+          fetchStats()
         }
       } catch (err: any) {
         console.error('Error polling integration task:', err)
@@ -465,6 +481,39 @@ export function ScoreIntegratorPage() {
       ) : (
         /* Mapped/Integrated Data Viewer Tab */
         <Card className="border-slate-100 shadow-sm bg-white p-6 overflow-visible">
+
+          {/* Prominent Database Metric Card - Compact Version */}
+          <div className="mb-4 bg-gradient-to-r from-blue-50 to-[#e6f0f7]/50 border border-[#b8d4e9]/70 rounded-lg py-2 px-3.5 flex items-center justify-between shadow-3xs animate-in fade-in duration-300">
+            <div className="flex items-center gap-2.5">
+              <GitMerge className="h-4 w-4 text-[#005b9a]" />
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-[11px] font-bold text-slate-555 uppercase tracking-wider">
+                  CSDL Tích hợp & Đối khớp:
+                </span>
+                <span className="text-base font-extrabold text-[#005b9a]">
+                  {dbStats ? dbStats.mapped_journals.toLocaleString() : '---'}
+                </span>
+                <span className="text-[10px] text-slate-500 font-semibold">
+                  tạp chí đã liên kết
+                </span>
+                {dbStats && dbStats.staging_journals > 0 && (
+                  <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100/50 animate-pulse">
+                    +{dbStats.staging_journals.toLocaleString()} staging
+                  </span>
+                )}
+                {dbStats && (
+                  <span className="text-[10px] font-bold text-[#005b9a] bg-[#e6f0f7]/60 px-1.5 py-0.5 rounded border border-[#b8d4e9]/30 ml-1">
+                    Tỷ lệ khớp: {dbStats.match_rate}%
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="hidden sm:block">
+              <span className="text-[10px] font-bold text-slate-400">
+                scholar_cv_all
+              </span>
+            </div>
+          </div>
 
           {isLoadingData ? (
             <div className="flex flex-col items-center justify-center py-12 gap-2">

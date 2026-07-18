@@ -20,7 +20,7 @@ export function UnifiedCrawlerPage() {
   const [bioxbioWorkers, setBioxbioWorkers] = useState<number>(10)
   const [bioxbioDelay, setBioxbioDelay] = useState<number>(2)
 
-  const [showConfig, setShowConfig] = useState(true)
+  const [showConfig, setShowConfig] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
 
   // Staging preview states
@@ -29,7 +29,7 @@ export function UnifiedCrawlerPage() {
   const [previewData, setPreviewData] = useState<any[]>([])
   const [previewSearch, setPreviewSearch] = useState<string>('')
   const [loadingPreview, setLoadingPreview] = useState<boolean>(false)
-  const [actionConfirmMode, setActionConfirmMode] = useState<'none' | 'confirm' | 'delete'>('none')
+  const [actionConfirmMode, setActionConfirmMode] = useState<'none' | 'delete'>('none')
   const [submittingAction, setSubmittingAction] = useState<boolean>(false)
 
   // Sub-task progress states parsed from task status info
@@ -246,13 +246,13 @@ export function UnifiedCrawlerPage() {
     setSubmittingAction(true)
     try {
       const res = await scholarApi.confirmStaging()
-      toast.success(`Ghi đè DB thành công! Đã cập nhật ${res.data.confirmed_count} bản ghi chính thức.`);
+      toast.success(`Đồng bộ & cập nhật DB thành công! Đã tích hợp ${res.data.confirmed_count} bản ghi chính thức.`);
       setActionConfirmMode('none')
       fetchStats()
       fetchPreview(activeStagingTab, previewSearch)
     } catch (err: any) {
       console.error(err)
-      toast.error('Lỗi khi xác nhận ghi đè dữ liệu.')
+      toast.error('Lỗi khi đồng bộ & cập nhật dữ liệu.')
     } finally {
       setSubmittingAction(false)
     }
@@ -286,6 +286,52 @@ export function UnifiedCrawlerPage() {
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800">Đang chờ</span>
     }
   }
+
+  const [autoCrawlEnabled, setAutoCrawlEnabled] = useState<boolean>(false)
+  const [autoCrawlHour, setAutoCrawlHour] = useState<number>(2)
+  const [autoCrawlMinute, setAutoCrawlMinute] = useState<number>(0)
+  const [savingSchedule, setSavingSchedule] = useState<boolean>(false)
+
+  // Load scheduler settings
+  useEffect(() => {
+    const loadScheduleSettings = async () => {
+      try {
+        const res = await scholarApi.getSettings()
+        setAutoCrawlEnabled(res.data.auto_crawl_enabled ?? false)
+        setAutoCrawlHour(res.data.auto_crawl_hour ?? 2)
+        setAutoCrawlMinute(res.data.auto_crawl_minute ?? 0)
+      } catch (err) {
+        console.error('Lỗi tải cấu hình lập lịch:', err)
+      }
+    }
+    loadScheduleSettings()
+  }, [])
+
+  const handleSaveSchedule = async () => {
+    setSavingSchedule(true)
+    try {
+      const currentSettings = await scholarApi.getSettings().then(r => r.data)
+      const updatedSettings = {
+        ...currentSettings,
+        auto_crawl_enabled: autoCrawlEnabled,
+        auto_crawl_hour: autoCrawlHour,
+        auto_crawl_minute: autoCrawlMinute,
+      }
+      await scholarApi.saveSettings(updatedSettings)
+      toast.success('Đã cập nhật lịch cào tự động thành công!')
+    } catch (err) {
+      console.error('Lỗi lưu lịch cào:', err)
+      toast.error('Lưu lịch cào tự động thất bại.')
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
+  const displayedData = activeStagingTab === 'staging_mapped'
+    ? previewData.filter((item) => item.is_new === true)
+    : previewData
+
+  const hasNewData = previewData.some((item) => item.is_new === true)
 
   const isRunning = taskStatus === 'PENDING' || taskStatus === 'PROGRESS'
 
@@ -475,6 +521,78 @@ export function UnifiedCrawlerPage() {
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Lập lịch cào tự động */}
+            <div className="col-span-1 md:col-span-3 pt-6 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex flex-col gap-1.5 max-w-xl">
+                <h4 className="font-bold text-slate-800 text-xs flex items-center gap-2 uppercase tracking-wider">
+                  <RefreshCw className="w-3.5 h-3.5 text-[#005b9a] animate-spin" style={{ animationDuration: '3s' }} /> Lập lịch cào tự động hàng ngày (Giờ Việt Nam)
+                </h4>
+                <p className="text-xs text-slate-450 leading-relaxed">
+                  Kích hoạt lịch cào tự động ngầm. Hệ thống sẽ chạy bộ cào song song và tự động đồng bộ vào cơ sở dữ liệu chính thức nếu phát hiện có tạp chí mới cào.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 bg-slate-50/50 p-4.5 rounded-xl border border-slate-100 w-full md:w-auto">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="autoCrawlEnabled"
+                    checked={autoCrawlEnabled}
+                    onChange={(e) => setAutoCrawlEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#005b9a] focus:ring-[#005b9a]/20 border-slate-350 cursor-pointer"
+                  />
+                  <label htmlFor="autoCrawlEnabled" className="text-xs font-bold text-slate-600 cursor-pointer select-none">
+                    Kích hoạt cào tự động
+                  </label>
+                </div>
+
+                {autoCrawlEnabled && (
+                  <div className="flex items-center gap-2 animate-in fade-in-50 duration-200">
+                    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 px-1.5">
+                      <select
+                        value={autoCrawlHour}
+                        onChange={(e) => setAutoCrawlHour(parseInt(e.target.value))}
+                        className="border-none bg-transparent py-1 text-xs text-slate-700 focus:outline-none font-bold cursor-pointer"
+                      >
+                        {Array.from({ length: 24 }).map((_, i) => (
+                          <option key={i} value={i}>
+                            {String(i).padStart(2, '0')}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-slate-400 font-bold">:</span>
+                      <select
+                        value={autoCrawlMinute}
+                        onChange={(e) => setAutoCrawlMinute(parseInt(e.target.value))}
+                        className="border-none bg-transparent py-1 text-xs text-slate-700 focus:outline-none font-bold cursor-pointer"
+                      >
+                        {Array.from({ length: 60 }).map((_, i) => (
+                          <option key={i} value={i}>
+                            {String(i).padStart(2, '0')}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <span className="text-[11px] text-slate-400 font-semibold italic">Giờ VN</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  disabled={savingSchedule}
+                  onClick={handleSaveSchedule}
+                  className="px-4 py-1.5 rounded-lg bg-[#005b9a] hover:bg-[#004b7c] text-white text-xs font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5 ml-auto md:ml-0"
+                >
+                  {savingSchedule ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang lưu...
+                    </>
+                  ) : (
+                    "Lưu Lịch Hẹn"
+                  )}
+                </button>
               </div>
             </div>
           </CardContent>
@@ -670,9 +788,9 @@ export function UnifiedCrawlerPage() {
             </div>
           )}
         </div>
-      </Card>
+            </Card>
 
-      {/* Staging Data Preview & Action Card (Draft Preview & Database Overwrite Sync Manager) */}
+      {/* Staging Data Preview & Action Card (Draft Preview & Database Sync & Update Manager) */}
       <Card className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
         <div className="p-4 px-6 border-b border-slate-100 flex items-center justify-between text-slate-800 font-semibold text-sm bg-white">
           <div className="flex items-center gap-2">
@@ -680,15 +798,25 @@ export function UnifiedCrawlerPage() {
           </div>
           {stats?.staging_journals > 0 && actionConfirmMode === 'none' && (
             <div className="flex items-center gap-2">
+              {hasNewData && (
+                <button
+                  disabled={submittingAction}
+                  onClick={handleConfirmStaging}
+                  className="inline-flex items-center justify-center px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 transition-colors text-white text-xs font-bold gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {submittingAction ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang đồng bộ...
+                    </>
+                  ) : (
+                    "Đồng Bộ & Cập Nhật"
+                  )}
+                </button>
+              )}
               <button
-                onClick={() => setActionConfirmMode('confirm')}
-                className="inline-flex items-center justify-center px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 transition-colors text-white text-xs font-bold gap-1.5 shadow-xs cursor-pointer"
-              >
-                Xác Nhận Đè Dữ Liệu
-              </button>
-              <button
+                disabled={submittingAction}
                 onClick={() => setActionConfirmMode('delete')}
-                className="inline-flex items-center justify-center px-4 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors text-rose-600 text-xs font-bold gap-1.5 border border-rose-200 cursor-pointer shadow-xs"
+                className="inline-flex items-center justify-center px-4 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors text-rose-600 text-xs font-bold gap-1.5 border border-rose-200 cursor-pointer shadow-xs disabled:opacity-50"
               >
                 Hủy / Xóa Bản Nháp
               </button>
@@ -698,43 +826,29 @@ export function UnifiedCrawlerPage() {
 
         <CardContent className="p-6 space-y-6 bg-white">
           {/* Action Warnings Confirmation dialog box */}
-          {actionConfirmMode !== 'none' && (
-            <div className={cn(
-              "p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 animate-[pulse_2s_infinite]",
-              actionConfirmMode === 'confirm' 
-                ? "bg-emerald-50 border-emerald-200 text-emerald-900" 
-                : "bg-rose-50 border-rose-200 text-rose-900"
-            )}>
+          {actionConfirmMode === 'delete' && (
+            <div className="p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 animate-[pulse_2s_infinite] bg-rose-50 border-rose-200 text-rose-900">
               <div className="flex items-center gap-3">
-                <AlertTriangle className={cn("w-8 h-8 shrink-0", actionConfirmMode === 'confirm' ? "text-emerald-600" : "text-rose-600")} />
+                <AlertTriangle className="w-8 h-8 shrink-0 text-rose-600" />
                 <div>
                   <h4 className="font-bold text-sm">
-                    {actionConfirmMode === 'confirm' 
-                      ? "⚠️ CẢNH BÁO: XÁC NHẬN GHI ĐÈ LÊN CƠ SỞ DỮ LIỆU CHÍNH THỨC" 
-                      : "⚠️ CẢNH BÁO: HỦY VÀ XÓA BẢN DỮ LIỆU NHÁP STAGING"
-                    }
+                    ⚠️ CẢNH BÁO: HỦY VÀ XÓA BẢN DỮ LIỆU NHÁP STAGING
                   </h4>
                   <p className="text-xs opacity-85 mt-1 font-semibold">
-                    {actionConfirmMode === 'confirm'
-                      ? `Hành động này sẽ XÓA TOÀN BỘ ${stats?.mapped_journals || 0} bản ghi tạp chí chính thức hiện tại và thay thế bằng ${stats?.staging_journals} bản ghi trong Staging. Thao tác này không thể hoàn tác.`
-                      : `Hành động này sẽ XÓA SẠCH toàn bộ ${stats?.staging_journals} bản ghi cào nháp tạm thời. Toàn bộ dữ liệu cào thô gốc của Clarivate, SCImago và BioxBio vẫn được giữ nguyên.`
-                    }
+                    Hành động này sẽ XÓA SẠCH toàn bộ {stats?.staging_journals} bản ghi cào nháp tạm thời. Toàn bộ dữ liệu cào thô gốc của Clarivate, SCImago và BioxBio vẫn được giữ nguyên.
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2.5 self-end md:self-auto">
                 <button
                   disabled={submittingAction}
-                  onClick={actionConfirmMode === 'confirm' ? handleConfirmStaging : handleDeleteStaging}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-xs font-bold text-white shadow-sm cursor-pointer disabled:opacity-50",
-                    actionConfirmMode === 'confirm' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"
-                  )}
+                  onClick={handleDeleteStaging}
+                  className="px-4 py-2 rounded-lg text-xs font-bold text-white shadow-sm cursor-pointer disabled:opacity-50 bg-rose-600 hover:bg-rose-700"
                 >
                   {submittingAction ? (
                     <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang xử lý...</span>
                   ) : (
-                    actionConfirmMode === 'confirm' ? "Tôi Đồng Ý, Hãy Ghi Đè!" : "Tôi Đồng Ý, Hãy Xóa Sạch!"
+                    "Tôi Đồng Ý, Hãy Xóa Sạch!"
                   )}
                 </button>
                 <button
@@ -829,9 +943,11 @@ export function UnifiedCrawlerPage() {
                       <Loader2 className="w-6 h-6 animate-spin text-[#005b9a]" />
                       <span className="text-xs font-semibold">Đang tải dữ liệu staging...</span>
                     </div>
-                  ) : previewData.length === 0 ? (
-                    <div className="py-12 text-center text-slate-400 text-xs font-semibold">
-                      Không tìm thấy bản ghi nào khớp với từ khóa lọc.
+                  ) : displayedData.length === 0 ? (
+                    <div className="py-12 text-center text-slate-450 text-xs font-semibold">
+                      {activeStagingTab === 'staging_mapped'
+                        ? "Không tìm thấy dữ liệu mới nào trên các nguồn."
+                        : "Không tìm thấy bản ghi nào khớp với từ khóa lọc."}
                     </div>
                   ) : (
                     <table className="w-full text-left text-xs border-collapse">
@@ -880,7 +996,7 @@ export function UnifiedCrawlerPage() {
                         )}
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                        {previewData.slice(0, 100).map((row, idx) => (
+                        {displayedData.slice(0, 100).map((row, idx) => (
                           <tr key={row.id || idx} className="hover:bg-slate-50/50 transition-colors">
                             {activeStagingTab === 'clarivate' && (
                               <>
@@ -914,7 +1030,20 @@ export function UnifiedCrawlerPage() {
                             )}
                             {activeStagingTab === 'staging_mapped' && (
                               <>
-                                <td className="p-3 pl-4 font-bold text-slate-800 truncate max-w-xs">{row.clarivate_title}</td>
+                                <td className="p-3 pl-4 truncate max-w-xs">
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <span className="font-bold text-slate-800">{row.clarivate_title}</span>
+                                    {row.is_new ? (
+                                      <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold rounded text-[9px] uppercase">
+                                        Mới cào
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 font-bold rounded text-[9px] uppercase">
+                                        Hiện có
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="p-3 font-semibold text-slate-500">{row.issn || '-'}</td>
                                 <td className="p-3 font-semibold text-slate-500">{row.eissn || '-'}</td>
                                 <td className="p-3 text-purple-700 font-bold">{row.latest_if || '-'}</td>

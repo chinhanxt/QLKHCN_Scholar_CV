@@ -75,7 +75,10 @@ def get_scholar_settings():
         'SCHOLAR_LUMINATI_PORT': getattr(settings, 'SCHOLAR_LUMINATI_PORT', 0),
         'SCHOLAR_HTTP_PROXY': getattr(settings, 'SCHOLAR_HTTP_PROXY', ''),
         'SCHOLAR_HTTPS_PROXY': getattr(settings, 'SCHOLAR_HTTPS_PROXY', ''),
-        'SCHOLAR_RETRIES': 3
+        'SCHOLAR_RETRIES': 3,
+        'auto_crawl_enabled': False,
+        'auto_crawl_hour': 2,
+        'auto_crawl_minute': 0,
     }
     if os.path.exists(filepath):
         try:
@@ -88,6 +91,46 @@ def get_scholar_settings():
     return defaults
 
 
+def sync_celery_beat_schedule(data):
+    """
+    Đồng bộ cấu hình lịch cào vào database django-celery-beat.
+    """
+    try:
+        from django_celery_beat.models import PeriodicTask, CrontabSchedule
+        import json as json_lib
+
+        task_name = 'scholar_auto_crawl_task'
+        enabled = data.get('auto_crawl_enabled', False)
+        hour = int(data.get('auto_crawl_hour', 2))
+        minute = int(data.get('auto_crawl_minute', 0))
+
+        if enabled:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute=str(minute),
+                hour=str(hour),
+                day_of_week='*',
+                day_of_month='*',
+                month_of_year='*',
+                timezone='Asia/Ho_Chi_Minh',
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    'task': 'apps.scholar.tasks.crawl_and_integrate_all_task',
+                    'crontab': schedule,
+                    'enabled': True,
+                    'kwargs': json_lib.dumps({'is_automated': True}),
+                    'description': 'Tự động cào và đồng bộ dữ liệu journal theo lịch (giờ VN)',
+                }
+            )
+            logger.info(f"Celery Beat schedule updated: {hour:02d}:{minute:02d} (Asia/Ho_Chi_Minh)")
+        else:
+            PeriodicTask.objects.filter(name=task_name).update(enabled=False)
+            logger.info("Celery Beat auto-crawl schedule disabled")
+    except Exception as e:
+        logger.error(f"sync_celery_beat_schedule error: {e}")
+
+
 def save_scholar_settings(data):
     import json
     filepath = os.path.join(settings.BASE_DIR, 'config/scholar_settings.json')
@@ -95,10 +138,14 @@ def save_scholar_settings(data):
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
+        
+        # Sync schedule configuration to database
+        sync_celery_beat_schedule(data)
         return True
     except Exception as e:
         logger.error(f"Error saving scholar settings: {e}")
         return False
+
 
 
 def setup_scholarly_proxy():
@@ -208,13 +255,27 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
         state_lock = threading.Lock()
         processed_count = 0
         
+        # Determine speed and concurrency based on Proxy settings
+        config = get_scholar_settings()
+        proxy_mode = config.get('SCHOLAR_PROXY_MODE', 'DIRECT')
+        
+        if proxy_mode in ('SCRAPERAPI', 'LUMINATI'):
+            max_workers = 15
+            min_delay, max_delay = 0.1, 0.4
+        elif proxy_mode in ('FREE_PROXIES', 'SINGLEPROXY'):
+            max_workers = 8
+            min_delay, max_delay = 0.3, 0.8
+        else: # DIRECT
+            max_workers = 5
+            min_delay, max_delay = 0.5, 1.5
+            
         def fill_one_pub(idx_and_pub):
             nonlocal processed_count
             idx, pub = idx_and_pub
             pub_title = pub.get('bib', {}).get('title', '')
             
             # Random delay before starting request to avoid bot detection (same as GUI)
-            time.sleep(random.uniform(0.5, 1.5))
+            time.sleep(random.uniform(min_delay, max_delay))
             
             try:
                 logger.info(f"Filling publication {idx+1}/{total_pubs}: {pub_title}")
@@ -240,8 +301,6 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                     }
                 )
         
-        # Match desktop tool default threads (using 5 threads for high speed parallel crawl)
-        max_workers = 5
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             executor.map(fill_one_pub, list(enumerate(pubs)))
                 
@@ -273,21 +332,19 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                 
     # Use database transaction to write profile and publications
     from django.db import transaction
-    from apps.scholar.models import GoogleScholarProfile, Publication
+    from apps.scholar.models import AuthorProfile, Publication
     
     try:
         with transaction.atomic():
             interests = author.get("interests", [])
             # Save or update author profile
-            author_profile, created = GoogleScholarProfile.objects.update_or_create(
+            author_profile, created = AuthorProfile.objects.update_or_create(
                 scholar_id=author.get("scholar_id"),
                 defaults={
                     "name": author.get("name", "Tác giả ẩn danh"),
                     "affiliation": author.get("affiliation", "Không rõ cơ quan công tác"),
                     "citedby": author.get("citedby", 0),
-                    "citedby5y": author.get("citedby5y", 0),
                     "hindex": author.get("hindex", 0),
-                    "hindex5y": author.get("hindex5y", 0),
                     "i10index": author.get("i10index", 0),
                     "interests": interests,
                 }
@@ -295,7 +352,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
             
             # Cache existing publications to preserve full authors list and cites history
             existing_pubs = {
-                p.title.lower().strip(): p 
+                p.display_order: p 
                 for p in Publication.objects.filter(author=author_profile)
             }
             processed_pub_ids = []
@@ -351,8 +408,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                 cites_history = pub.get("cites_per_year", {})
                 
                 # Merge logic: preserve existing data if it's higher quality
-                title_lower = title.lower().strip()
-                existing_pub = existing_pubs.get(title_lower)
+                existing_pub = existing_pubs.get(idx)
                 
                 final_authors = authors_clean
                 if existing_pub and existing_pub.authors_list:
@@ -370,13 +426,13 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                 
                 pub_obj, created = Publication.objects.update_or_create(
                     author=author_profile,
-                    title=title,
+                    display_order=idx,
                     defaults={
+                        "title": title,
                         "authors_list": final_authors,
                         "venue": venue_raw,
                         "year": year,
                         "citations": num_citations,
-                        "display_order": idx,
                         "cites_per_year": final_cites_history,
                         "journal": journal_fk,
                         "sjr_q": sjr_q,
@@ -434,8 +490,10 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=Non
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
+    session = requests.Session()
+    
     try:
-        r = requests.get(start_url, headers=headers, timeout=15)
+        r = session.get(start_url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
     except Exception as e:
         logger.exception("Failed to connect to BioxBio")
@@ -518,7 +576,7 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=Non
             page_url = f"{target_url}{sep}page={page_num}"
             
             try:
-                page_res = requests.get(page_url, headers=headers, timeout=15)
+                page_res = session.get(page_url, headers=headers, timeout=15)
                 if page_res.status_code in [403, 429]:
                     with state_lock:
                         crawler_state['sleep_until'] = time.time() + 30.0
@@ -573,7 +631,7 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=Non
                     time.sleep(random.uniform(delay * 0.25, delay * 0.75))
 
                     try:
-                        res_det = requests.get(link_str, headers=headers, timeout=15)
+                        res_det = session.get(link_str, headers=headers, timeout=15)
                         if res_det.status_code in [403, 429]:
                             with state_lock:
                                 crawler_state['sleep_until'] = time.time() + 30.0
@@ -700,6 +758,12 @@ def crawl_scimago_task(self, start_url="https://www.scimagojr.com/journalrank.ph
     for idx, year in enumerate(years):
         self.update_state(state='PROGRESS', meta={'message': f"Downloading SCImago CSV for year {year}...", 'progress': int((idx / total_years) * 100)})
         
+        # Optimize: skip download for past years if already exists in DB
+        current_year = int(time.strftime("%Y"))
+        if year < current_year and ScimagoRanking.objects.filter(year=year).exists():
+            logger.info(f"SCImago CSV for past year {year} already exists in DB. Skipping.")
+            continue
+            
         base_url = start_url.split('?')[0]
         url = f"{base_url}?year={year}&out=xls"
         r = None
@@ -872,7 +936,7 @@ def crawl_scimago_task(self, start_url="https://www.scimagojr.com/journalrank.ph
 # 6. CLARIVATE CRAWLER TASK
 # ==============================================================================
 @shared_task(bind=True)
-def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search", max_pages=None, max_workers=3, delay=1.5):
+def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search", max_pages=None, max_workers=5, delay=0.5):
     """
     Celery task to scrape the Clarivate Web of Science Master Journal List page-by-page.
     """
@@ -887,6 +951,8 @@ def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jpro
         "x-1p-appId": "mjl",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
+    
+    session = requests.Session()
     
     # 1. Fetch total pages
     search_id = str(hashlib.md5(str(time.time()).encode()).hexdigest())
@@ -919,7 +985,7 @@ def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jpro
     }
     
     try:
-        r = requests.post(url, headers=headers, json=payload, timeout=20)
+        r = session.post(url, headers=headers, json=payload, timeout=20)
         init_res = r.json()
     except Exception as e:
         logger.exception("Failed to connect to Clarivate API")
@@ -965,7 +1031,7 @@ def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jpro
             time.sleep(random.uniform(delay * 0.25, delay * 0.75))
             
         try:
-            res = requests.post(url, headers=headers, json=page_payload, timeout=20)
+            res = session.post(url, headers=headers, json=page_payload, timeout=20)
             if res.status_code in [403, 429]:
                 with state_lock:
                     crawler_state['sleep_until'] = time.time() + 30.0
@@ -1072,6 +1138,7 @@ def integrate_scores_task(self):
     Celery task that matches raw BioxBio and SCImago journals against Clarivate raw,
     populates unified Journal master entries, and builds direct mapping links.
     Identical double-matching flow as the desktop Tool 5.
+    Optimized to use in-memory caches and bulk creations for maximum speed.
     """
     self.update_state(state='PROGRESS', meta={'message': 'Loading raw databases into memory cache...', 'progress': 5})
     Journal.objects.filter(is_staging=True).delete()
@@ -1091,148 +1158,179 @@ def integrate_scores_task(self):
     for issn_obj in ScimagoISSN.objects.select_related('journal'):
         scimago_issns[issn_obj.issn] = issn_obj.journal
 
+    # Cache rankings in memory to prevent database roundtrips
+    from collections import defaultdict
+    
+    biox_rankings = defaultdict(list)
+    for r in BioxbioRanking.objects.all().order_by('-year'):
+        biox_rankings[r.journal_id].append(r)
+        
+    scimago_rankings = defaultdict(list)
+    for r in ScimagoRanking.objects.all().order_by('-year'):
+        scimago_rankings[r.journal_id].append(r)
+
+    # Cache existing ISSNs to avoid duplicate key errors
+    existing_issns = set(JournalISSN.objects.values_list('issn', flat=True))
+
     # Fetch Clarivate Raw journals
     clarivate_journals = ClarivateJournal.objects.all()
     total_count = clarivate_journals.count()
     self.update_state(state='PROGRESS', meta={'message': f"Found {total_count} Clarivate master records. Commencing matching...", 'progress': 15})
     
-    # Process in chunks of 2000
-    chunk_size = 2000
-    processed_count = 0
+    journals_by_title = {}
+    inserted_issns_in_run = set()
     
-    for start_idx in range(0, total_count, chunk_size):
-        batch = list(clarivate_journals[start_idx:start_idx+chunk_size])
+    # Matching pass (100% in-memory)
+    for idx, raw_j in enumerate(clarivate_journals):
+        title_norm = raw_j.title_normalized
+        if not title_norm:
+            continue
+            
+        # A. Try matching against BioxBio
+        biox_match = None
+        biox_journal_fk = None
         
-        with transaction.atomic():
-            for raw_j in batch:
-                title_norm = raw_j.title_normalized
-                if not title_norm:
-                    continue
-                    
-                # A. Try matching against BioxBio
-                biox_match = None
-                biox_journal_fk = None
-                
-                # Check ISSN first
-                cleaned_issn = raw_j.issn.replace("-", "").strip().upper() if raw_j.issn else ""
-                cleaned_eissn = raw_j.eissn.replace("-", "").strip().upper() if raw_j.eissn else ""
-                
-                if cleaned_issn and cleaned_issn in biox_issns:
-                    biox_journal_fk = biox_issns[cleaned_issn]
-                    biox_match = "ISSN"
-                elif cleaned_eissn and cleaned_eissn in biox_issns:
-                    biox_journal_fk = biox_issns[cleaned_eissn]
-                    biox_match = "eISSN"
-                elif title_norm in biox_cache_by_title:
-                    biox_journal_fk = biox_cache_by_title[title_norm]
-                    biox_match = "Title Exact"
-                    
-                # B. Try matching against SCImago
-                scimago_match = None
-                scimago_journal_fk = None
-                
-                if cleaned_issn and cleaned_issn in scimago_issns:
-                    scimago_journal_fk = scimago_issns[cleaned_issn]
-                    scimago_match = "ISSN"
-                elif cleaned_eissn and cleaned_eissn in scimago_issns:
-                    scimago_journal_fk = scimago_issns[cleaned_eissn]
-                    scimago_match = "eISSN"
-                elif title_norm in scimago_cache_by_title:
-                    scimago_journal_fk = scimago_cache_by_title[title_norm]
-                    scimago_match = "Title Exact"
+        # Check ISSN first
+        cleaned_issn = raw_j.issn.replace("-", "").strip().upper() if raw_j.issn else ""
+        cleaned_eissn = raw_j.eissn.replace("-", "").strip().upper() if raw_j.eissn else ""
+        
+        if cleaned_issn and cleaned_issn in biox_issns:
+            biox_journal_fk = biox_issns[cleaned_issn]
+            biox_match = "ISSN"
+        elif cleaned_eissn and cleaned_eissn in biox_issns:
+            biox_journal_fk = biox_issns[cleaned_eissn]
+            biox_match = "eISSN"
+        elif title_norm in biox_cache_by_title:
+            biox_journal_fk = biox_cache_by_title[title_norm]
+            biox_match = "Title Exact"
+            
+        # B. Try matching against SCImago
+        scimago_match = None
+        scimago_journal_fk = None
+        
+        if cleaned_issn and cleaned_issn in scimago_issns:
+            scimago_journal_fk = scimago_issns[cleaned_issn]
+            scimago_match = "ISSN"
+        elif cleaned_eissn and cleaned_eissn in scimago_issns:
+            scimago_journal_fk = scimago_issns[cleaned_eissn]
+            scimago_match = "eISSN"
+        elif title_norm in scimago_cache_by_title:
+            scimago_journal_fk = scimago_cache_by_title[title_norm]
+            scimago_match = "Title Exact"
 
-                # C. Extract latest rankings
-                biox_if = None
-                biox_yr = None
-                if biox_journal_fk:
-                    latest_biox_rank = biox_journal_fk.raw_rankings.order_by('-year').first()
-                    if latest_biox_rank:
-                        biox_if = latest_biox_rank.impact_factor
-                        biox_yr = latest_biox_rank.year
-                        
-                scimago_sjr = None
-                scimago_yr = None
-                scimago_q = None
-                scimago_h = None
-                if scimago_journal_fk:
-                    latest_s_rank = scimago_journal_fk.raw_rankings.order_by('-year').first()
-                    if latest_s_rank:
-                        scimago_sjr = latest_s_rank.sjr_score
-                        scimago_yr = latest_s_rank.year
-                        scimago_q = latest_s_rank.sjr_quartile
-                        scimago_h = latest_s_rank.h_index
+        # C. Extract latest rankings
+        biox_if = None
+        biox_yr = None
+        biox_ranks_list = []
+        if biox_journal_fk:
+            biox_ranks_list = biox_rankings.get(biox_journal_fk.id, [])
+            if biox_ranks_list:
+                latest_biox_rank = biox_ranks_list[0]
+                biox_if = latest_biox_rank.impact_factor
+                biox_yr = latest_biox_rank.year
+                
+        scimago_sjr = None
+        scimago_yr = None
+        scimago_q = None
+        scimago_h = None
+        scimago_ranks_list = []
+        if scimago_journal_fk:
+            scimago_ranks_list = scimago_rankings.get(scimago_journal_fk.id, [])
+            if scimago_ranks_list:
+                latest_s_rank = scimago_ranks_list[0]
+                scimago_sjr = latest_s_rank.sjr_score
+                scimago_yr = latest_s_rank.year
+                scimago_q = latest_s_rank.sjr_quartile
+                scimago_h = latest_s_rank.h_index
 
-                # Create or update Mapped Journal in staging
-                journal, created = Journal.objects.update_or_create(
-                    title_normalized=title_norm,
-                    is_staging=True,
-                    defaults={
-                        "clarivate_title": raw_j.title,
-                        "issn": raw_j.issn,
-                        "eissn": raw_j.eissn,
-                        "publisher": raw_j.publisher,
-                        "country": raw_j.country,
-                        "wos_core_collection": raw_j.wos_core_collection,
-                        "additional_wos_indexes": raw_j.additional_wos_indexes,
-                        "latest_if": biox_if,
-                        "latest_if_year": biox_yr,
-                        "latest_sjr": scimago_sjr,
-                        "latest_sjr_year": scimago_yr,
-                        "latest_quartile": scimago_q,
-                        "latest_h_index": scimago_h,
-                        "bioxbio_match": biox_match,
-                        "bioxbio_journal": biox_journal_fk,
-                        "scimago_match": scimago_match,
-                        "scimago_journal": scimago_journal_fk,
-                    }
+        defaults = {
+            "clarivate_title": raw_j.title,
+            "issn": raw_j.issn,
+            "eissn": raw_j.eissn,
+            "publisher": raw_j.publisher,
+            "country": raw_j.country,
+            "wos_core_collection": raw_j.wos_core_collection,
+            "additional_wos_indexes": raw_j.additional_wos_indexes,
+            "latest_if": biox_if,
+            "latest_if_year": biox_yr,
+            "latest_sjr": scimago_sjr,
+            "latest_sjr_year": scimago_yr,
+            "latest_quartile": scimago_q,
+            "latest_h_index": scimago_h,
+            "bioxbio_match": biox_match,
+            "bioxbio_journal": biox_journal_fk,
+            "scimago_match": scimago_match,
+            "scimago_journal": scimago_journal_fk,
+        }
+        
+        if title_norm in journals_by_title:
+            journal_obj = journals_by_title[title_norm]
+            for k, v in defaults.items():
+                setattr(journal_obj, k, v)
+        else:
+            journal_obj = Journal(
+                title_normalized=title_norm,
+                is_staging=True,
+                **defaults
+            )
+            journals_by_title[title_norm] = journal_obj
+
+    # 2. Bulk insert Journals
+    self.update_state(state='PROGRESS', meta={'message': "Writing mapped journals to database...", 'progress': 80})
+    journals_list = list(journals_by_title.values())
+    created_journals = Journal.objects.bulk_create(journals_list, batch_size=1000)
+    
+    # 3. Create secondary tables in memory
+    issns_to_create = []
+    rankings_to_create = []
+    
+    for j in created_journals:
+        cleaned_issn = j.issn.replace("-", "").strip().upper() if j.issn else ""
+        cleaned_eissn = j.eissn.replace("-", "").strip().upper() if j.eissn else ""
+        
+        for code in filter(None, [cleaned_issn, cleaned_eissn]):
+            if code not in existing_issns and code not in inserted_issns_in_run:
+                issns_to_create.append(JournalISSN(journal=j, issn=code))
+                inserted_issns_in_run.add(code)
+                
+        biox_ranks_list = []
+        if j.bioxbio_journal_id:
+            biox_ranks_list = biox_rankings.get(j.bioxbio_journal_id, [])
+            
+        scimago_ranks_list = []
+        if j.scimago_journal_id:
+            scimago_ranks_list = scimago_rankings.get(j.scimago_journal_id, [])
+            
+        years_to_process = set()
+        biox_ranks_map = {}
+        for r in biox_ranks_list:
+            years_to_process.add(r.year)
+            biox_ranks_map[r.year] = r
+            
+        sjr_ranks_map = {}
+        for r in scimago_ranks_list:
+            years_to_process.add(r.year)
+            sjr_ranks_map[r.year] = r
+            
+        for yr in years_to_process:
+            b_rank = biox_ranks_map.get(yr)
+            s_rank = sjr_ranks_map.get(yr)
+            
+            rankings_to_create.append(
+                JournalRanking(
+                    journal=j,
+                    year=yr,
+                    impact_factor=b_rank.impact_factor if b_rank else None,
+                    sjr_score=s_rank.sjr_score if s_rank else None,
+                    sjr_quartile=s_rank.sjr_quartile if s_rank else None,
+                    h_index=s_rank.h_index if s_rank else None,
                 )
-                
-                # Update ISSN entries for this journal
-                for code in filter(None, [cleaned_issn, cleaned_eissn]):
-                    JournalISSN.objects.get_or_create(
-                        issn=code,
-                        defaults={"journal": journal}
-                    )
-                    
-                # Match rankings
-                # Add BioxBio and SCImago rankings history
-                years_to_process = set()
-                biox_ranks_map = {}
-                if biox_journal_fk:
-                    for r in biox_journal_fk.raw_rankings.all():
-                        years_to_process.add(r.year)
-                        biox_ranks_map[r.year] = r
-                        
-                sjr_ranks_map = {}
-                if scimago_journal_fk:
-                    for r in scimago_journal_fk.raw_rankings.all():
-                        years_to_process.add(r.year)
-                        sjr_ranks_map[r.year] = r
-                        
-                for yr in years_to_process:
-                    b_rank = biox_ranks_map.get(yr)
-                    s_rank = sjr_ranks_map.get(yr)
-                    
-                    JournalRanking.objects.update_or_create(
-                        journal=journal,
-                        year=yr,
-                        defaults={
-                            "impact_factor": b_rank.impact_factor if b_rank else None,
-                            "sjr_score": s_rank.sjr_score if s_rank else None,
-                            "sjr_quartile": s_rank.sjr_quartile if s_rank else None,
-                            "h_index": s_rank.h_index if s_rank else None,
-                        }
-                    )
+            )
 
-        processed_count += len(batch)
-        progress_val = int(15 + (processed_count / total_count) * 85)
-        self.update_state(
-            state='PROGRESS', 
-            meta={
-                'message': f"Integrated {processed_count} of {total_count} journals...", 
-                'progress': progress_val
-            }
-        )
+    # 4. Bulk insert ISSNS and Rankings
+    self.update_state(state='PROGRESS', meta={'message': "Writing ISSNs and rankings to database...", 'progress': 95})
+    JournalISSN.objects.bulk_create(issns_to_create, batch_size=1000)
+    JournalRanking.objects.bulk_create(rankings_to_create, batch_size=1000)
 
     logger.info(f"Integrated Academic Scores finished successfully. Processed {total_count} journals.")
     return {'status': 'success', 'integrated_count': total_count}
@@ -1244,12 +1342,13 @@ def integrate_scores_task(self):
 @shared_task(bind=True)
 def crawl_and_integrate_all_task(
     self,
+    is_automated=False,
     scimago_years=None,
     scimago_start_url="https://www.scimagojr.com/journalrank.php",
     clarivate_max_pages=None,
     clarivate_start_url="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search",
-    clarivate_workers=3,
-    clarivate_delay=1.5,
+    clarivate_workers=5,
+    clarivate_delay=0.5,
     scimago_workers=5,
     scimago_delay=1.0,
     bioxbio_start_url="https://www.bioxbio.com/journal/",
@@ -1263,6 +1362,7 @@ def crawl_and_integrate_all_task(
     2. Poller Loop: Kiểm tra tiến độ 5s/lần, cập nhật metadata.
     3. Self-Healing: Đếm số lượng DB, cào bù nếu thiếu.
     4. Kích hoạt integrate_scores_task khi đủ 100%.
+    5. Đồng bộ tự động nếu is_automated=True và phát hiện dữ liệu mới.
     """
     from celery.result import AsyncResult
 
@@ -1425,6 +1525,45 @@ def crawl_and_integrate_all_task(
 
         if map_res.status in ('SUCCESS', 'FAILURE'):
             break
+
+    # --- Phase 5: Auto-Sync (Only for automated Celery Beat runs) ---
+    if is_automated:
+        from apps.scholar.models import Journal
+        from django.db import connection, transaction
+
+        confirmed_titles = set(Journal.objects.filter(is_staging=False).values_list('title_normalized', flat=True))
+        has_new = Journal.objects.filter(is_staging=True).exclude(title_normalized__in=confirmed_titles).exists()
+
+        if has_new:
+            logger.info("Auto-Sync: Phát hiện dữ liệu mới, bắt đầu đồng bộ tự động...")
+            try:
+                with transaction.atomic():
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            UPDATE scholar_publications 
+                            SET journal_id = NULL 
+                            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                        """)
+                        cursor.execute("""
+                            DELETE FROM scholar_journal_rankings 
+                            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                        """)
+                        cursor.execute("""
+                            DELETE FROM scholar_journal_issns 
+                            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                        """)
+                        cursor.execute("DELETE FROM scholar_journals WHERE is_staging = FALSE")
+                    Journal.objects.filter(is_staging=True).update(is_staging=False)
+                logger.info("Auto-Sync: Đồng bộ dữ liệu thành công.")
+            except Exception as e:
+                logger.error(f"Auto-Sync: Đồng bộ thất bại: {e}")
+        else:
+            logger.info("Auto-Sync: Không có dữ liệu mới nào. Đang dọn dẹp dữ liệu staging...")
+            try:
+                Journal.objects.filter(is_staging=True).delete()
+                logger.info("Auto-Sync: Dọn dẹp staging thành công.")
+            except Exception as e:
+                logger.error(f"Auto-Sync: Dọn dẹp staging thất bại: {e}")
 
     return {
         'status': 'success',

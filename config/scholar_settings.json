@@ -1,0 +1,13 @@
+{
+    "SCHOLAR_PROXY_MODE": "",
+    "SCRAPER_API_KEY": "",
+    "SCHOLAR_LUMINATI_USER": "",
+    "SCHOLAR_LUMINATI_PASSWORD": "",
+    "SCHOLAR_LUMINATI_PORT": 0,
+    "SCHOLAR_HTTP_PROXY": "",
+    "SCHOLAR_HTTPS_PROXY": "",
+    "SCHOLAR_RETRIES": 3,
+    "auto_crawl_enabled": false,
+    "auto_crawl_hour": 4,
+    "auto_crawl_minute": 15
+}

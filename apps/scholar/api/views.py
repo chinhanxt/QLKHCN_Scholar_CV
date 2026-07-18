@@ -265,22 +265,43 @@ class CrawlerViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="confirm-staging")
     def confirm_staging(self, request):
         """
-        Xác nhận đè dữ liệu staging lên DB hiện tại.
-        1. Xóa toàn bộ Journal where is_staging=False.
+        Xác nhận đồng bộ dữ liệu staging lên DB chính thức.
+        1. Xóa toàn bộ Journal where is_staging=False (sử dụng raw SQL để nhanh và tránh nghẽn Django ORM cascade).
         2. Cập nhật tất cả Journal where is_staging=True thành is_staging=False.
         """
         from apps.scholar.models import Journal
-        from django.db import transaction
+        from django.db import transaction, connection
         
         try:
             with transaction.atomic():
-                # Delete confirmed journals (cascade deletes confirmed ISSNs & rankings)
-                Journal.objects.filter(is_staging=False).delete()
-                # Update staging journals to confirmed
+                with connection.cursor() as cursor:
+                    # 1. SET NULL cho publication.journal_id của các journal chuẩn bị xóa
+                    cursor.execute("""
+                        UPDATE scholar_publications 
+                        SET journal_id = NULL 
+                        WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                    """)
+                    # 2. Xóa các rankings chính thức của các journal chuẩn bị xóa
+                    cursor.execute("""
+                        DELETE FROM scholar_journal_rankings 
+                        WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                    """)
+                    # 3. Xóa các issns chính thức của các journal chuẩn bị xóa
+                    cursor.execute("""
+                        DELETE FROM scholar_journal_issns 
+                        WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                    """)
+                    # 4. Xóa chính các journal chính thức
+                    cursor.execute("DELETE FROM scholar_journals WHERE is_staging = FALSE")
+                    
+                # 5. Cập nhật staging journals thành chính thức (is_staging = False)
                 updated_count = Journal.objects.filter(is_staging=True).update(is_staging=False)
                 
             return Response({"status": "success", "confirmed_count": updated_count}, status=status.HTTP_200_OK)
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.exception("Error in confirm_staging raw SQL execution")
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=["post"], url_path="delete-staging")
@@ -451,7 +472,12 @@ class CrawlerViewSet(viewsets.ViewSet):
             )
 
         queryset = queryset[:100]
-        serializer = JournalShortSerializer(queryset, many=True)
+        confirmed_titles = None
+        if staging:
+            confirmed_titles = set(
+                Journal.objects.filter(is_staging=False).values_list("title_normalized", flat=True)
+            )
+        serializer = JournalShortSerializer(queryset, many=True, context={"confirmed_titles": confirmed_titles})
         return Response(serializer.data)
 
 
