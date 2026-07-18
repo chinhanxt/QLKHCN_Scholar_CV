@@ -468,6 +468,12 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=Non
     import random
     import threading
 
+    existing_biox_titles = set(
+        BioxbioJournal.objects.filter(raw_rankings__isnull=False)
+        .values_list('title_normalized', flat=True)
+        .distinct()
+    )
+
     total_subjects = len(subject_links)
     logger.info(f"Found {total_subjects} subjects to crawl.")
     journals_scraped_count = 0
@@ -545,11 +551,9 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=Non
             active_batch = []
             for title, link in journal_links:
                 norm_title = normalize_title(title)
-                # Skip if already exists and has rankings
-                if BioxbioJournal.objects.filter(title_normalized=norm_title).exists():
-                    j = BioxbioJournal.objects.get(title_normalized=norm_title)
-                    if j.raw_rankings.exists():
-                        continue
+                # Skip if already exists in our cache set
+                if norm_title in existing_biox_titles:
+                    continue
                 active_batch.append((title, link))
                 
             if active_batch:
@@ -643,6 +647,7 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=Non
                                     title_normalized=norm_t,
                                     defaults={'title': det_res['title']}
                                 )
+                                existing_biox_titles.add(norm_t)
                                 for issn_code in det_res['issns']:
                                     BioxbioISSN.objects.get_or_create(
                                         issn=issn_code,
@@ -757,11 +762,15 @@ def crawl_scimago_task(self, start_url="https://www.scimagojr.com/journalrank.ph
         
         # We cache all existing source IDs to decide if we bulk_create with ignore or update
         existing_source_ids = set(ScimagoJournal.objects.values_list('source_id', flat=True))
+        existing_rankings = set(ScimagoRanking.objects.filter(year=year).values_list('journal__source_id', flat=True))
         
         for _, row in df.iterrows():
             try:
                 sid = int(row[found_cols['source_id']])
             except Exception:
+                continue
+                
+            if sid in existing_rankings:
                 continue
                 
             title_val = str(row[found_cols['title']]).strip()
@@ -868,6 +877,7 @@ def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jpro
     Celery task to scrape the Clarivate Web of Science Master Journal List page-by-page.
     """
     import random
+    existing_ids = set(ClarivateJournal.objects.values_list('publication_id', flat=True))
     self.update_state(state='PROGRESS', meta={'message': 'Connecting to Clarivate REST API...', 'progress': 5})
     url = start_url
     headers = {
@@ -994,6 +1004,8 @@ def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jpro
             for p in profiles:
                 profile = p.get('journalProfile', {})
                 pub_id = profile.get('publicationId')
+                if pub_id in existing_ids:
+                    continue
                 title = profile.get('publicationTitle', '').strip()
                 issn = profile.get('issn', '').strip()
                 eissn = profile.get('eissn', '').strip()
@@ -1037,6 +1049,8 @@ def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jpro
             with transaction.atomic():
                 for i in range(0, len(records_to_create), 5000):
                     ClarivateJournal.objects.bulk_create(records_to_create[i:i+5000], ignore_conflicts=True)
+            for r in records_to_create:
+                existing_ids.add(r.publication_id)
                 
                 # Save progress
                 ClarivateCrawlerProgress.objects.update_or_create(

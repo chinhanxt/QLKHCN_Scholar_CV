@@ -94,22 +94,40 @@ export function UnifiedCrawlerPage() {
       try {
         const res = await scholarApi.getCrawlerTaskStatus(taskId).then((r) => r.data)
         
-        // Update general status
-        setTaskState('unified', { 
-          taskStatus: res.status,
-          progress: res.progress || 0
-        })
-
-        // Update sub-task metadata
-        if (res.result) {
-          // Task completed
+        if (res.status === 'SUCCESS') {
+          setTaskState('unified', { 
+            taskId: null,
+            taskStatus: 'SUCCESS',
+            progress: 100
+          })
           setClProgress({ status: 'SUCCESS', progress: 100, message: 'Hoàn tất cào dữ liệu' })
           setScProgress({ status: 'SUCCESS', progress: 100, message: 'Hoàn tất tải và import CSV' })
           setBbProgress({ status: 'SUCCESS', progress: 100, message: 'Hoàn tất cào dữ liệu' })
           setMapProgress({ status: 'SUCCESS', progress: 100, message: 'Đồng bộ mapping thành công!' })
+          clearInterval(pollInterval)
           fetchStats()
-        } else if (res.status === 'PROGRESS' && res.message) {
-          addConsoleLog('unified', res.message)
+          toast.success('Tiến trình cào song song và mapping đã hoàn thành thành công!')
+        } else if (res.status === 'FAILURE') {
+          setTaskState('unified', { 
+            taskId: null,
+            taskStatus: 'FAILURE',
+            progress: res.progress || 0
+          })
+          setClProgress({ status: 'FAILURE', progress: 0, message: 'Cào dữ liệu thất bại' })
+          setScProgress({ status: 'FAILURE', progress: 0, message: 'Tải SCImago thất bại' })
+          setBbProgress({ status: 'FAILURE', progress: 0, message: 'Cào BioxBio thất bại' })
+          setMapProgress({ status: 'FAILURE', progress: 0, message: 'Mapping thất bại' })
+          clearInterval(pollInterval)
+          fetchStats()
+          toast.error('Hệ thống cào song song gặp lỗi thất bại.')
+        } else {
+          setTaskState('unified', { 
+            taskStatus: res.status,
+            progress: res.progress || 0
+          })
+          if (res.status === 'PROGRESS' && res.message) {
+            addConsoleLog('unified', res.message)
+          }
         }
       } catch (err) {
         console.error('Error polling status:', err)
@@ -501,13 +519,20 @@ export function UnifiedCrawlerPage() {
       </Card>
 
       {/* Progress & Live Monitors */}
-      {isRunning && (
+      {taskStatus && taskStatus !== 'IDLE' && (
         <div className="space-y-4">
           {/* Master Progress Bar */}
           <Card className="rounded-xl border border-slate-200 bg-white shadow-xs p-5">
             <div className="flex justify-between items-center mb-3">
               <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
-                <Loader2 className="w-3.5 h-3.5 text-[#005b9a] animate-spin" /> Tiến độ tổng hợp dự án
+                {isRunning ? (
+                  <Loader2 className="w-3.5 h-3.5 text-[#005b9a] animate-spin" />
+                ) : taskStatus === 'SUCCESS' ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                )}
+                Tiến độ tổng hợp dự án {taskStatus === 'SUCCESS' && "(Hoàn thành)"} {taskStatus === 'FAILURE' && "(Thất bại)"}
               </span>
               <span className="text-sm font-bold text-[#005b9a]">{masterProgress}%</span>
             </div>
