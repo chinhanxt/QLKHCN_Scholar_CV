@@ -3,7 +3,7 @@ import { scholarApi } from '@/api/endpoints/scholar'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { Layers, Play, Square, Loader2, RefreshCw, Zap, Trash2, Copy, Terminal, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Layers, Play, Square, Loader2, Zap, Trash2, Copy, Terminal, CheckCircle2, AlertCircle, ChevronUp, ChevronDown } from 'lucide-react'
 import { useCrawlerStore } from '@/stores/crawler.store'
 
 export function UnifiedCrawlerPage() {
@@ -224,30 +224,32 @@ export function UnifiedCrawlerPage() {
               <Play className="w-3.5 h-3.5" /> Kích Hoạt Hệ Thống
             </button>
           )}
-          <button
-            onClick={() => setShowConfig(!showConfig)}
-            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-500 cursor-pointer bg-white"
-            title="Ẩn/Hiện Cấu Hình"
-          >
-            <RefreshCw className={cn("w-4 h-4", isRunning && "animate-spin text-[#005b9a]")} />
-          </button>
         </div>
       </Card>
 
-      {/* Main configuration panel */}
-      {showConfig && (
-        <Card className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-          <div className="p-4 px-6 border-b border-slate-100 flex items-center gap-2 text-slate-800 font-semibold text-sm">
+      {/* Main configuration panel with header toggle button */}
+      <Card className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+        <div className="p-4 px-6 border-b border-slate-100 flex items-center justify-between text-slate-800 font-semibold text-sm bg-white">
+          <div className="flex items-center gap-2">
             <Zap className="w-4.5 h-4.5 text-[#005b9a]" /> Bảng điều khiển cấu hình tham số
           </div>
-          <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <button
+            onClick={() => setShowConfig(!showConfig)}
+            className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-500 cursor-pointer bg-white flex items-center justify-center"
+            title={showConfig ? "Thu gọn cấu hình" : "Mở rộng cấu hình"}
+          >
+            {showConfig ? <ChevronUp className="w-4.5 h-4.5" /> : <ChevronDown className="w-4.5 h-4.5" />}
+          </button>
+        </div>
+        {showConfig && (
+          <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 bg-white">
             {/* Clarivate config */}
             <div className="space-y-4 p-5 rounded-2xl bg-white border border-slate-200 shadow-3xs">
               <h4 className="font-bold text-slate-800 text-sm pb-3 border-b border-slate-100 flex items-center justify-between">
                 <span>1. Cấu hình Clarivate (WoS)</span>
                 <span className={cn(
-                  "w-2.5 h-2.5 rounded-full transition-all duration-300",
-                  isRunning ? "bg-emerald-500 animate-pulse" : "bg-blue-500"
+                  "w-2.5 h-2.5 rounded-full bg-emerald-500 transition-all duration-300",
+                  isRunning && "animate-pulse"
                 )}></span>
               </h4>
               <div className="space-y-3.5">
@@ -290,8 +292,8 @@ export function UnifiedCrawlerPage() {
               <h4 className="font-bold text-slate-800 text-sm pb-3 border-b border-slate-100 flex items-center justify-between">
                 <span>2. Cấu hình SCImago (SJR)</span>
                 <span className={cn(
-                  "w-2.5 h-2.5 rounded-full transition-all duration-300",
-                  isRunning ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                  "w-2.5 h-2.5 rounded-full bg-emerald-500 transition-all duration-300",
+                  isRunning && "animate-pulse"
                 )}></span>
               </h4>
               <div className="space-y-3.5">
@@ -334,8 +336,8 @@ export function UnifiedCrawlerPage() {
               <h4 className="font-bold text-slate-800 text-sm pb-3 border-b border-slate-100 flex items-center justify-between">
                 <span>3. Cấu hình BioxBio (IF)</span>
                 <span className={cn(
-                  "w-2.5 h-2.5 rounded-full transition-all duration-300",
-                  isRunning ? "bg-emerald-500 animate-pulse" : "bg-purple-500"
+                  "w-2.5 h-2.5 rounded-full bg-emerald-500 transition-all duration-300",
+                  isRunning && "animate-pulse"
                 )}></span>
               </h4>
               <div className="space-y-3.5">
@@ -373,8 +375,8 @@ export function UnifiedCrawlerPage() {
               </div>
             </div>
           </CardContent>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {/* Progress & Live Monitors */}
       {isRunning && (
