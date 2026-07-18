@@ -8,15 +8,18 @@ import { useCrawlerStore } from '@/stores/crawler.store'
 
 export function UnifiedCrawlerPage() {
   // Config states
+  const [scimagoStartUrl, setScimagoStartUrl] = useState<string>('https://www.scimagojr.com/journalrank.php')
   const [scimagoYearsRaw, setScimagoYearsRaw] = useState<string>('2024, 2023, 2022')
   const [scimagoWorkers, setScimagoWorkers] = useState<number>(5)
   const [scimagoDelay, setScimagoDelay] = useState<number>(1)
 
+  const [clarivateStartUrl, setClarivateStartUrl] = useState<string>('https://mjl.clarivate.com/api/mjl/jprof/public/rank-search')
   const [clarivateMaxPages, setClarivateMaxPages] = useState<number | null>(null)
   const [clarivateWorkers, setClarivateWorkers] = useState<number>(3)
   const [clarivateDelay, setClarivateDelay] = useState<number>(1.5)
 
   const [bioxbioStartUrl, setBioxbioStartUrl] = useState<string>('https://www.bioxbio.com/journal/')
+  const [bioxbioMaxPages, setBioxbioMaxPages] = useState<number | null>(null)
   const [bioxbioWorkers, setBioxbioWorkers] = useState<number>(10)
   const [bioxbioDelay, setBioxbioDelay] = useState<number>(2)
 
@@ -113,15 +116,9 @@ export function UnifiedCrawlerPage() {
   }, [consoleLogs])
 
   const handleStartCrawl = async () => {
-    const years = scimagoYearsRaw
-      .split(',')
-      .map((y) => parseInt(y.trim()))
-      .filter((y) => !isNaN(y))
-
-    if (years.length === 0) {
-      toast.error('Vui lòng nhập ít nhất một năm cho SCImago (ví dụ: 2024).')
-      return
-    }
+    const years = scimagoYearsRaw.trim()
+      ? scimagoYearsRaw.split(',').map((y) => parseInt(y.trim())).filter((y) => !isNaN(y))
+      : null
 
     clearLogs('unified')
     setClProgress({ status: 'PROGRESS', progress: 5, message: 'Đang khởi động...' })
@@ -131,13 +128,16 @@ export function UnifiedCrawlerPage() {
 
     try {
       const payload = {
+        scimago_start_url: scimagoStartUrl,
         scimago_years: years,
         scimago_workers: scimagoWorkers,
         scimago_delay: scimagoDelay,
+        clarivate_start_url: clarivateStartUrl,
         clarivate_max_pages: clarivateMaxPages,
         clarivate_workers: clarivateWorkers,
         clarivate_delay: clarivateDelay,
         bioxbio_start_url: bioxbioStartUrl,
+        bioxbio_max_pages: bioxbioMaxPages,
         bioxbio_workers: bioxbioWorkers,
         bioxbio_delay: bioxbioDelay,
       }
@@ -254,6 +254,16 @@ export function UnifiedCrawlerPage() {
               </h4>
               <div className="space-y-3.5">
                 <div>
+                  <label className="block text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Đường dẫn quét danh sách (Start URL)</label>
+                  <input
+                    type="text"
+                    value={clarivateStartUrl}
+                    onChange={(e) => setClarivateStartUrl(e.target.value)}
+                    placeholder="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-855 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#005b9a]/20 focus:border-[#005b9a] hover:border-slate-350 transition-all font-semibold"
+                  />
+                </div>
+                <div>
                   <label className="block text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Giới hạn trang cào (Trống = Tất cả)</label>
                   <input
                     type="number"
@@ -298,12 +308,22 @@ export function UnifiedCrawlerPage() {
               </h4>
               <div className="space-y-3.5">
                 <div>
-                  <label className="block text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Các năm cần cào (Ngăn cách bằng dấu phẩy)</label>
+                  <label className="block text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Đường dẫn quét danh sách (Start URL)</label>
+                  <input
+                    type="text"
+                    value={scimagoStartUrl}
+                    onChange={(e) => setScimagoStartUrl(e.target.value)}
+                    placeholder="https://www.scimagojr.com/journalrank.php"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-855 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#005b9a]/20 focus:border-[#005b9a] hover:border-slate-350 transition-all font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Các năm cần cào (Trống = Tất cả từ 1999)</label>
                   <input
                     type="text"
                     value={scimagoYearsRaw}
                     onChange={(e) => setScimagoYearsRaw(e.target.value)}
-                    placeholder="2024, 2023, 2022"
+                    placeholder="Tự động quét tất cả năm"
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-855 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#005b9a]/20 focus:border-[#005b9a] hover:border-slate-350 transition-all font-semibold"
                   />
                 </div>
@@ -348,6 +368,16 @@ export function UnifiedCrawlerPage() {
                     value={bioxbioStartUrl}
                     onChange={(e) => setBioxbioStartUrl(e.target.value)}
                     placeholder="https://www.bioxbio.com/journal/"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-855 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#005b9a]/20 focus:border-[#005b9a] hover:border-slate-350 transition-all font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Giới hạn trang cào (Trống = Tất cả)</label>
+                  <input
+                    type="number"
+                    value={bioxbioMaxPages || ''}
+                    onChange={(e) => setBioxbioMaxPages(e.target.value ? parseInt(e.target.value) : null)}
+                    placeholder="Tự động quét tất cả"
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-855 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#005b9a]/20 focus:border-[#005b9a] hover:border-slate-350 transition-all font-semibold"
                   />
                 </div>

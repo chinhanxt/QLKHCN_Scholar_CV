@@ -171,6 +171,7 @@ class ClarivateJournalSerializer(serializers.ModelSerializer):
 
 class UnifiedCrawlRequestSerializer(serializers.Serializer):
     # SCImago
+    scimago_start_url = serializers.URLField(default="https://www.scimagojr.com/journalrank.php")
     scimago_years = serializers.ListField(
         child=serializers.IntegerField(), required=False, allow_null=True,
         help_text="Danh sách năm cần cào (trống = toàn bộ từ 1999)"
@@ -179,6 +180,7 @@ class UnifiedCrawlRequestSerializer(serializers.Serializer):
     scimago_delay   = serializers.FloatField(default=1.0, min_value=0.1, max_value=10.0)
 
     # Clarivate
+    clarivate_start_url = serializers.URLField(default="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search")
     clarivate_max_pages = serializers.IntegerField(required=False, allow_null=True,
         help_text="Giới hạn trang (trống = tất cả)")
     clarivate_workers   = serializers.IntegerField(default=3, min_value=1, max_value=10)
@@ -186,7 +188,12 @@ class UnifiedCrawlRequestSerializer(serializers.Serializer):
 
     # BioxBio
     bioxbio_start_url = serializers.URLField(default="https://www.bioxbio.com/journal/")
+    bioxbio_max_pages = serializers.IntegerField(required=False, allow_null=True,
+        help_text="Giới hạn trang (trống = tất cả)")
     bioxbio_workers   = serializers.IntegerField(default=10, min_value=1, max_value=30)
     bioxbio_delay     = serializers.FloatField(default=2.0, min_value=0.1, max_value=10.0)
+
+
+
 
 

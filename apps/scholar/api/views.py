@@ -246,12 +246,15 @@ class CrawlerViewSet(viewsets.ViewSet):
         from apps.scholar.tasks import crawl_and_integrate_all_task
         task = crawl_and_integrate_all_task.delay(
             scimago_years=d.get('scimago_years'),
+            scimago_start_url=d.get('scimago_start_url', 'https://www.scimagojr.com/journalrank.php'),
             clarivate_max_pages=d.get('clarivate_max_pages'),
+            clarivate_start_url=d.get('clarivate_start_url', 'https://mjl.clarivate.com/api/mjl/jprof/public/rank-search'),
             clarivate_workers=d.get('clarivate_workers', 3),
             clarivate_delay=d.get('clarivate_delay', 1.5),
             scimago_workers=d.get('scimago_workers', 5),
             scimago_delay=d.get('scimago_delay', 1.0),
             bioxbio_start_url=d.get('bioxbio_start_url', 'https://www.bioxbio.com/journal/'),
+            bioxbio_max_pages=d.get('bioxbio_max_pages'),
             bioxbio_workers=d.get('bioxbio_workers', 10),
             bioxbio_delay=d.get('bioxbio_delay', 2.0),
         )

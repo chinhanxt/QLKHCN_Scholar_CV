@@ -423,10 +423,11 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
 # 4. BIOXBIO CRAWLER TASK (No Selenium required!)
 # ==============================================================================
 @shared_task(bind=True)
-def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_workers=10, delay=2.0):
+def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=None, max_workers=10, delay=2.0):
     """
     Celery task to scrape BioxBio Impact Factor subjects, journals, and details.
     Updates PostgreSQL tables without heavy Selenium requirements.
+    Smartly traverses alphabetical list if start_url points to /journal/.
     """
     self.update_state(state='PROGRESS', meta={'message': 'Initializing BioxBio Crawler...', 'progress': 5})
     headers = {
@@ -493,6 +494,10 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_workers=1
         self.update_state(state='PROGRESS', meta={'message': f"Crawling subject: {subject_name} (Page {page_num})", 'progress': int(5 + (sub_idx / total_subjects) * 90)})
         
         while True:
+            if max_pages and page_num > max_pages:
+                logger.info(f"Page limit ({max_pages}) reached for {subject_name}. Stopping.")
+                break
+
             # Check circuit breaker before requesting listing page
             while True:
                 with state_lock:
@@ -668,14 +673,14 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_workers=1
 # 5. SCIMAGO CRAWLER TASK (Downloads CSV directly without Selenium)
 # ==============================================================================
 @shared_task(bind=True)
-def crawl_scimago_task(self, years=None, max_workers=5, delay=1.0):
+def crawl_scimago_task(self, start_url="https://www.scimagojr.com/journalrank.php", years=None, max_workers=5, delay=1.0):
     """
     Celery task to download SCImago CSV files directly using requests and import to PostgreSQL.
     """
     if not years:
-        # Default to last 3 years
+        # Default to all years from 1999 to current year
         current_year = int(time.strftime("%Y"))
-        years = [current_year - 1, current_year - 2, current_year - 3]
+        years = list(range(1999, current_year + 1))
         
     if isinstance(years, int):
         years = [years]
@@ -690,7 +695,8 @@ def crawl_scimago_task(self, years=None, max_workers=5, delay=1.0):
     for idx, year in enumerate(years):
         self.update_state(state='PROGRESS', meta={'message': f"Downloading SCImago CSV for year {year}...", 'progress': int((idx / total_years) * 100)})
         
-        url = f"https://www.scimagojr.com/journalrank.php?year={year}&out=xls"
+        base_url = start_url.split('?')[0]
+        url = f"{base_url}?year={year}&out=xls"
         r = None
         for attempt in range(3):
             try:
@@ -857,13 +863,13 @@ def crawl_scimago_task(self, years=None, max_workers=5, delay=1.0):
 # 6. CLARIVATE CRAWLER TASK
 # ==============================================================================
 @shared_task(bind=True)
-def crawl_clarivate_task(self, max_pages=None, max_workers=3, delay=1.5):
+def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search", max_pages=None, max_workers=3, delay=1.5):
     """
     Celery task to scrape the Clarivate Web of Science Master Journal List page-by-page.
     """
     import random
     self.update_state(state='PROGRESS', meta={'message': 'Connecting to Clarivate REST API...', 'progress': 5})
-    url = "https://mjl.clarivate.com/api/mjl/jprof/public/rank-search"
+    url = start_url
     headers = {
         "Accept": "application/json, text/plain, */*",
         "Authorization": "Bearer",
@@ -1223,12 +1229,15 @@ def integrate_scores_task(self):
 def crawl_and_integrate_all_task(
     self,
     scimago_years=None,
+    scimago_start_url="https://www.scimagojr.com/journalrank.php",
     clarivate_max_pages=None,
+    clarivate_start_url="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search",
     clarivate_workers=3,
     clarivate_delay=1.5,
     scimago_workers=5,
     scimago_delay=1.0,
     bioxbio_start_url="https://www.bioxbio.com/journal/",
+    bioxbio_max_pages=None,
     bioxbio_workers=10,
     bioxbio_delay=2.0,
 ):
@@ -1252,17 +1261,20 @@ def crawl_and_integrate_all_task(
 
     # --- Phase 1: Launch 3 crawlers in parallel ---
     cl_task = crawl_clarivate_task.delay(
+        start_url=clarivate_start_url,
         max_pages=clarivate_max_pages,
         max_workers=clarivate_workers,
         delay=clarivate_delay
     )
     sc_task = crawl_scimago_task.delay(
+        start_url=scimago_start_url,
         years=scimago_years,
         max_workers=scimago_workers,
         delay=scimago_delay
     )
     bb_task = crawl_bioxbio_task.delay(
         start_url=bioxbio_start_url,
+        max_pages=bioxbio_max_pages,
         max_workers=bioxbio_workers,
         delay=bioxbio_delay
     )
@@ -1334,6 +1346,7 @@ def crawl_and_integrate_all_task(
     if cl_expected > 0 and cl_in_db < cl_expected * 0.98:  # Chấp nhận sai lệch 2%
         logger.warning(f"Self-Healing Clarivate: DB={cl_in_db}, Expected={cl_expected}. Đang cào bù...")
         retry_cl = crawl_clarivate_task.delay(
+            start_url=clarivate_start_url,
             max_pages=clarivate_max_pages,
             max_workers=clarivate_workers,
             delay=clarivate_delay
@@ -1350,6 +1363,7 @@ def crawl_and_integrate_all_task(
             logger.warning(f"Self-Healing BioxBio: {incomplete_biox} incomplete subjects. Rerunning...")
             bb_heal = crawl_bioxbio_task.delay(
                 start_url=bioxbio_start_url,
+                max_pages=bioxbio_max_pages,
                 max_workers=bioxbio_workers,
                 delay=bioxbio_delay
             )

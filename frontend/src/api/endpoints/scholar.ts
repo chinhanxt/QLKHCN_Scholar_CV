@@ -106,13 +106,16 @@ export const scholarApi = {
     apiClient.post<{ task_id: string; status: string }>('/scholar/crawlers/integrate/'),
 
   startUnifiedCrawl: (payload: {
+    scimago_start_url?: string;
     scimago_years?: number[];
     scimago_workers?: number;
     scimago_delay?: number;
+    clarivate_start_url?: string;
     clarivate_max_pages?: number | null;
     clarivate_workers?: number;
     clarivate_delay?: number;
     bioxbio_start_url?: string;
+    bioxbio_max_pages?: number | null;
     bioxbio_workers?: number;
     bioxbio_delay?: number;
   }) =>
