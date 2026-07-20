@@ -156,3 +156,4 @@ frontend/dist/
 *.sln
 *.sw?
 .gemini/
+backup/

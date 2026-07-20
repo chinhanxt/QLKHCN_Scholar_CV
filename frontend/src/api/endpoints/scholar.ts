@@ -9,6 +9,35 @@ export interface DatabaseStats {
   mapped_journals: number
   staging_journals: number
   match_rate: number
+  
+  clarivate_mapped: number
+  scimago_mapped: number
+  bioxbio_mapped: number
+  
+  matched_publications: number
+  pub_match_rate: number
+  quartiles: {
+    Q1: number
+    Q2: number
+    Q3: number
+    Q4: number
+    NA: number
+  }
+  journal_quartiles: {
+    Q1: number
+    Q2: number
+    Q3: number
+    Q4: number
+    NA: number
+  }
+  countries: Array<{ country: string; count: number }>
+  history_trends: Array<{
+    date: string
+    clarivate: number
+    scimago: number
+    bioxbio: number
+    mapped: number
+  }>
 }
 
 export interface TaskStatusResponse {

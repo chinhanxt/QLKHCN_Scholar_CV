@@ -255,10 +255,10 @@ class CrawlerViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
-        from django.db.models import Q
+        from django.db.models import Q, Count
         from apps.scholar.models import (
             BioxbioJournal, ScimagoJournal, ClarivateJournal, Journal,
-            AuthorProfile, Publication
+            AuthorProfile, Publication, CrawlHistory
         )
         total_authors = AuthorProfile.objects.count()
         total_publications = Publication.objects.count()
@@ -268,11 +268,52 @@ class CrawlerViewSet(viewsets.ViewSet):
         total_mapped = Journal.objects.filter(is_staging=False).count()
         total_staging = Journal.objects.filter(is_staging=True).count()
         
+        # Real publication matching rate
+        matched_publications = Publication.objects.filter(journal__isnull=False).count()
+        pub_match_rate = round((matched_publications / total_publications * 100), 1) if total_publications > 0 else 0
+        
+        # Coverage rate of mapped journals
         mapped_with_raw = Journal.objects.filter(is_staging=False).filter(
             Q(bioxbio_journal__isnull=False) | Q(scimago_journal__isnull=False)
         ).count()
         match_rate = round((mapped_with_raw / total_mapped * 100), 1) if total_mapped > 0 else 0
         
+        # Quartile distribution of matched publications
+        q1_count = Publication.objects.filter(sjr_q='Q1').count()
+        q2_count = Publication.objects.filter(sjr_q='Q2').count()
+        q3_count = Publication.objects.filter(sjr_q='Q3').count()
+        q4_count = Publication.objects.filter(sjr_q='Q4').count()
+        na_count = Publication.objects.exclude(sjr_q__in=['Q1', 'Q2', 'Q3', 'Q4']).count()
+
+        # Quartile distribution of integrated journals
+        j_q1 = Journal.objects.filter(is_staging=False, latest_quartile='Q1').count()
+        j_q2 = Journal.objects.filter(is_staging=False, latest_quartile='Q2').count()
+        j_q3 = Journal.objects.filter(is_staging=False, latest_quartile='Q3').count()
+        j_q4 = Journal.objects.filter(is_staging=False, latest_quartile='Q4').count()
+        j_na = Journal.objects.filter(is_staging=False).exclude(latest_quartile__in=['Q1', 'Q2', 'Q3', 'Q4']).count()
+
+        # Actual integrated mapped counts
+        clarivate_mapped = Journal.objects.filter(is_staging=False).exclude(clarivate_title__isnull=True).exclude(clarivate_title='').count()
+        scimago_mapped = Journal.objects.filter(is_staging=False, scimago_journal__isnull=False).count()
+        bioxbio_mapped = Journal.objects.filter(is_staging=False, bioxbio_journal__isnull=False).count()
+        
+        # Top 5 countries of mapped journals
+        top_countries = Journal.objects.filter(is_staging=False).exclude(country__isnull=True).exclude(country='').values('country').annotate(count=Count('id')).order_by('-count')[:5]
+        countries = [{"country": item['country'], "count": item['count']} for item in top_countries]
+        
+        # Database growth history over success runs
+        history_runs = list(CrawlHistory.objects.filter(status='SUCCESS').order_by('-created_at')[:6])
+        history_runs.reverse()
+        history_data = []
+        for r in history_runs:
+            history_data.append({
+                "date": r.created_at.strftime("%d/%m"),
+                "clarivate": r.clarivate_total or r.clarivate_count or 0,
+                "scimago": r.scimago_total or r.scimago_count or 0,
+                "bioxbio": r.bioxbio_total or r.bioxbio_count or 0,
+                "mapped": r.mapped_total or r.mapped_count or 0
+            })
+
         return Response({
             "authors": total_authors,
             "publications": total_publications,
@@ -281,7 +322,30 @@ class CrawlerViewSet(viewsets.ViewSet):
             "clarivate_journals": total_clarivate,
             "mapped_journals": total_mapped,
             "staging_journals": total_staging,
-            "match_rate": match_rate
+            "match_rate": match_rate,
+            
+            "clarivate_mapped": clarivate_mapped,
+            "scimago_mapped": scimago_mapped,
+            "bioxbio_mapped": bioxbio_mapped,
+            
+            "matched_publications": matched_publications,
+            "pub_match_rate": pub_match_rate,
+            "quartiles": {
+                "Q1": q1_count,
+                "Q2": q2_count,
+                "Q3": q3_count,
+                "Q4": q4_count,
+                "NA": na_count
+            },
+            "journal_quartiles": {
+                "Q1": j_q1,
+                "Q2": j_q2,
+                "Q3": j_q3,
+                "Q4": j_q4,
+                "NA": j_na
+            },
+            "countries": countries,
+            "history_trends": history_data
         })
 
     @action(detail=False, methods=["post"], url_path="bioxbio")
