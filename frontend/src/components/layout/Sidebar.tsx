@@ -184,7 +184,10 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       </div>
       
       {/* Navigation - Shifted down a bit with pt-4 */}
-      <nav className="flex flex-1 flex-col gap-5 p-3 pt-4">
+      <nav className={cn(
+        "flex flex-1 flex-col gap-5 p-3 pt-4",
+        isCollapsed ? "overflow-visible" : "overflow-y-auto overflow-x-hidden custom-scrollbar"
+      )}>
         {/* General */}
         <div>
           <div className="px-3 mb-2 flex items-center h-5 overflow-hidden">

@@ -223,8 +223,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
         scholarly_instance = setup_scholarly_proxy()
     except Exception as e:
         logger.exception("Proxy setup failed")
-        self.update_state(state='FAILURE', meta={'message': f"Proxy setup error: {str(e)}"})
-        return {'error': f"Failed to setup proxy: {str(e)}"}
+        raise Exception(f"Proxy setup error: {str(e)}") from e
         
     self.update_state(state='PROGRESS', meta={'message': f"Fetching author profile: {author_id}...", 'progress': 15})
     
@@ -232,8 +231,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
         author = scholarly_instance.search_author_id(author_id)
     except Exception as e:
         logger.exception(f"Author fetch failed for ID {author_id}")
-        self.update_state(state='FAILURE', meta={'message': f"Author profile not found: {str(e)}"})
-        return {'error': f"Failed to retrieve author profile: {str(e)}"}
+        raise Exception(f"Author profile not found: {str(e)}") from e
         
     self.update_state(state='PROGRESS', meta={'message': f"Filling publications (limit={limit})...", 'progress': 30})
     
@@ -241,8 +239,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
         author = scholarly_instance.fill(author, sections=['basics', 'indices', 'counts', 'publications'], publication_limit=limit)
     except Exception as e:
         logger.exception(f"Author fill failed for ID {author_id}")
-        self.update_state(state='FAILURE', meta={'message': f"Failed to fill profile details: {str(e)}"})
-        return {'error': f"Failed to fill profile details: {str(e)}"}
+        raise Exception(f"Failed to fill profile details: {str(e)}") from e
         
     pubs = author.get('publications', [])
     total_pubs = len(pubs)
@@ -473,8 +470,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
             
     except Exception as e:
         logger.exception("Database transaction failed during save")
-        self.update_state(state='FAILURE', meta={'message': f"Database save error: {str(e)}"})
-        return {'error': f"Database save error: {str(e)}"}
+        raise Exception(f"Database save error: {str(e)}") from e
 
 
 # ==============================================================================
