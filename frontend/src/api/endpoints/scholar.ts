@@ -84,6 +84,19 @@ export interface PublicationDetail {
   sjr_q: string
   if_val: string
   wos: string
+  pub_date?: string | null
+  volume?: string | null
+  issue?: string | null
+  pages?: string | null
+  publisher?: string | null
+  description?: string | null
+  pub_url?: string | null
+  eprint_url?: string | null
+  url_related_articles?: string | null
+  versions_count?: string | null
+  url_all_versions?: string | null
+  cites_id?: string | null
+  url_scholar_article?: string | null
 }
 
 export interface AuthorProfileDetail {
@@ -91,6 +104,7 @@ export interface AuthorProfileDetail {
   scholar_id: string
   name: string
   affiliation: string
+  email_domain?: string | null
   citedby: number
   hindex: number
   i10index: number

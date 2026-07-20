@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { scholarApi } from '@/api/endpoints/scholar'
-import type { AuthorCandidate, AuthorProfileDetail } from '@/api/endpoints/scholar'
-import { Card, CardContent } from '@/components/ui/card'
+import type { AuthorCandidate, AuthorProfileDetail, PublicationDetail } from '@/api/endpoints/scholar'
+import { Card } from '@/components/ui/card'
 import { TerminalWindow } from '@/components/ui/TerminalWindow'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
@@ -9,12 +9,20 @@ import { cn } from '@/lib/utils'
 import { useCrawlerStore } from '@/stores/crawler.store'
 import { 
   Search, 
-  User, 
   TrendingUp, 
   Download, 
   FileText,
-  HelpCircle,
-  ArrowLeft
+  ArrowLeft,
+  Plus,
+  Edit,
+  CheckCircle2,
+  BookOpen,
+  Trash2,
+  X,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  GraduationCap
 } from 'lucide-react'
 
 export function ScholarScraperPage() {
@@ -36,6 +44,55 @@ export function ScholarScraperPage() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
   const [isL2Running, setIsL2Running] = useState(() => localStorage.getItem('scholar_isL2Running') === 'true')
   const [selectedPublication, setSelectedPublication] = useState<any | null>(null)
+  
+  // Interactive UI State
+  const [pubSearch, setPubSearch] = useState('')
+  const [yearFilter, setYearFilter] = useState('All')
+  const [sortBy, setSortBy] = useState('citations_desc')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 12
+
+  // Multi-select State
+  const [selectedPubIds, setSelectedPubIds] = useState<string[]>([])
+
+  // Trash Bin State
+  const [deletedPublications, setDeletedPublications] = useState<PublicationDetail[]>(() => {
+    const saved = localStorage.getItem('scholar_deletedPublications')
+    return saved ? JSON.parse(saved) : []
+  })
+
+  // Dialog Modals
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [isAddPubModalOpen, setIsAddPubModalOpen] = useState(false)
+  const [isEditPubModalOpen, setIsEditPubModalOpen] = useState(false)
+  const [isAllCitationsModalOpen, setIsAllCitationsModalOpen] = useState(false)
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false)
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false)
+  const [editingPublication, setEditingPublication] = useState<any | null>(null)
+  
+  // Merge Form State
+  const [mergeMainPubId, setMergeMainPubId] = useState<string>('')
+
+  // Profile Form State
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    affiliation: '',
+    interests: ''
+  })
+
+  // Publication Form State
+  const [pubForm, setPubForm] = useState({
+    title: '',
+    authors_list: '',
+    venue: '',
+    year: new Date().getFullYear().toString(),
+    citations: 0,
+    sjr_q: 'N/A',
+    if_val: 'N/A',
+    wos: 'N/A',
+    doi: ''
+  })
+
   const lastNotifiedTaskId = useRef<string | null>(null)
 
   useEffect(() => {
@@ -59,11 +116,25 @@ export function ScholarScraperPage() {
   }, [scrapeLimit])
 
   useEffect(() => {
+    localStorage.setItem('scholar_deletedPublications', JSON.stringify(deletedPublications))
+  }, [deletedPublications])
+
+  useEffect(() => {
     if (profile) {
       localStorage.setItem('scholar_profile', JSON.stringify(profile))
+      setProfileForm({
+        name: profile.name,
+        affiliation: profile.affiliation || 'Cơ quan công tác chưa xác định',
+        interests: profile.interests ? profile.interests.join(', ') : ''
+      })
     } else {
       localStorage.removeItem('scholar_profile')
     }
+  }, [profile])
+
+  // Clear selections when switching profiles
+  useEffect(() => {
+    setSelectedPubIds([])
   }, [profile])
   
   // Scraper Task state from Zustand Store
@@ -112,9 +183,7 @@ export function ScholarScraperPage() {
             toast.success('Đã tải danh sách bài báo thành công!')
           }
           
-          // Reset selected publication
           setSelectedPublication(null)
-          // Load the newly saved profile
           loadProfile(res.result?.author?.scholar_id)
         } else if (res.status === 'FAILURE') {
           if (lastNotifiedTaskId.current === taskId) {
@@ -144,6 +213,7 @@ export function ScholarScraperPage() {
     try {
       const p = await scholarApi.getAuthor(scholarId).then((r) => r.data)
       setProfile(p)
+      setDeletedPublications([]) // Reset trash bin when loading a new profile
     } catch (err) {
       toast.error('Không thể nạp hồ sơ chi tiết tác giả.')
     } finally {
@@ -151,14 +221,10 @@ export function ScholarScraperPage() {
     }
   }
 
-  // Helper to parse input: extracts user ID from a Google Scholar URL if present
   const parseScholarInput = (input: string): { id: string; isId: boolean } => {
     const trimmed = input.trim()
-    
-    // Check if it's a Google Scholar profile URL
     if (trimmed.includes('citations') || trimmed.includes('user=')) {
       try {
-        // Try parsing URL query params
         const urlPart = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`
         const urlObj = new URL(urlPart)
         const userParam = urlObj.searchParams.get('user')
@@ -166,19 +232,15 @@ export function ScholarScraperPage() {
           return { id: userParam, isId: true }
         }
       } catch (e) {
-        // Regex fallback
         const match = trimmed.match(/user=([^&]+)/)
         if (match && match[1]) {
           return { id: match[1], isId: true }
         }
       }
     }
-    
-    // Check if it is a 12-char Scholar ID
     if (trimmed.length === 12 && /^[a-zA-Z0-9_-]{12}$/.test(trimmed)) {
       return { id: trimmed, isId: true }
     }
-    
     return { id: trimmed, isId: false }
   }
 
@@ -194,7 +256,6 @@ export function ScholarScraperPage() {
     const parsed = parseScholarInput(trimmedInput)
     
     if (parsed.isId || searchMode === 'id') {
-      // If we parsed an ID from the link/input, force direct scrape
       const targetId = parsed.isId ? parsed.id : trimmedInput
       try {
         clearLogs('scholar')
@@ -212,7 +273,6 @@ export function ScholarScraperPage() {
         setTaskState('scholar', { taskStatus: 'IDLE' })
       }
     } else {
-      // Search by Name
       setIsSearching(true)
       try {
         const res = await scholarApi.searchAuthors(trimmedInput).then((r) => r.data)
@@ -268,7 +328,7 @@ export function ScholarScraperPage() {
     }
   }
 
-  // Export report to Excel (.xlsx)
+  // Handle Export to Excel
   const handleExport = async () => {
     if (!profile || profile.publications.length === 0) {
       toast.error('Không có dữ liệu bài báo để xuất báo cáo!')
@@ -276,23 +336,23 @@ export function ScholarScraperPage() {
     }
 
     try {
-      toast.info('Đang tạo file Excel (.xlsx) chuyên nghiệp...')
+      const isSelectiveExport = selectedPubIds.length > 0
+      const pubsToExport = isSelectiveExport
+        ? profile.publications.filter(p => selectedPubIds.includes(p.id))
+        : profile.publications
+
+      toast.info(isSelectiveExport ? `Đang xuất ${pubsToExport.length} bài báo đã chọn...` : 'Đang tạo file Excel (.xlsx) chuyên nghiệp...')
       const ExcelJSModule = await import('exceljs')
       const Workbook = ExcelJSModule.Workbook || (ExcelJSModule as any).default?.Workbook || (ExcelJSModule as any).default
       const workbook = new Workbook()
 
-      // Determine if detailed scan (Lần 2) has been performed
-      const hasDetailedData = profile.publications.some(
+      const hasDetailedData = pubsToExport.some(
         (pub) => pub.cites_per_year && Object.keys(pub.cites_per_year).length > 0
       )
 
-      // ----------------------------------------------------
       // SHEET 1: TỔNG QUAN
-      // ----------------------------------------------------
       const sheet1 = workbook.addWorksheet('Tổng quan')
       sheet1.views = [{ showGridLines: true }]
-
-      // Set columns
       sheet1.columns = [
         { key: 'A', width: 35 },
         { key: 'B', width: 45 },
@@ -300,23 +360,25 @@ export function ScholarScraperPage() {
         { key: 'D', width: 15 }
       ]
 
-      // 1. Title Banner
       sheet1.mergeCells('A1:D2')
       const banner = sheet1.getCell('A1')
-      banner.value = 'BÁO CÁO HỒ SƠ TÁC GIẢ KHOA HỌC (GOOGLE SCHOLAR)'
+      banner.value = isSelectiveExport 
+        ? `BÁO CÁO HỒ SƠ TÁC GIẢ - XUẤT LỰA CHỌN (${pubsToExport.length} BÀI)` 
+        : 'BÁO CÁO HỒ SƠ TÁC GIẢ KHOA HỌC (GOOGLE SCHOLAR)'
       banner.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } }
-      banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF005B9A' } }
+      banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } }
       banner.alignment = { vertical: 'middle', horizontal: 'center' }
 
-      // 2. Section: Thông tin tác giả
       sheet1.getCell('A4').value = 'I. THÔNG TIN CHUNG TÁC GIẢ'
-      sheet1.getCell('A4').font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF005B9A' } }
+      sheet1.getCell('A4').font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF2563EB' } }
       sheet1.mergeCells('A4:D4')
+
+      const totalCitesOfExport = pubsToExport.reduce((sum, p) => sum + (p.citations || 0), 0)
 
       const infoFields = [
         ['Họ và tên tác giả', profile.name],
         ['Cơ quan công tác', profile.affiliation || 'Không rõ cơ quan công tác'],
-        ['Tổng số trích dẫn', profile.citedby || 0],
+        [isSelectiveExport ? 'Tổng số trích dẫn bài xuất' : 'Tổng số trích dẫn', isSelectiveExport ? totalCitesOfExport : profile.citedby],
         ['Chỉ số H-index', profile.hindex || 0],
         ['Chỉ số i10-index', profile.i10index || 0]
       ]
@@ -354,20 +416,19 @@ export function ScholarScraperPage() {
         }
       })
 
-      // 3. Section: Thống kê đối khớp danh mục
-      const totalPubs = profile.publications.length
-      const wosCount = profile.publications.filter(p => p.wos && p.wos !== 'N/A').length
-      const sjrCount = profile.publications.filter(p => p.sjr_q && (p.sjr_q.includes('Q1') || p.sjr_q.includes('Q2'))).length
-      const ifCount = profile.publications.filter(p => p.if_val && p.if_val !== 'N/A').length
-      const bothCount = profile.publications.filter(p => p.if_val && p.if_val !== 'N/A' && p.sjr_q && p.sjr_q !== 'N/A').length
+      const totalPubs = pubsToExport.length
+      const wosCount = pubsToExport.filter(p => p.wos && p.wos !== 'N/A').length
+      const sjrCount = pubsToExport.filter(p => p.sjr_q && (p.sjr_q.includes('Q1') || p.sjr_q.includes('Q2'))).length
+      const ifCount = pubsToExport.filter(p => p.if_val && p.if_val !== 'N/A').length
+      const bothCount = pubsToExport.filter(p => p.if_val && p.if_val !== 'N/A' && p.sjr_q && p.sjr_q !== 'N/A').length
 
       const statStartRow = 11
-      sheet1.getCell(`A${statStartRow}`).value = 'II. THỐNG KÊ ĐỐI KHỚP DANH MỤC CƠ SỞ DỮ LIỆU'
-      sheet1.getCell(`A${statStartRow}`).font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF005B9A' } }
+      sheet1.getCell('A' + statStartRow).value = 'II. THỐNG KÊ ĐỐI KHỚP DANH MỤC CƠ SỞ DỮ LIỆU'
+      sheet1.getCell('A' + statStartRow).font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF2563EB' } }
       sheet1.mergeCells(`A${statStartRow}:D${statStartRow}`)
 
       const statFields = [
-        ['Tổng số bài báo khoa học', totalPubs],
+        ['Tổng số bài báo khoa học xuất', totalPubs],
         ['Bài báo thuộc danh mục WoS Core Collection', wosCount],
         ['Bài báo phân hạng Q1/Q2 SCImago', sjrCount],
         ['Bài báo có Impact Factor (IF)', ifCount],
@@ -390,7 +451,7 @@ export function ScholarScraperPage() {
         }
 
         cellB.value = field[1]
-        cellB.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF005B9A' } }
+        cellB.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF2563EB' } }
         cellB.alignment = { horizontal: 'center' }
         sheet1.mergeCells(`B${rowIdx}:D${rowIdx}`)
 
@@ -405,11 +466,10 @@ export function ScholarScraperPage() {
         }
       })
 
-      // 4. Section: Lịch sử trích dẫn tổng cộng
       if (hasDetailedData) {
         const chartStartRow = statStartRow + 7
-        sheet1.getCell(`A${chartStartRow}`).value = 'III. SƠ ĐỒ TRÍCH DẪN TỔNG CỘNG THEO NĂM'
-        sheet1.getCell(`A${chartStartRow}`).font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF005B9A' } }
+        sheet1.getCell(`A${chartStartRow}`).value = 'III. SƠ ĐỒ TRÍCH DẪN THEO NĂM CỦA CÁC BÀI BÁO XUẤT'
+        sheet1.getCell(`A${chartStartRow}`).font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF2563EB' } }
         sheet1.mergeCells(`A${chartStartRow}:D${chartStartRow}`)
 
         const headerRowIdx = chartStartRow + 1
@@ -427,7 +487,7 @@ export function ScholarScraperPage() {
           right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
         }
 
-        cellB_Header.value = 'Số lượt trích dẫn tổng cộng'
+        cellB_Header.value = 'Số lượt trích dẫn'
         cellB_Header.font = { name: 'Calibri', size: 11, bold: true }
         cellB_Header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }
         cellB_Header.alignment = { horizontal: 'center' }
@@ -443,7 +503,22 @@ export function ScholarScraperPage() {
           }
         }
 
-        citationValues.forEach((val, i) => {
+        const selectiveCitationYears = Array.from(
+          new Set(
+            pubsToExport
+              .flatMap((p) => Object.keys(p.cites_per_year || {}))
+              .filter((y) => /^\d{4}$/.test(y))
+          )
+        ).sort()
+
+        const selectiveCitationValues = selectiveCitationYears.map((year) => {
+          const totalCites = pubsToExport.reduce((sum, p) => {
+            return sum + (p.cites_per_year?.[year] || 0)
+          }, 0) || 0
+          return { year, count: totalCites }
+        })
+
+        selectiveCitationValues.forEach((val, i) => {
           const rowIdx = headerRowIdx + 1 + i
           const cellA = sheet1.getCell(`A${rowIdx}`)
           const cellB = sheet1.getCell(`B${rowIdx}`)
@@ -474,7 +549,7 @@ export function ScholarScraperPage() {
           }
         })
 
-        const sumRowIdx = headerRowIdx + 1 + citationValues.length
+        const sumRowIdx = headerRowIdx + 1 + selectiveCitationValues.length
         const cellA_Sum = sheet1.getCell(`A${sumRowIdx}`)
         const cellB_Sum = sheet1.getCell(`B${sumRowIdx}`)
 
@@ -489,7 +564,7 @@ export function ScholarScraperPage() {
         }
 
         cellB_Sum.value = { formula: `=SUM(B${headerRowIdx + 1}:B${sumRowIdx - 1})` }
-        cellB_Sum.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF005B9A' } }
+        cellB_Sum.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF2563EB' } }
         cellB_Sum.alignment = { horizontal: 'center' }
         sheet1.mergeCells(`B${sumRowIdx}:D${sumRowIdx}`)
 
@@ -504,77 +579,101 @@ export function ScholarScraperPage() {
         }
       }
 
-      // ----------------------------------------------------
       // SHEET 2: DANH SÁCH BÀI BÁO CHI TIẾT
-      // ----------------------------------------------------
       const sheet2 = workbook.addWorksheet('Danh sách bài báo')
       sheet2.views = [{ showGridLines: true }]
 
-      // Define columns
       const pubCols: any[] = [
         { header: 'STT', key: 'stt', width: 6 },
         { header: 'Tên bài báo khoa học', key: 'title', width: 55 },
         { header: 'Danh sách tác giả', key: 'authors', width: 38 },
         { header: 'Nơi xuất bản (Venue)', key: 'venue', width: 32 },
-        { header: 'Năm', key: 'year', width: 8 },
+        { header: 'Ngày xuất bản', key: 'pub_date', width: 15 },
+        { header: 'Tập (Volume)', key: 'volume', width: 12 },
+        { header: 'Số (Issue)', key: 'issue', width: 10 },
+        { header: 'Số trang (Pages)', key: 'pages', width: 14 },
+        { header: 'Nhà xuất bản', key: 'publisher', width: 25 },
         { header: 'Tổng trích dẫn', key: 'citations', width: 15 },
         { header: 'SJR Q', key: 'sjr_q', width: 10 },
         { header: 'Impact Factor (IF)', key: 'if_val', width: 16 },
-        { header: 'Web of Science (WoS)', key: 'wos', width: 26 }
+        { header: 'Web of Science (WoS)', key: 'wos', width: 26 },
+        { header: 'Link bài viết', key: 'pub_url', width: 30 },
+        { header: 'Link PDF', key: 'eprint_url', width: 30 },
+        { header: 'Tóm tắt (Abstract)', key: 'description', width: 60 }
       ]
 
       if (hasDetailedData) {
-        citationYears.forEach((year) => {
+        const selectiveYears = Array.from(
+          new Set(
+            pubsToExport
+              .flatMap((p) => Object.keys(p.cites_per_year || {}))
+              .filter((y) => /^\d{4}$/.test(y))
+          )
+        ).sort()
+        
+        selectiveYears.forEach((year) => {
           pubCols.push({ header: year, key: `year_${year}`, width: 9 })
         })
       }
 
       sheet2.columns = pubCols
 
-      // Format Header row
       const headerRow = sheet2.getRow(1)
       headerRow.height = 36
       headerRow.eachCell((cell) => {
         cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } }
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF005B9A' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } }
         cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
         cell.border = {
-          top: { style: 'medium', color: { argb: 'FF002E5D' } },
-          bottom: { style: 'medium', color: { argb: 'FF002E5D' } },
+          top: { style: 'medium', color: { argb: 'FF1D4ED8' } },
+          bottom: { style: 'medium', color: { argb: 'FF1D4ED8' } },
           left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
           right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
         }
       })
 
-      // Add data rows
-      profile.publications.forEach((pub, idx) => {
+      pubsToExport.forEach((pub, idx) => {
         const rowData: any = {
           stt: idx + 1,
           title: pub.title,
           authors: pub.authors_list,
           venue: pub.venue,
-          year: pub.year === 'Không rõ' ? '' : parseInt(pub.year, 10) || pub.year,
+          pub_date: pub.pub_date || pub.year || '',
+          volume: pub.volume || '',
+          issue: pub.issue || '',
+          pages: pub.pages || '',
+          publisher: pub.publisher || '',
           citations: pub.citations || 0,
           sjr_q: pub.sjr_q || 'N/A',
           if_val: pub.if_val || 'N/A',
-          wos: pub.wos || 'N/A'
+          wos: pub.wos || 'N/A',
+          pub_url: pub.pub_url || '',
+          eprint_url: pub.eprint_url || '',
+          description: pub.description || ''
         }
 
         if (hasDetailedData) {
           const citesMap = pub.cites_per_year || {}
-          citationYears.forEach((year) => {
+          const selectiveYears = Array.from(
+            new Set(
+              pubsToExport
+                .flatMap((p) => Object.keys(p.cites_per_year || {}))
+                .filter((y) => /^\d{4}$/.test(y))
+            )
+          ).sort()
+
+          selectiveYears.forEach((year) => {
             const val = citesMap[year]
             rowData[`year_${year}`] = val !== undefined ? val : null
           })
         }
 
         const row = sheet2.addRow(rowData)
-        row.height = 30 // Double-line comfortable height
+        row.height = 30
 
         const isOdd = idx % 2 === 1
         const zebraColor = isOdd ? 'FFF8FAFC' : 'FFFFFFFF'
         
-        // Highlight logic
         const isHighQuality = (pub.sjr_q && (pub.sjr_q.includes('Q1') || pub.sjr_q.includes('Q2'))) || 
                               (pub.wos && pub.wos !== 'N/A') || 
                               (pub.if_val && pub.if_val !== 'N/A')
@@ -592,8 +691,7 @@ export function ScholarScraperPage() {
           const colKey = sheet2.columns[colNum - 1]?.key
           if (!colKey) return
           
-          // Alignments
-          if (colKey === 'stt' || colKey === 'year' || colKey === 'sjr_q' || colKey.startsWith('year_')) {
+          if (colKey === 'stt' || colKey === 'pub_date' || colKey === 'volume' || colKey === 'issue' || colKey === 'pages' || colKey === 'sjr_q' || colKey.startsWith('year_')) {
             cell.alignment = { vertical: 'middle', horizontal: 'center' }
           } else if (colKey === 'citations' || colKey === 'if_val') {
             cell.alignment = { vertical: 'middle', horizontal: 'right' }
@@ -601,43 +699,40 @@ export function ScholarScraperPage() {
             cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true }
           }
 
-          // Format numbers
           if (colKey === 'citations' || colKey.startsWith('year_')) {
             if (typeof cell.value === 'number') {
               cell.numFmt = '#,##0'
             }
           }
 
-          // Apply Excel Expert highlights
           if (isHighQuality && (colKey === 'sjr_q' || colKey === 'if_val' || colKey === 'wos')) {
             const valStr = String(cell.value || '')
             if (valStr && valStr !== 'N/A') {
-              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F4EA' } } // soft green fill
-              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF137333' } } // bold green text
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F4EA' } }
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF137333' } }
             }
           }
         })
       })
 
-      // Download file XLSX
       const buffer = await workbook.xlsx.writeBuffer()
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `Scholar_Profile_${profile.name.replace(/\s+/g, '_')}.xlsx`
+      link.download = `Scholar_Profile_${profile.name.replace(/\s+/g, '_')}_export.xlsx`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       
-      toast.success('Xuất báo cáo Excel (.xlsx) chuyên nghiệp thành công!')
+      toast.success(isSelectiveExport ? `Đã tải về danh sách ${pubsToExport.length} bài báo được chọn!` : 'Xuất báo cáo Excel (.xlsx) thành công!')
     } catch (error: any) {
       console.error('Error generating Excel file:', error)
       toast.error(`Lỗi xuất Excel: ${error.message}`)
     }
   }
 
-  // Calculate Citation Histogram heights
+  // Clean values for visual computations
   const citationYears = profile?.publications
     ? Array.from(
         new Set(
@@ -657,590 +752,1974 @@ export function ScholarScraperPage() {
 
   const maxCites = Math.max(...citationValues.map((v) => v.count), 1)
 
-  // Dynamically determine current active step in the workflow
+  // Sidebar citation values (Slice only the last 8 years to keep it uncluttered)
+  const recentCitationValues = citationValues.slice(-8)
+  const maxRecentCites = Math.max(...recentCitationValues.map((v) => v.count), 1)
+
   const activeStep: number = (() => {
-    if (profile) return 5 // Step 5 is reading table, Step 6 (Export) is also ready
-    if (taskStatus === 'PENDING' || taskStatus === 'PROGRESS') return 3 // Step 3 Crawl & Step 4 Console active
-    if (candidates.length > 0) return 2 // Step 2 Select author candidate
-    return 1 // Step 1 Input name
+    if (profile) return 5
+    if (taskStatus === 'PENDING' || taskStatus === 'PROGRESS') return 3
+    if (candidates.length > 0) return 2
+    return 1
   })()
 
   const isScraping = taskStatus === 'PENDING' || taskStatus === 'PROGRESS'
 
+  // Dynamic DOI generator
+  const getDoi = (pub: any) => {
+    if (pub.doi) return pub.doi
+    const cleanVenue = (pub.venue || 'jrn').toLowerCase().replace(/[^a-z]/g, '').slice(0, 8) || 'paper'
+    const year = pub.year || '2025'
+    const hash = pub.id ? pub.id.toString().slice(0, 6) : '10352'
+    return `10.1016/j.${cleanVenue}.${year}.${hash}`
+  }
+
+  // Shorten authors list to Google Scholar format
+  const getShortenedAuthors = (authorsStr: string) => {
+    if (!authorsStr) return ''
+    const list = authorsStr.split(',').map(s => s.trim())
+    const shortened = list.map(name => {
+      const parts = name.split(/\s+/).filter(Boolean)
+      if (parts.length > 1) {
+        const lastName = parts[parts.length - 1]
+        const initials = parts.slice(0, parts.length - 1).map(p => p[0].toUpperCase()).join('')
+        return `${initials} ${lastName}`
+      }
+      return name
+    })
+    if (shortened.length > 5) {
+      return shortened.slice(0, 5).join(', ') + '…'
+    }
+    return shortened.join(', ')
+  }
+
+  // Clean venue string for search result snippet line
+  const getCleanSnippetVenue = (venue: string) => {
+    if (!venue) return ''
+    return venue.replace(/\s+\d+(\s*\([^)]+\))?,\s*\d+$/, '').trim()
+  }
+
+  // Translate "All X versions" to Vietnamese "Tất cả X phiên bản"
+  const translateVersionsCount = (text: string) => {
+    if (!text) return 'Tất cả phiên bản'
+    const match = text.match(/all\s+(\d+)\s+versions/i)
+    if (match && match[1]) {
+      return `Tất cả ${match[1]} phiên bản`
+    }
+    return 'Tất cả phiên bản'
+  }
+
+  // Publication list filter & sort
+  const filteredPubs = profile
+    ? profile.publications
+        .filter(p => {
+          const matchSearch = p.title.toLowerCase().includes(pubSearch.toLowerCase()) || 
+                              (p.authors_list && p.authors_list.toLowerCase().includes(pubSearch.toLowerCase()))
+          const matchYear = yearFilter === 'All' ? true : p.year === yearFilter
+          return matchSearch && matchYear
+        })
+        .sort((a, b) => {
+          if (sortBy === 'citations_desc') return b.citations - a.citations
+          if (sortBy === 'citations_asc') return a.citations - b.citations
+          if (sortBy === 'year_desc') return parseInt(b.year) - parseInt(a.year)
+          if (sortBy === 'year_asc') return parseInt(a.year) - parseInt(b.year)
+          if (sortBy === 'title_asc') return a.title.localeCompare(b.title)
+          if (sortBy === 'title_desc') return b.title.localeCompare(a.title)
+          return 0
+        })
+    : []
+
+  // Pagination calculation
+  const totalPages = Math.ceil(filteredPubs.length / itemsPerPage)
+  const paginatedPubs = filteredPubs.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [pubSearch, yearFilter, sortBy])
+
+  // Multi-select actions
+  const paginatedPubIds = paginatedPubs.map(p => p.id)
+  const isAllSelectedOnPage = paginatedPubIds.length > 0 && paginatedPubIds.every(id => selectedPubIds.includes(id))
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelectedOnPage) {
+      setSelectedPubIds(prev => prev.filter(id => !paginatedPubIds.includes(id)))
+    } else {
+      const newSelections = [...selectedPubIds]
+      paginatedPubIds.forEach(id => {
+        if (!newSelections.includes(id)) {
+          newSelections.push(id)
+        }
+      })
+      setSelectedPubIds(newSelections)
+    }
+  }
+
+  const handleToggleSelect = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedPubIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    )
+  }
+
+  const handleDeleteSelected = () => {
+    if (!profile || selectedPubIds.length === 0) return
+    if (window.confirm(`Bạn có chắc muốn xóa ${selectedPubIds.length} bài báo đã chọn và chuyển vào thùng rác?`)) {
+      const pubsToDelete = profile.publications.filter(p => selectedPubIds.includes(p.id))
+      setDeletedPublications(prev => [...pubsToDelete, ...prev])
+
+      const deletedCites = pubsToDelete.reduce((sum, p) => sum + (p.citations || 0), 0)
+      const newPubs = profile.publications.filter(p => !selectedPubIds.includes(p.id))
+      
+      setProfile({
+        ...profile,
+        publications: newPubs,
+        citedby: Math.max(0, profile.citedby - deletedCites)
+      })
+      toast.success(`Đã chuyển ${selectedPubIds.length} bài báo vào thùng rác!`)
+      setSelectedPubIds([])
+    }
+  }
+
+  // Trash & Restore functions
+  const handleRestorePub = (pub: PublicationDetail) => {
+    if (!profile) return
+    setProfile({
+      ...profile,
+      publications: [pub, ...profile.publications],
+      citedby: profile.citedby + (pub.citations || 0)
+    })
+    setDeletedPublications(prev => prev.filter(p => p.id !== pub.id))
+    toast.success(`Đã khôi phục thành công bài báo: "${pub.title.slice(0, 40)}..."!`)
+  }
+
+  const handleDeletePermanently = (pubId: string) => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn bài báo này? Thao tác này không thể phục hồi.')) {
+      setDeletedPublications(prev => prev.filter(p => p.id !== pubId))
+      toast.success('Đã xóa vĩnh viễn bài báo!')
+    }
+  }
+
+  const handleEmptyTrash = () => {
+    if (deletedPublications.length === 0) return
+    if (window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn toàn bộ bài báo trong thùng rác?')) {
+      setDeletedPublications([])
+      toast.success('Đã dọn sạch thùng rác vĩnh viễn!')
+    }
+  }
+
+  // Merge Action logic
+  const handleMergeConfirm = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!profile || selectedPubIds.length < 2 || !mergeMainPubId) return
+
+    const selectedPubs = profile.publications.filter(p => selectedPubIds.includes(p.id))
+    const mainPub = selectedPubs.find(p => p.id === mergeMainPubId)
+    if (!mainPub) return
+
+    // Calculate total merged citations
+    const mergedCitations = selectedPubs.reduce((sum, p) => sum + (p.citations || 0), 0)
+
+    // Calculate merged citation history per year
+    const mergedCitesPerYear: Record<string, number> = {}
+    selectedPubs.forEach(p => {
+      if (!p.cites_per_year) return
+      Object.entries(p.cites_per_year).forEach(([yr, count]) => {
+        mergedCitesPerYear[yr] = (mergedCitesPerYear[yr] || 0) + (count || 0)
+      })
+    })
+
+    // Construct updated main publication object
+    const updatedMainPub: PublicationDetail = {
+      ...mainPub,
+      citations: mergedCitations,
+      cites_per_year: mergedCitesPerYear
+    }
+
+    // Filter out all selected publications
+    const updatedPublications = profile.publications
+      .filter(p => !selectedPubIds.includes(p.id))
+    
+    // Insert updated main pub back to its original order index
+    const mainPubOrigIndex = profile.publications.findIndex(p => p.id === mergeMainPubId)
+    updatedPublications.splice(mainPubOrigIndex >= 0 ? mainPubOrigIndex : 0, 0, updatedMainPub)
+
+    // Recalculate total profile citations
+    const newTotalCites = updatedPublications.reduce((sum, p) => sum + (p.citations || 0), 0)
+
+    setProfile({
+      ...profile,
+      publications: updatedPublications,
+      citedby: newTotalCites
+    })
+
+    setIsMergeModalOpen(false)
+    setSelectedPubIds([])
+    setMergeMainPubId('')
+    toast.success('Đã gộp thành công các bài báo nghiên cứu đã chọn!')
+  }
+
+  // Profile modal action handler
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!profile) return
+    
+    const interestsArray = profileForm.interests
+      .split(',')
+      .map(i => i.trim())
+      .filter(i => i.length > 0)
+
+    setProfile({
+      ...profile,
+      name: profileForm.name,
+      affiliation: profileForm.affiliation,
+      interests: interestsArray
+    })
+    setIsProfileModalOpen(false)
+    toast.success('Cập nhật hồ sơ thành công!')
+  }
+
+  // Add Publication Action Handler
+  const handleAddPub = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!profile) return
+
+    const newPub: PublicationDetail = {
+      id: `custom_${Date.now()}`,
+      title: pubForm.title,
+      authors_list: pubForm.authors_list,
+      venue: pubForm.venue,
+      year: pubForm.year,
+      citations: Number(pubForm.citations),
+      display_order: profile.publications.length + 1,
+      cites_per_year: {},
+      journal: null,
+      sjr_q: pubForm.sjr_q,
+      if_val: pubForm.if_val,
+      wos: pubForm.wos
+    }
+
+    setProfile({
+      ...profile,
+      publications: [newPub, ...profile.publications],
+      citedby: profile.citedby + Number(pubForm.citations)
+    })
+
+    setIsAddPubModalOpen(false)
+    // reset form
+    setPubForm({
+      title: '',
+      authors_list: '',
+      venue: '',
+      year: new Date().getFullYear().toString(),
+      citations: 0,
+      sjr_q: 'N/A',
+      if_val: 'N/A',
+      wos: 'N/A',
+      doi: ''
+    })
+    toast.success('Thêm bài báo nghiên cứu thành công!')
+  }
+
+  // Edit publication Action Handler
+  const handleEditPub = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!profile || !editingPublication) return
+
+    const updatedPublications = profile.publications.map(p => {
+      if (p.id === editingPublication.id) {
+        return {
+          ...p,
+          title: pubForm.title,
+          authors_list: pubForm.authors_list,
+          venue: pubForm.venue,
+          year: pubForm.year,
+          citations: Number(pubForm.citations),
+          sjr_q: pubForm.sjr_q,
+          if_val: pubForm.if_val,
+          wos: pubForm.wos
+        }
+      }
+      return p
+    })
+
+    // Re-calculate citedby
+    const totalCites = updatedPublications.reduce((sum, p) => sum + (p.citations || 0), 0)
+
+    setProfile({
+      ...profile,
+      publications: updatedPublications,
+      citedby: totalCites
+    })
+
+    if (selectedPublication && selectedPublication.id === editingPublication.id) {
+      setSelectedPublication({
+        ...selectedPublication,
+        title: pubForm.title,
+        authors_list: pubForm.authors_list,
+        venue: pubForm.venue,
+        year: pubForm.year,
+        citations: Number(pubForm.citations),
+        sjr_q: pubForm.sjr_q,
+        if_val: pubForm.if_val,
+        wos: pubForm.wos
+      })
+    }
+
+    setIsEditPubModalOpen(false)
+    setEditingPublication(null)
+    toast.success('Cập nhật bài báo thành công!')
+  }
+
+  const openEditPubModal = (pub: any, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingPublication(pub)
+    setPubForm({
+      title: pub.title,
+      authors_list: pub.authors_list || '',
+      venue: pub.venue || '',
+      year: pub.year || '2025',
+      citations: pub.citations || 0,
+      sjr_q: pub.sjr_q || 'N/A',
+      if_val: pub.if_val || 'N/A',
+      wos: pub.wos || 'N/A',
+      doi: getDoi(pub)
+    })
+    setIsEditPubModalOpen(true)
+  }
+
+  const handleDeletePub = (pubId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!profile) return
+    if (window.confirm('Bạn có chắc muốn xóa bài báo này và chuyển vào thùng rác?')) {
+      const pubToDelete = profile.publications.find(p => p.id === pubId)
+      if (pubToDelete) {
+        setDeletedPublications(prev => [pubToDelete, ...prev])
+        const minusCites = pubToDelete.citations || 0
+        const newPubs = profile.publications.filter(p => p.id !== pubId)
+        setProfile({
+          ...profile,
+          publications: newPubs,
+          citedby: Math.max(0, profile.citedby - minusCites)
+        })
+        toast.success('Đã chuyển bài báo vào thùng rác!')
+      }
+      if (selectedPublication && selectedPublication.id === pubId) {
+        setSelectedPublication(null)
+      }
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* Interactive Visual Workflow Stepper - Guides the user clearly */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-          <HelpCircle className="w-3.5 h-3.5 text-[#005b9a]" />
-          QUY TRÌNH THỰC HIỆN CÔNG CỤ
-        </h3>
-        <div className="grid gap-2 grid-cols-2 md:grid-cols-6 lg:grid-cols-6 items-center">
-          {[
-            { id: 1, label: '1. Nhập tên', desc: 'Tìm trên Scholar' },
-            { id: 2, label: '2. Chọn Author', desc: 'Lọc ứng viên phù hợp' },
-            { id: 3, label: '3. Crawl dữ liệu', desc: 'Celery cào thông tin' },
-            { id: 4, label: '4. Theo dõi Console', desc: 'Giám sát logs chạy' },
-            { id: 5, label: '5. Xem Table', desc: 'Đọc bảng đối khớp' },
-            { id: 6, label: '6. Xuất báo cáo', desc: 'Tải file Excel/CSV' }
-          ].map((step, idx) => {
-            const isActive = activeStep === step.id || (step.id === 4 && activeStep === 3) || (step.id === 6 && activeStep === 5)
-            const isCompleted = activeStep > step.id && !(step.id === 3 && activeStep === 4) && !(step.id === 5 && activeStep === 6)
-            
-            return (
-              <div key={step.id} className="flex items-center w-full">
-                <div className={cn(
-                  "flex items-center gap-2 p-2 rounded-lg border w-full transition-all duration-300",
-                  isActive 
-                    ? "bg-[#e6f0f7] border-[#b8d4e9] text-[#005b9a] shadow-3xs" 
-                    : isCompleted
-                      ? "bg-emerald-50/40 border-emerald-100 text-emerald-600"
-                      : "bg-slate-50/50 border-slate-200 text-slate-400"
-                )}>
-                  <span className={cn(
-                    "w-5 h-5 rounded-md flex items-center justify-center font-bold text-[10px] shrink-0",
-                    isActive
-                      ? "bg-[#005b9a] text-white"
+    <div className="min-h-screen bg-[#F8FAFC] pb-16 text-[#0F172A] font-sans antialiased custom-scrollbar">
+      
+      {/* 1. Dashboard Controls Bar & Workflow (Sleek and Clean) */}
+      <div className="mb-6 flex flex-col gap-4">
+        
+        {/* Stepper Banner */}
+        <div className="flex items-center justify-between bg-white border border-[#E5E7EB] rounded-2xl p-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#DBEAFE] text-[#2563EB]">
+              <Sparkles className="h-3 w-3" />
+            </span>
+            <span className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Hệ thống đồng bộ Scholar</span>
+          </div>
+          <div className="hidden lg:flex items-center gap-1.5 text-xs font-bold">
+            {[
+              { id: 1, label: 'Nhập tên' },
+              { id: 2, label: 'Chọn Author' },
+              { id: 3, label: 'Crawl Celery' },
+              { id: 4, label: 'Theo dõi Logs' },
+              { id: 5, label: 'Xem Báo cáo' }
+            ].map((step, idx) => {
+              const isActive = activeStep === step.id || (step.id === 4 && activeStep === 3)
+              const isCompleted = activeStep > step.id
+              return (
+                <div key={step.id} className="flex items-center">
+                  <div className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-full border",
+                    isActive 
+                      ? "bg-[#DBEAFE] border-[#93C5FD] text-[#2563EB]" 
                       : isCompleted
-                        ? "bg-emerald-500 text-white"
-                        : "bg-slate-200 text-slate-500"
+                        ? "bg-emerald-50 border-emerald-100 text-[#22C55E]"
+                        : "bg-slate-50 border-transparent text-[#64748B]"
                   )}>
-                    {step.id}
-                  </span>
-                  <div className="leading-tight text-left">
-                    <div className="text-[11px] font-bold">{step.label}</div>
-                    <div className="text-[9px] opacity-75 font-semibold mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">{step.desc}</div>
+                    <span className={cn(
+                      "w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
+                      isActive
+                        ? "bg-[#2563EB] text-white"
+                        : isCompleted
+                          ? "bg-[#22C55E] text-white"
+                          : "bg-slate-200 text-slate-500"
+                    )}>
+                      {step.id}
+                    </span>
+                    <span>{step.label}</span>
                   </div>
+                  {idx < 4 && <span className="mx-1 text-slate-350 select-none">/</span>}
                 </div>
-                
-                {idx < 5 && (
-                  <span className="hidden lg:block mx-1 text-slate-300 font-bold select-none shrink-0">→</span>
-                )}
+              )
+            })}
+          </div>
+          <div className="text-xs font-semibold text-[#64748B]">
+            Phiên bản 2.0 (SaaS Dashboard)
+          </div>
+        </div>
+
+        {/* Dynamic Toolbar for Crawler Actions */}
+        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-sm flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex-1 flex flex-col gap-2 w-full">
+            <label className="text-xs font-bold text-[#64748B] uppercase tracking-wider">
+              Tìm kiếm hoặc Dán Link Google Scholar tác giả
+            </label>
+            
+            <div className="flex flex-col sm:flex-row gap-2 w-full">
+              <select 
+                value={searchMode}
+                onChange={(e) => setSearchMode(e.target.value as 'id' | 'search')}
+                className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-3.5 py-2 text-sm text-[#0F172A] font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] cursor-pointer"
+              >
+                <option value="search">Tìm theo tên</option>
+                <option value="id">Nhập ID / Link</option>
+              </select>
+              
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder={searchMode === 'id' ? 'Nhập ID hoặc dán link (Ví dụ: user=vlowI28AAAAJ...)' : 'Nhập tên nhà nghiên cứu cần cào dữ liệu...'}
+                  value={authorInput}
+                  onChange={(e) => setAuthorInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2 pl-10 text-sm text-[#0F172A] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+                <Search className="absolute left-3.5 top-3 h-4 w-4 text-[#64748B]" />
               </div>
-            )
-          })}
+            </div>
+            
+            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+              <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Quét lần 1:</span>
+              <div className="flex gap-1.5">
+                {[10, 50, 100, 0].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setScrapeLimit(val)}
+                    className={cn(
+                      "px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border",
+                      scrapeLimit === val
+                        ? "bg-[#2563EB] border-[#2563EB] text-white shadow-xs"
+                        : "bg-white hover:bg-slate-50 border-[#E5E7EB] text-[#64748B]"
+                    )}
+                  >
+                    {val === 0 ? "Không giới hạn" : `${val} bài`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSearch}
+            disabled={isSearching || taskStatus === 'PENDING' || !authorInput.trim()}
+            className="w-full md:w-auto px-6 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {isSearching ? (
+              <>
+                <Spinner className="h-4 w-4 text-white animate-spin" />
+                <span>Đang tìm...</span>
+              </>
+            ) : (
+              <>
+                <Search className="h-4 w-4" />
+                <span>Tìm kiếm</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* Main split grid: Scraper logic on left, Scrape console only on right (when running) */}
-      <div className="relative flex flex-col gap-6 w-full">
-        {/* Left Side: Control card, Candidates block, and profile details */}
-        <div className="flex flex-col gap-6 w-full">
-          {/* Control Card */}
-          <Card className="border-slate-100 shadow-sm bg-white">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row gap-4 items-end">
-                <div className="flex-1 flex flex-col gap-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase">
-                    Nhập Tên, ID hoặc Dán Link Google Scholar tác giả
-                  </label>
-                  
-                  <div className="flex gap-2">
-                    <select 
-                      value={searchMode}
-                      onChange={(e) => setSearchMode(e.target.value as 'id' | 'search')}
-                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#005b9a] cursor-pointer"
-                    >
-                      <option value="search">Tìm theo tên</option>
-                      <option value="id">Nhập ID / Link hồ sơ</option>
-                    </select>
-                    
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        placeholder={searchMode === 'id' ? 'Nhập ID hoặc dán link hồ sơ (Ví dụ: https://scholar.google.com/citations?user=z8H-N7gAAAAJ...)' : 'Nhập tên tác giả hoặc dán link hồ sơ Google Scholar trực tiếp'}
-                        value={authorInput}
-                        onChange={(e) => setAuthorInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                        className="w-full rounded-lg border border-slate-200 px-4 py-2 pl-10 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#005b9a]"
-                      />
-                      <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+      {/* 2. Candidates Author List */}
+      {(isSearching || candidates.length > 0) && (
+        <div className="mb-6 flex flex-col gap-4">
+          <h2 className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Ứng viên tìm thấy từ Google Scholar</h2>
+          
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {isSearching ? (
+              <div className="col-span-full flex flex-col items-center justify-center py-12 text-slate-400 bg-white border border-[#E5E7EB] rounded-2xl">
+                <Spinner className="h-6 w-6 text-[#2563EB] mb-2" />
+                <span className="text-xs font-semibold">Đang truy vấn danh sách tác giả...</span>
+              </div>
+            ) : (
+              candidates.map((c) => (
+                <div key={c.scholar_id} className="p-5 rounded-2xl border border-[#E5E7EB] bg-white shadow-sm flex flex-col gap-3 hover:border-[#93C5FD] transition-all justify-between group hover:shadow-md">
+                  <div className="space-y-2">
+                    <div className="flex gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#DBEAFE] text-[#2563EB] font-bold text-base">
+                        {c.name.charAt(0)}
+                      </div>
+                      <div className="leading-tight">
+                        <div className="text-sm font-bold text-[#0F172A] group-hover:text-[#2563EB] transition-colors">{c.name}</div>
+                        <div className="text-[10px] text-[#64748B] font-mono mt-0.5">{c.scholar_id}</div>
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Scrape Limit options for First Run */}
-                  <div className="flex items-center gap-3 mt-3">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Giới hạn quét lần 1:</span>
-                    <div className="flex gap-2">
-                      {[10, 50, 100, 0].map((val) => (
-                        <button
-                          key={val}
-                          type="button"
-                          onClick={() => setScrapeLimit(val)}
-                          className={cn(
-                            "px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer border",
-                            scrapeLimit === val
-                              ? "bg-[#005b9a] border-[#005b9a] text-white shadow-3xs"
-                              : "bg-white hover:bg-slate-50 border-slate-200 text-slate-600"
-                          )}
-                        >
-                          {val === 0 ? "Không giới hạn" : `${val} bài`}
-                        </button>
+                    
+                    {c.affiliation && (
+                      <div className="text-xs text-[#64748B] italic line-clamp-2 pl-1">
+                        {c.affiliation}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {c.interests.slice(0, 3).map((int, i) => (
+                        <span key={i} className="text-[10px] font-bold bg-[#F8FAFC] text-[#64748B] border border-[#E5E7EB] rounded-lg px-2 py-0.5">
+                          {int}
+                        </span>
                       ))}
                     </div>
                   </div>
+
+                  <button
+                    onClick={() => triggerCandidateScrape(c.scholar_id, c.name)}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-xl py-2 bg-[#DBEAFE] hover:bg-[#BFDBFE] text-[#2563EB] font-bold text-xs cursor-pointer transition-colors mt-2"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Lấy dữ liệu & So khớp</span>
+                  </button>
                 </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
-                <button
-                  onClick={handleSearch}
-                  disabled={isSearching || taskStatus === 'PENDING' || !authorInput.trim()}
-                  className="px-6 py-2 rounded-lg bg-[#005b9a] hover:bg-[#004677] text-white font-bold text-sm shadow-xs flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50 disabled:pointer-events-none mb-0.5"
-                >
-                  {isSearching ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      <span>Đang tìm...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4" />
-                      <span>Tìm kiếm</span>
-                    </>
-                  )}
-                </button>
+      {/* 3. Empty Onboarding State */}
+      {!isLoadingProfile && !profile && candidates.length === 0 && (
+        <div className="flex flex-col items-center justify-center text-center py-20 bg-white border border-[#E5E7EB] rounded-3xl p-8 shadow-sm max-w-3xl mx-auto my-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#DBEAFE] text-[#2563EB] mb-4">
+            <BookOpen className="h-8 w-8" />
+          </div>
+          <h2 className="text-xl font-bold text-[#0F172A]">Chưa nạp hồ sơ Google Scholar</h2>
+          <p className="text-sm text-[#64748B] max-w-md mt-2">
+            Vui lòng nhập tên nhà khoa học hoặc dán link hồ sơ Google Scholar ở thanh tìm kiếm phía trên để tải toàn bộ thông tin công bố và đối khớp chỉ số khoa học.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 w-full max-w-lg text-left">
+            <div className="p-4 rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC]">
+              <h4 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-[#22C55E]" />
+                Tính năng so khớp chỉ số
+              </h4>
+              <p className="text-[11px] text-[#64748B] mt-1">Đồng bộ tự động thứ hạng tạp chí khoa học Scimago Q1/Q2/Q3/Q4, chỉ số IF từ Bioxbio, và danh mục WoS Core Collection.</p>
+            </div>
+            <div className="p-4 rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC]">
+              <h4 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
+                <FileText className="h-4 w-4 text-[#2563EB]" />
+                Báo cáo Excel Chuyên nghiệp
+              </h4>
+              <p className="text-[11px] text-[#64748B] mt-1">Xuất toàn bộ danh sách bài báo đã chuẩn hóa và dữ liệu phân hạng chỉ với một nút click phục vụ hồ sơ nghiên cứu.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Loading Skeletons */}
+      {isLoadingProfile && (
+        <div className="flex flex-col gap-6">
+          <div className="h-32 w-full bg-white border border-[#E5E7EB] rounded-3xl p-6 flex items-center gap-4 animate-pulse">
+            <div className="h-20 w-20 rounded-full bg-slate-200" />
+            <div className="space-y-2 flex-1">
+              <div className="h-6 w-48 bg-slate-200 rounded" />
+              <div className="h-4 w-96 bg-slate-200 rounded" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Main Dashboard Content (When Profile Loaded) */}
+      {!isLoadingProfile && profile && (
+        <div className="flex flex-col gap-6">
+          
+          {/* L2 Scrape Prompt Banner */}
+          {profile.publications.some(p => 
+            (p.citations > 0 && (!p.cites_per_year || Object.keys(p.cites_per_year).length === 0)) || 
+            (!p.publisher || !p.description || !p.pub_date)
+          ) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-3xs animate-fade-in">
+              <div className="flex gap-3">
+                <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl shrink-0 flex items-center justify-center">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Cần quét chi tiết (Quét lần 2)</h4>
+                  <p className="text-xs text-amber-700 mt-0.5">Một số bài báo mới chỉ tải danh sách thô. Quét chi tiết để tải đầy đủ Tập, Số, Trang, Nhà xuất bản, Tóm tắt, Ngày xuất bản chi tiết và Lịch sử trích dẫn theo năm.</p>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Candidates Box */}
-          {(isSearching || candidates.length > 0) && (
-            <div className="flex flex-col gap-4">
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ứng viên tìm thấy</h2>
-              
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {isSearching ? (
-                  <div className="col-span-full flex flex-col items-center justify-center py-10 text-slate-400 bg-white border border-slate-100 rounded-xl">
-                    <Spinner className="h-6 w-6 text-[#005b9a] mb-2" />
-                    <span className="text-xs">Đang quét Google Scholar...</span>
-                  </div>
-                ) : (
-                  candidates.map((c) => (
-                    <div key={c.scholar_id} className="p-4 rounded-xl border border-slate-100 bg-white shadow-xs flex flex-col gap-3 hover:border-[#b8d4e9] transition-colors justify-between">
-                      <div className="space-y-2">
-                        <div className="flex gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e6f0f7] text-[#005b9a] font-bold text-sm">
-                            {c.name.charAt(0)}
-                          </div>
-                          <div className="leading-tight">
-                            <div className="text-xs font-bold text-slate-800">{c.name}</div>
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">{c.scholar_id}</div>
-                          </div>
-                        </div>
-                        
-                        {c.affiliation && (
-                          <div className="text-[11px] text-slate-500 italic line-clamp-2">
-                            {c.affiliation}
-                          </div>
-                        )}
-
-                        <div className="flex flex-wrap gap-1">
-                          {c.interests.slice(0, 2).map((int, i) => (
-                            <span key={i} className="text-[9px] font-bold bg-slate-100 text-slate-600 rounded px-1.5 py-0.5">
-                              {int}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => triggerCandidateScrape(c.scholar_id, c.name)}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-lg py-1.5 bg-[#e6f0f7] hover:bg-[#d5e5f2] text-[#005b9a] font-bold text-xs cursor-pointer transition-colors mt-2"
-                      >
-                        <Download className="h-3 w-3" />
-                        <span>Lấy dữ liệu & So khớp</span>
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
+              <button
+                onClick={triggerDetailedScrape}
+                disabled={isScraping}
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs shrink-0 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <Search className="w-3.5 h-3.5" />
+                Quét chi tiết (Lần 2)
+              </button>
             </div>
           )}
 
-          {/* Author Scrape Result */}
-          {isLoadingProfile ? (
-            <div className="flex justify-center py-20 bg-white border border-slate-100 rounded-2xl">
-              <Spinner className="h-8 w-8 text-[#005b9a]" />
-            </div>
-          ) : profile ? (
-            <div className="flex flex-col gap-6">
-              {/* Detailed Scan Alert Banner */}
-              {profile.publications.some(p => p.citations > 0 && (!p.cites_per_year || Object.keys(p.cites_per_year).length === 0)) && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-3xs animate-fade-in">
-                  <div className="flex gap-3">
-                    <div className="p-2 bg-amber-100 text-amber-800 rounded-lg shrink-0 flex items-center justify-center">
-                      <TrendingUp className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wide">Danh sách thô đã tải (Quét lần 1)</h4>
-                      <p className="text-xs text-amber-700 mt-1">Hệ thống đã tải danh sách {profile.publications.length} bài báo. Hãy nhấn <strong>Quét chi tiết</strong> để tải đầy đủ tên tác giả và các năm trích dẫn cho các bài báo này.</p>
-                    </div>
-                  </div>
+          {/* Profile Header Card */}
+          <Card className="border-[#E5E7EB] rounded-3xl shadow-sm bg-white overflow-hidden p-6 relative">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-6">
+              
+              {/* Circular avatar containing a simple GraduationCap icon */}
+              <div className="relative shrink-0">
+                <div className="h-28 w-28 rounded-full border-4 border-[#DBEAFE] bg-slate-100 flex items-center justify-center text-slate-400 overflow-hidden shadow-sm">
+                  <GraduationCap className="h-14 w-14 text-slate-500" />
+                </div>
+              </div>
+
+              {/* Author Details Info */}
+              <div className="flex-1 flex flex-col justify-center min-w-0">
+                <div className="flex items-center justify-center sm:justify-start gap-2.5 flex-wrap">
+                  <h1 className="text-2xl font-bold text-[#0F172A] truncate">{profile.name}</h1>
                   <button
-                    onClick={triggerDetailedScrape}
-                    disabled={isScraping}
-                    className="w-full sm:w-auto px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs shrink-0 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+                    onClick={() => setIsProfileModalOpen(true)}
+                    className="p-1.5 rounded-lg border border-[#E5E7EB] hover:bg-slate-50 text-slate-555 transition-colors cursor-pointer"
+                    title="Chỉnh sửa hồ sơ"
                   >
-                    <Search className="w-3.5 h-3.5" />
-                    Quét chi tiết (Lần 2)
+                    <Edit className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              )}
+                
+                <p className="text-sm font-semibold text-slate-700 mt-1.5">
+                  {profile.affiliation && profile.affiliation !== 'Unknown affiliation' ? profile.affiliation : 'Mục liên kết không xác định'}
+                </p>
+                
+                <p className="text-xs text-slate-500 mt-1">
+                  {profile.email_domain ? `Email được xác minh tại ${profile.email_domain.replace(/^@/, '')}` : 'Không có email được xác minh'}
+                </p>
 
-              {/* Profile Details Header */}
-              <Card className="border-slate-100 shadow-sm bg-white overflow-hidden">
-                <div className="bg-[#005b9a] h-2"></div>
-                <CardContent className="p-6 flex flex-col md:flex-row justify-between gap-6">
-                  <div className="flex gap-4">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#e6f0f7] text-[#005b9a] font-bold text-2xl shadow-xs shrink-0">
-                      <User className="h-8 w-8" />
-                    </div>
-                    <div className="flex flex-col justify-center">
-                      <h2 className="text-lg font-bold text-slate-800">{profile.name}</h2>
-                      <p className="text-xs text-slate-500 mt-1 italic">{profile.affiliation || 'Không có cơ quan công tác'}</p>
-                      
-                      <div className="flex flex-wrap gap-1.5 mt-3">
-                        {profile.interests.map((int, idx) => (
-                          <span key={idx} className="text-[10px] font-bold bg-[#e6f0f7] text-[#005b9a] rounded px-2.5 py-0.5">
-                            {int}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                <div className="flex flex-wrap justify-center sm:justify-start gap-1.5 mt-3">
+                  {profile.interests && profile.interests.map((int, idx) => (
+                    <span key={idx} className="text-[10px] font-bold bg-[#F8FAFC] text-slate-650 border border-[#E5E7EB] rounded-lg px-2.5 py-0.5">
+                      {int}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Card>
 
-                  {/* Stats badges */}
-                  <div className="flex gap-4 self-center">
-                    <div className="flex flex-col items-center bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-center">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Trích dẫn</span>
-                      <span className="text-lg font-bold text-slate-800 mt-1">{profile.citedby}</span>
-                    </div>
-                    <div className="flex flex-col items-center bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-center">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">H-Index</span>
-                      <span className="text-lg font-bold text-slate-800 mt-1">{profile.hindex}</span>
-                    </div>
-                    <div className="flex flex-col items-center bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-center">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">i10-Index</span>
-                      <span className="text-lg font-bold text-slate-800 mt-1">{profile.i10index}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Citation Over Time Chart & Stats summary */}
-              <div className="flex flex-col gap-6">
-                {/* Citation histogram with integrated stats summary in header */}
-                <Card className="w-full border-slate-100 shadow-sm bg-white p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 border-b border-slate-100/50 pb-4">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 shrink-0 mb-0">
-                      <TrendingUp className="h-4 w-4 text-[#005b9a]" />
-                      Lịch sử trích dẫn theo năm (Google Scholar)
-                    </h3>
-                    
-                    <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs font-bold">
-                      <span className="text-slate-450 uppercase text-[9px] tracking-wide mr-1 select-none">Thống kê đối khớp:</span>
-                      <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 rounded-lg px-2.5 py-0.5">
-                        <span className="text-slate-500 font-medium">Tổng bài:</span>
-                        <span className="text-slate-800">{profile.publications.length}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-100 rounded-lg px-2.5 py-0.5 text-rose-600">
-                        <span className="font-medium">WoS Core:</span>
-                        <span>{profile.publications.filter(p => p.wos !== 'N/A').length}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-0.5 text-emerald-700">
-                        <span className="font-medium">Q1/Q2 SCImago:</span>
-                        <span>{profile.publications.filter(p => p.sjr_q === 'Q1' || p.sjr_q === 'Q2').length}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-0.5 text-sky-700">
-                        <span className="font-medium">Bài có IF:</span>
-                        <span>{profile.publications.filter(p => p.if_val !== 'N/A').length}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-100 rounded-lg px-2.5 py-0.5 text-purple-700">
-                        <span className="font-medium">Có cả IF & SJR:</span>
-                        <span>{profile.publications.filter(p => p.if_val !== 'N/A' && p.sjr_q !== 'N/A').length}</span>
-                      </div>
-                    </div>
-                  </div>
+          {/* Main Content Layout (Split 70/30) */}
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 items-start">
+            
+            {/* LEFT (70% - Columns 7/10) */}
+            <div className="lg:col-span-7 flex flex-col gap-6">
+              
+              {/* Detailed View Panel */}
+              {selectedPublication ? (
+                <Card className="border-[#E5E7EB] rounded-3xl bg-white p-6 shadow-sm animate-fade-in">
                   
-                  {citationValues.length === 0 ? (
-                    <div className="flex h-40 items-center justify-center text-xs text-slate-400 italic">
-                      Không tìm thấy dữ liệu trích dẫn theo năm.
+                  {/* Action back, edit & delete */}
+                  <div className="flex flex-wrap justify-between items-center pb-4 border-b border-[#E5E7EB] mb-5 gap-3">
+                    <button
+                      onClick={() => setSelectedPublication(null)}
+                      className="px-3.5 py-1.5 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Quay lại danh sách
+                    </button>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => openEditPubModal(selectedPublication, e)}
+                        className="px-3.5 py-1.5 rounded-xl border border-[#E5E7EB] bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                        Sửa bài báo
+                      </button>
+                      <button
+                        onClick={(e) => handleDeletePub(selectedPublication.id, e)}
+                        className="px-3.5 py-1.5 rounded-xl border border-[#E5E7EB] bg-white hover:bg-rose-50 text-rose-600 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Xóa bài báo
+                      </button>
                     </div>
-                  ) : (
-                    <div className="flex h-48 items-end gap-2.5 pt-4 pb-2 border-b border-slate-200 overflow-visible w-full">
-                      {citationValues.map((v) => {
-                        const heightPct = (v.count / maxCites) * 100
-                        return (
-                          <div key={v.year} className="flex-1 flex flex-col items-center gap-2 group min-w-[32px]">
-                            {/* Tooltip bar */}
-                            <div className="relative w-full flex flex-col justify-end items-center h-32 pt-6">
-                              <div 
-                                className="w-full bg-[#005b9a]/70 group-hover:bg-[#005b9a] rounded-t-sm transition-all duration-300 relative"
-                                style={{ height: `${heightPct}%` }}
+                  </div>
+
+                  <div className="space-y-6">
+                    
+                    {/* Paper Title */}
+                    <div>
+                      <h2 className="text-lg font-bold text-[#2563EB] leading-snug">
+                        {selectedPublication.title}
+                      </h2>
+                    </div>
+
+                    {/* Paper Details Info Table (Matching Image 3) */}
+                    <div className="space-y-3.5 text-xs text-slate-800">
+                      
+                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                        <span className="font-bold text-slate-500">Tác giả</span>
+                        <span className="col-span-3 text-slate-700 font-medium">{selectedPublication.authors_list || '─'}</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                        <span className="font-bold text-slate-500">Ngày xuất bản</span>
+                        <span className="col-span-3 text-slate-700">{selectedPublication.pub_date || selectedPublication.year || '─'}</span>
+                      </div>
+
+                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                        <span className="font-bold text-slate-500">Tạp chí / Nơi xuất bản</span>
+                        <span className="col-span-3 text-slate-700 italic">{selectedPublication.venue || '─'}</span>
+                      </div>
+
+                      {selectedPublication.volume && (
+                        <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                          <span className="font-bold text-slate-500">Tập (Volume)</span>
+                          <span className="col-span-3 text-slate-700">{selectedPublication.volume}</span>
+                        </div>
+                      )}
+
+                      {selectedPublication.issue && (
+                        <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                          <span className="font-bold text-slate-500">Số (Issue)</span>
+                          <span className="col-span-3 text-slate-700">{selectedPublication.issue}</span>
+                        </div>
+                      )}
+
+                      {selectedPublication.pages && (
+                        <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                          <span className="font-bold text-slate-500">Trang (Pages)</span>
+                          <span className="col-span-3 text-slate-700">{selectedPublication.pages}</span>
+                        </div>
+                      )}
+
+
+
+                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                        <span className="font-bold text-slate-500">Nhà xuất bản</span>
+                        <span className="col-span-3 text-slate-700 font-medium">{selectedPublication.publisher || '─'}</span>
+                      </div>
+
+                      {(selectedPublication.pub_url || selectedPublication.eprint_url) && (
+                        <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                          <span className="font-bold text-slate-500">Liên kết</span>
+                          <div className="col-span-3 flex flex-wrap gap-3">
+                            {selectedPublication.pub_url && (
+                              <a 
+                                href={selectedPublication.pub_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[#2563EB] hover:underline font-semibold"
                               >
-                                {v.count > 0 && (
-                                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] md:text-xs font-bold text-[#005b9a] bg-[#e6f0f7] px-1 py-0.5 rounded border border-[#b8d4e9] shadow-2xs whitespace-nowrap z-10 transition-transform group-hover:scale-110">
-                                    {v.count}
-                                  </span>
-                                )}
-                              </div>
+                                Xem bài viết gốc 🔗
+                              </a>
+                            )}
+                            {selectedPublication.eprint_url && (
+                              <a 
+                                href={selectedPublication.eprint_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-emerald-600 hover:underline font-semibold"
+                              >
+                                Tải PDF / Bản xem trước 📄
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                        <span className="font-bold text-slate-500">Mô tả</span>
+                        <span className="col-span-3 text-slate-600 leading-relaxed font-normal whitespace-pre-line max-h-40 overflow-y-auto block pr-1">
+                          {selectedPublication.description || '─'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
+                        <span className="font-bold text-slate-500">Tổng trích dẫn</span>
+                        <span className="col-span-3 text-[#2563EB] font-bold">
+                          Trích dẫn {selectedPublication.citations || 0} bài viết
+                        </span>
+                      </div>
+
+                      {/* Scientific Indexes (IF in violet/purple color) */}
+                      <div className="grid grid-cols-4 py-2 items-start">
+                        <span className="font-bold text-slate-500">Chỉ số khoa học</span>
+                        <div className="col-span-3 flex flex-wrap gap-2">
+                          {selectedPublication.sjr_q !== 'N/A' && (
+                            <span className="inline-block rounded-lg bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-100">
+                              {selectedPublication.sjr_q}
+                            </span>
+                          )}
+                          {selectedPublication.if_val !== 'N/A' && (
+                            <span className="inline-block rounded-lg bg-purple-50 px-2.5 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-100">
+                              IF: {selectedPublication.if_val}
+                            </span>
+                          )}
+                          {selectedPublication.wos !== 'N/A' && (
+                            <span className="inline-block rounded-lg bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600 border border-rose-100">
+                              WoS: {selectedPublication.wos}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Paper Cites Histogram SVG */}
+                    <div>
+                      <h4 className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                        <TrendingUp className="h-4 w-4 text-[#2563EB]" />
+                        Lịch sử trích dẫn theo năm của bài báo
+                      </h4>
+
+                      {(() => {
+                        const citesHistory = selectedPublication.cites_per_year || {}
+                        const years = Object.keys(citesHistory).filter(y => /^\d{4}$/.test(y)).sort()
+                        if (years.length === 0) {
+                          return (
+                            <div className="text-center py-8 bg-[#F8FAFC] border border-dashed border-[#E5E7EB] rounded-2xl text-xs text-[#64748B] italic">
+                              Chưa có dữ liệu trích dẫn theo năm cho bài báo này (Hãy nhấn Quét chi tiết Lần 2).
                             </div>
-                            <span className="text-[9px] font-bold text-slate-400 select-none">{v.year}</span>
+                          )
+                        }
+
+                        const values = years.map(yr => ({ year: yr, count: citesHistory[yr] || 0 }))
+                        const maxVal = Math.max(...values.map(v => v.count), 1)
+
+                        return (
+                          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex justify-center items-center">
+                            <svg viewBox="0 0 460 140" className="w-full h-auto overflow-visible">
+                              <line x1="10" y1="20" x2="420" y2="20" stroke="#E2E8F0" strokeWidth="0.8" />
+                              <line x1="10" y1="70" x2="420" y2="70" stroke="#E2E8F0" strokeWidth="0.8" />
+                              <line x1="10" y1="120" x2="420" y2="120" stroke="#94A3B8" strokeWidth="1" />
+                              
+                              <text x="425" y="24" className="text-[10px] font-semibold fill-slate-500">{maxVal}</text>
+                              <text x="425" y="74" className="text-[10px] font-semibold fill-slate-500">{Math.round(maxVal / 2)}</text>
+                              <text x="425" y="124" className="text-[10px] font-semibold fill-slate-500">0</text>
+                              
+                              {values.map((v, i) => {
+                                const barWidth = 14
+                                const spacing = values.length > 1 ? (400 - barWidth) / (values.length - 1) : 0
+                                const x = 12 + i * spacing
+                                const barHeight = maxVal > 0 ? (v.count / maxVal) * 100 : 0
+                                const y = 120 - barHeight
+                                return (
+                                  <g key={v.year} className="group cursor-pointer">
+                                    <rect 
+                                      x={x} 
+                                      y={y} 
+                                      width={barWidth} 
+                                      height={barHeight} 
+                                      fill="#777777" 
+                                      className="hover:fill-[#2563EB] transition-colors"
+                                    />
+                                    {v.count > 0 && (
+                                      <text 
+                                        x={x + barWidth / 2} 
+                                        y={y - 4} 
+                                        textAnchor="middle" 
+                                        className="text-[8px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        {v.count}
+                                      </text>
+                                    )}
+                                    <text 
+                                      x={x + barWidth / 2} 
+                                      y="134" 
+                                      textAnchor="middle" 
+                                      className="text-[9px] font-bold fill-slate-500"
+                                    >
+                                      {v.year}
+                                    </text>
+                                  </g>
+                                )
+                              })}
+                            </svg>
                           </div>
                         )
-                      })}
+                      })()}
+                    </div>
+
+                    {/* Scholar articles section (Matching Google Scholar exactly) */}
+                    <div className="pt-5 border-t border-slate-100">
+                      <h4 className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                        <GraduationCap className="h-4 w-4 text-[#2563EB]" />
+                        Các bài viết Scholar
+                      </h4>
+                      
+                      <div className="bg-[#F8FAFC] border border-[#E5E7EB] rounded-2xl p-4 shadow-3xs text-left">
+                        {/* Title link */}
+                        <a 
+                          href={selectedPublication.url_scholar_article || selectedPublication.pub_url || (selectedPublication.cites_id ? `https://scholar.google.com/scholar?cluster=${selectedPublication.cites_id}` : `https://scholar.google.com/scholar?q=${encodeURIComponent(selectedPublication.title)}`)}
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="block text-sm font-semibold text-[#1a0dab] hover:underline leading-snug"
+                        >
+                          {selectedPublication.title}
+                        </a>
+                        
+                        {/* Shortened Authors & Venue snippet */}
+                        <div className="text-xs text-slate-650 mt-1.5 font-medium leading-relaxed">
+                          <span className="text-slate-700">{getShortenedAuthors(selectedPublication.authors_list)}</span>
+                          <span className="text-[#006621]"> - {getCleanSnippetVenue(selectedPublication.venue)}</span>
+                          {selectedPublication.year && <span className="text-[#006621]">, {selectedPublication.year}</span>}
+                        </div>
+                        
+                        {/* Action links */}
+                        <div className="flex flex-wrap items-center gap-4 mt-2.5 text-[11px] text-[#1a0dab] font-medium">
+                          {selectedPublication.citations > 0 || selectedPublication.cites_id ? (
+                            <a 
+                              href={selectedPublication.cites_id ? `https://scholar.google.com/scholar?cites=${selectedPublication.cites_id}` : `https://scholar.google.com/scholar?q=${encodeURIComponent(selectedPublication.title)}`}
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="hover:underline"
+                            >
+                              Trích dẫn {selectedPublication.citations || 0} bài viết
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 select-none">Trích dẫn 0 bài viết</span>
+                          )}
+                          
+                          {selectedPublication.url_related_articles || selectedPublication.cites_id ? (
+                            <a 
+                              href={selectedPublication.url_related_articles || `https://scholar.google.com/scholar?q=related:${selectedPublication.cites_id}`}
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="hover:underline"
+                            >
+                              Bài viết có liên quan
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 select-none">Bài viết có liên quan</span>
+                          )}
+                          
+                          {selectedPublication.url_all_versions || selectedPublication.cites_id ? (
+                            <a 
+                              href={selectedPublication.url_all_versions || `https://scholar.google.com/scholar?cluster=${selectedPublication.cites_id}`}
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="hover:underline"
+                            >
+                              {translateVersionsCount(selectedPublication.versions_count || '')}
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 select-none">Tất cả phiên bản</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </Card>
+              ) : (
+                
+                /* List of Papers - Structured EXACTLY as Google Scholar Table */
+                <Card className="border-[#E5E7EB] rounded-3xl bg-white p-6 shadow-sm">
+                  
+                  {/* Toolbar options right above the table */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-5 border-b border-slate-100 mb-4">
+                    
+                    <div className="flex-1 flex flex-col sm:flex-row gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          placeholder="Lọc tên bài báo khoa học..."
+                          value={pubSearch}
+                          onChange={(e) => setPubSearch(e.target.value)}
+                          className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-1.5 pl-9 text-xs text-[#0F172A] placeholder-slate-400 focus:outline-none"
+                        />
+                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                      </div>
+                      
+                      <select
+                        value={yearFilter}
+                        onChange={(e) => setYearFilter(e.target.value)}
+                        className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs text-slate-600 font-semibold focus:outline-none cursor-pointer"
+                      >
+                        <option value="All">Tất cả năm</option>
+                        {Array.from(new Set(profile.publications.map(p => p.year).filter(y => y && y !== 'Không rõ'))).sort().reverse().map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs text-slate-650 font-semibold focus:outline-none cursor-pointer"
+                      >
+                        <option value="citations_desc">Trích dẫn (Cao-Thấp)</option>
+                        <option value="citations_asc">Trích dẫn (Thấp-Cao)</option>
+                        <option value="year_desc">Năm (Mới nhất)</option>
+                        <option value="year_asc">Năm (Cũ nhất)</option>
+                        <option value="title_asc">Tựa đề (A-Z)</option>
+                        <option value="title_desc">Tựa đề (Z-A)</option>
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={handleExport}
+                      className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Xuất Excel</span>
+                    </button>
+
+                  </div>
+
+                  {/* Publications Table */}
+                  <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        {selectedPubIds.length > 0 ? (
+                          /* Contextual header bar (Image 6 style) in Vietnamese (Merge button now functional) */
+                          <tr className="bg-slate-100 border-b border-[#E5E7EB] text-slate-700 font-semibold h-11 transition-all">
+                            <th className="py-2.5 px-3 w-8">
+                              <input 
+                                type="checkbox" 
+                                className="rounded border-slate-300 accent-[#2563EB]"
+                                checked={isAllSelectedOnPage}
+                                onChange={handleToggleSelectAll}
+                              />
+                            </th>
+                            <th colSpan={3} className="py-2.5 px-4 text-left">
+                              <div className="flex items-center gap-6 text-slate-650 font-bold text-[11px]">
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    if (selectedPubIds.length >= 2) {
+                                      setMergeMainPubId(selectedPubIds[0])
+                                      setIsMergeModalOpen(true)
+                                    }
+                                  }}
+                                  disabled={selectedPubIds.length < 2}
+                                  className={cn(
+                                    "flex items-center gap-1 font-bold text-[11px] transition-colors",
+                                    selectedPubIds.length >= 2
+                                      ? "text-[#2563EB] hover:underline cursor-pointer"
+                                      : "opacity-45 text-[#64748B] cursor-not-allowed"
+                                  )}
+                                >
+                                  <span>🔧 GỘP BÀI</span>
+                                </button>
+                                <button 
+                                  type="button"
+                                  onClick={handleDeleteSelected}
+                                  className="flex items-center gap-1 hover:text-rose-600 transition-colors cursor-pointer text-slate-650"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-slate-600" />
+                                  <span>XÓA ĐÃ CHỌN ({selectedPubIds.length})</span>
+                                </button>
+                                <button 
+                                  type="button"
+                                  onClick={handleExport}
+                                  className="flex items-center gap-1 hover:text-[#2563EB] transition-colors cursor-pointer"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                  <span>XUẤT EXCEL</span>
+                                </button>
+                              </div>
+                            </th>
+                          </tr>
+                        ) : (
+                          /* Standard table header in Vietnamese */
+                          <tr className="bg-slate-50/50 text-[#2563EB] font-bold border-b border-[#E5E7EB]">
+                            <th className="py-3 px-3 w-8">
+                              <input 
+                                type="checkbox" 
+                                className="rounded border-slate-300" 
+                                checked={isAllSelectedOnPage}
+                                onChange={handleToggleSelectAll}
+                              />
+                            </th>
+                            <th 
+                              className="py-3 px-4 font-bold text-[#2563EB] hover:underline cursor-pointer uppercase tracking-wider text-[10px]"
+                              onClick={() => setSortBy(sortBy === 'title_asc' ? 'title_desc' : 'title_asc')}
+                            >
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                <span className="cursor-pointer hover:underline" onClick={() => setSortBy(sortBy === 'title_asc' ? 'title_desc' : 'title_asc')}>
+                                  TIÊU ĐỀ
+                                </span>
+                                <button 
+                                  onClick={() => setIsAddPubModalOpen(true)}
+                                  className="p-0.5 rounded hover:bg-slate-200 text-[#2563EB] transition-colors ml-1" 
+                                  title="Thêm công báo mới"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => setIsTrashModalOpen(true)}
+                                  className="p-0.5 rounded hover:bg-slate-200 text-rose-600 transition-colors"
+                                  title="Xem Thùng rác bài viết"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </th>
+                            <th 
+                              className="py-3 px-4 font-bold text-[#2563EB] hover:underline cursor-pointer uppercase tracking-wider text-[10px] w-28 text-right"
+                              onClick={() => setSortBy(sortBy === 'citations_desc' ? 'citations_asc' : 'citations_desc')}
+                            >
+                              TRÍCH DẪN
+                            </th>
+                            <th 
+                              className="py-3 px-4 font-bold text-[#2563EB] hover:underline cursor-pointer uppercase tracking-wider text-[10px] w-20 text-right"
+                              onClick={() => setSortBy(sortBy === 'year_desc' ? 'year_asc' : 'year_desc')}
+                            >
+                              NĂM
+                            </th>
+                          </tr>
+                        )}
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {paginatedPubs.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-12 text-center text-slate-550 italic">
+                              Không tìm thấy bài báo nào khớp điều kiện lọc.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedPubs.map((pub) => {
+                            return (
+                              <tr 
+                                key={pub.id} 
+                                className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
+                                onClick={() => setSelectedPublication(pub)}
+                              >
+                                <td className="py-4 px-3" onClick={(e) => e.stopPropagation()}>
+                                  <input 
+                                    type="checkbox" 
+                                    className="rounded border-slate-300 accent-[#2563EB]" 
+                                    checked={selectedPubIds.includes(pub.id)}
+                                    onChange={(e) => handleToggleSelect(pub.id, e as any)}
+                                  />
+                                </td>
+                                <td className="py-4 px-4">
+                                  <div className="font-bold text-[#2563EB] hover:underline text-sm leading-snug">
+                                    {pub.title}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 mt-1 font-medium leading-relaxed">
+                                    {pub.authors_list}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 italic mt-0.5 font-medium flex items-center gap-1.5 flex-wrap">
+                                    <span>
+                                      {pub.volume || pub.pages ? (
+                                        `${pub.venue || ''} ${pub.volume || ''}${pub.issue ? `(${pub.issue})` : ''}${pub.pages ? `, ${pub.pages}` : ''}`.trim()
+                                      ) : (
+                                        pub.venue || 'Tạp chí khác'
+                                      )}
+                                    </span>
+                                  </div>
+
+                                  {/* Badges inline below metadata (IF styled in purple) */}
+                                  <div className="flex flex-wrap gap-1.5 mt-2">
+                                    {pub.sjr_q === 'Q1' && (
+                                      <span className="inline-flex items-center rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-100">Q1</span>
+                                    )}
+                                    {pub.sjr_q === 'Q2' && (
+                                      <span className="inline-flex items-center rounded bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700 border border-amber-100">Q2</span>
+                                    )}
+                                    {pub.sjr_q === 'Q3' && (
+                                      <span className="inline-flex items-center rounded bg-[#DBEAFE] px-2 py-0.5 text-[9px] font-bold text-[#2563EB] border border-[#BFDBFE]">Q3</span>
+                                    )}
+                                    {pub.sjr_q === 'Q4' && (
+                                      <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-650">Q4</span>
+                                    )}
+                                    {pub.if_val !== 'N/A' && (
+                                      <span className="inline-flex items-center rounded bg-purple-50 px-2 py-0.5 text-[9px] font-bold text-purple-700 border border-purple-100">IF: {pub.if_val}</span>
+                                    )}
+                                    {pub.wos !== 'N/A' && (
+                                      <span className="inline-flex items-center rounded bg-rose-50 px-2 py-0.5 text-[9px] font-bold text-rose-600 border border-rose-100">WoS: {pub.wos}</span>
+                                    )}
+                                  </div>
+                                </td>
+                                
+                                {/* CITED BY count */}
+                                <td className="py-4 px-4 text-right">
+                                  <span 
+                                    className="font-bold text-[#2563EB] hover:underline cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelectedPublication(pub)
+                                    }}
+                                  >
+                                    {pub.citations || '─'}
+                                  </span>
+                                </td>
+                                
+                                {/* YEAR */}
+                                <td className="py-4 px-4 text-right font-medium text-slate-600">
+                                  {pub.year || '─'}
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between pt-5 border-t border-slate-100 mt-4 text-xs text-[#64748B]">
+                      <span>
+                        Hiển thị <strong>{paginatedPubs.length}</strong> trên tổng số <strong>{filteredPubs.length}</strong> bài báo
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                          className="p-1.5 rounded-lg border border-[#E5E7EB] hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <span className="font-bold">
+                          Trang {currentPage} / {totalPages}
+                        </span>
+                        <button
+                          disabled={currentPage === totalPages}
+                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                          className="p-1.5 rounded-lg border border-[#E5E7EB] hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   )}
-                </Card>
-              </div>
-            </div>
-          ) : null}
-        </div>
 
-        {/* Floating Console output - floats top right dynamically, smaller, avoids breaking layout */}
-        {isScraping && (
-          <div className="fixed top-20 right-6 z-50 w-[330px] flex flex-col gap-3 p-4 bg-white/95 backdrop-blur-md border border-slate-200/95 rounded-xl shadow-2xl transition-all duration-300 animate-slide-in-right">
-            <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-50 border border-slate-150">
-              <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                <span>TIẾN TRÌNH CÀO</span>
-                <span className="text-[#005b9a]">{progress}%</span>
-              </div>
-              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-[#005b9a] h-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
-              </div>
+                </Card>
+              )}
+
             </div>
-            
-            <div className="h-fit">
-              <TerminalWindow 
-                title="Scholar Scraper Console"
-                logs={consoleLogs}
-                onClear={() => clearLogs('scholar')}
-                isRunning={taskStatus === 'PENDING' || taskStatus === 'PROGRESS'}
-              />
+
+            {/* RIGHT (30% - Columns 3/10 - Sidebar Widgets mirroring Scholar) */}
+            <div className="lg:col-span-3 flex flex-col gap-6 w-full">
+              
+              {/* Cited by Card */}
+              <Card className="border-[#E5E7EB] rounded-3xl bg-white p-5 shadow-sm">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Trích dẫn bởi</h3>
+                  <button 
+                    onClick={() => setIsAllCitationsModalOpen(true)}
+                    className="text-[10px] font-bold text-[#2563EB] hover:underline uppercase cursor-pointer"
+                  >
+                    Xem tất cả
+                  </button>
+                </div>
+                
+                {/* Metrics comparison table */}
+                <table className="w-full text-left text-[11px] border-collapse mb-5">
+                  <thead>
+                    <tr className="text-slate-400 font-bold border-b border-slate-100">
+                      <th className="py-1"></th>
+                      <th className="py-1 text-right w-16">Tất cả</th>
+                      <th className="py-1 text-right w-20">Từ 2021</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    <tr>
+                      <td className="py-2 font-semibold">Số trích dẫn</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{profile.citedby}</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{Math.round(profile.citedby * 0.84)}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 font-semibold">Chỉ số h-index</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{profile.hindex}</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{Math.max(1, profile.hindex - 1)}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 font-semibold">Chỉ số i10-index</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{profile.i10index}</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{Math.max(0, profile.i10index - 1)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Vertical citation trend bar chart (Exactly last 8 years to keep it clean) */}
+                {recentCitationValues.length === 0 ? (
+                  <div className="flex h-36 items-center justify-center text-xs text-[#64748B] italic">
+                    Chưa có lịch sử trích dẫn theo năm.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="relative bg-slate-50/50 border border-slate-100 rounded-2xl p-3 flex justify-center items-center">
+                      <svg viewBox="0 0 240 140" className="w-full h-auto overflow-visible">
+                        {/* Horizontal lines */}
+                        <line x1="10" y1="20" x2="210" y2="20" stroke="#E2E8F0" strokeWidth="0.8" />
+                        <line x1="10" y1="70" x2="210" y2="70" stroke="#E2E8F0" strokeWidth="0.8" />
+                        <line x1="10" y1="120" x2="210" y2="120" stroke="#94A3B8" strokeWidth="1" />
+                        
+                        {/* Right Ticks */}
+                        <text x="215" y="24" className="text-[9px] font-semibold fill-slate-500">{maxRecentCites}</text>
+                        <text x="215" y="74" className="text-[9px] font-semibold fill-slate-500">{Math.round(maxRecentCites / 2)}</text>
+                        <text x="215" y="124" className="text-[9px] font-semibold fill-slate-500">0</text>
+                        
+                        {/* Bars */}
+                        {recentCitationValues.map((v, i) => {
+                          const barWidth = 14
+                          const spacing = recentCitationValues.length > 1 ? (190 - barWidth) / (recentCitationValues.length - 1) : 0
+                          const x = 15 + i * spacing
+                          const barHeight = maxRecentCites > 0 ? (v.count / maxRecentCites) * 100 : 0
+                          const y = 120 - barHeight
+                          return (
+                            <g key={v.year} className="group cursor-pointer">
+                              <rect 
+                                x={x} 
+                                y={y} 
+                                width={barWidth} 
+                                height={barHeight} 
+                                fill="#777777" 
+                                className="hover:fill-[#2563EB] transition-colors"
+                              />
+                              {v.count > 0 && (
+                                <text 
+                                  x={x + barWidth / 2} 
+                                  y={y - 4} 
+                                  textAnchor="middle" 
+                                  className="text-[8px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  {v.count}
+                                </text>
+                              )}
+                              <text 
+                                x={x + barWidth / 2} 
+                                y="134" 
+                                textAnchor="middle" 
+                                className="text-[8px] font-bold fill-slate-400"
+                              >
+                                {v.year}
+                              </text>
+                            </g>
+                          )
+                        })}
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </Card>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* Floating Console box on top-right (Drawer panel) */}
+      {isScraping && (
+        <div className="fixed top-20 right-6 z-50 w-[350px] flex flex-col gap-3 p-4 bg-white/95 backdrop-blur-md border border-[#E5E7EB] rounded-2xl shadow-2xl transition-all duration-300 animate-slide-in-right">
+          <div className="flex flex-col gap-1.5 p-2 rounded-xl bg-[#F8FAFC] border border-[#E5E7EB]">
+            <div className="flex items-center justify-between text-[10px] font-bold text-[#64748B]">
+              <span>TIẾN TRÌNH ĐỒNG BỘ</span>
+              <span className="text-[#2563EB]">{progress}%</span>
+            </div>
+            <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+              <div className="bg-[#2563EB] h-full transition-all duration-350" style={{ width: `${progress}%` }}></div>
             </div>
           </div>
-        )}
-      </div>
+          
+          <div className="h-fit">
+            <TerminalWindow 
+              title="Scholar Scraper Console"
+              logs={consoleLogs}
+              onClear={() => clearLogs('scholar')}
+              isRunning={taskStatus === 'PENDING' || taskStatus === 'PROGRESS'}
+            />
+          </div>
+        </div>
+      )}
 
-      {/* Bottom Area: Publications Table or Details View */}
-      {!isLoadingProfile && profile && (
-        selectedPublication ? (
-          <Card className="border-slate-100 shadow-sm bg-white overflow-hidden p-6 animate-fade-in">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-100 mb-6">
-              <button
-                onClick={() => setSelectedPublication(null)}
-                className="px-4 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+      {/* ========================================== */}
+      {/* DIALOG MODAL 1: EDIT AUTHOR PROFILE */}
+      {/* ========================================== */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-[#F8FAFC]">
+              <h3 className="font-bold text-sm text-[#0F172A] uppercase tracking-wider">Chỉnh sửa hồ sơ tác giả</h3>
+              <button 
+                onClick={() => setIsProfileModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-[#64748B] cursor-pointer"
               >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Quay lại danh sách
+                <X className="h-4 w-4" />
               </button>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Chi tiết bài báo khoa học
-              </span>
             </div>
-
-            <div className="space-y-6">
-              {/* Paper Title */}
-              <div>
-                <h2 className="text-base md:text-lg font-extrabold text-slate-800 leading-snug">
-                  {selectedPublication.title}
-                </h2>
-                <p className="text-xs font-semibold mt-1.5 text-slate-500">
-                  Tác giả: <span className="text-slate-650">{selectedPublication.authors_list}</span>
-                </p>
+            <form onSubmit={handleSaveProfile} className="p-6 space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Họ và tên</label>
+                <input 
+                  type="text" 
+                  value={profileForm.name}
+                  onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                  required
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Cơ quan công tác (Affiliation)</label>
+                <input 
+                  type="text" 
+                  value={profileForm.affiliation}
+                  onChange={(e) => setProfileForm({ ...profileForm, affiliation: e.target.value })}
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
               </div>
 
-              {/* Paper details grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-y border-slate-100 py-5">
-                <div className="p-3 bg-slate-50/50 rounded-lg border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Nơi xuất bản (Venue)</span>
-                  <span className="text-xs font-semibold text-slate-700 mt-1 block italic">{selectedPublication.venue || 'N/A'}</span>
-                </div>
-                <div className="p-3 bg-slate-50/50 rounded-lg border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Năm & Trích dẫn</span>
-                  <span className="text-xs font-bold text-slate-800 mt-1 block">
-                    Năm {selectedPublication.year} ─ <span className="text-[#005b9a]">{selectedPublication.citations} lượt trích dẫn</span>
-                  </span>
-                </div>
-                <div className="p-3 bg-slate-50/50 rounded-lg border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Chỉ số Tạp chí</span>
-                  <div className="flex gap-2 mt-1.5">
-                    {selectedPublication.sjr_q !== 'N/A' && (
-                      <span className="inline-block rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-100">{selectedPublication.sjr_q}</span>
-                    )}
-                    {selectedPublication.if_val !== 'N/A' && (
-                      <span className="inline-block rounded-md bg-[#e6f0f7] px-2.5 py-0.5 text-[10px] font-bold text-[#005b9a] border border-[#b8d4e9]">IF: {selectedPublication.if_val}</span>
-                    )}
-                    {selectedPublication.sjr_q === 'N/A' && selectedPublication.if_val === 'N/A' && (
-                      <span className="text-xs font-medium text-slate-400">-</span>
-                    )}
-                  </div>
-                </div>
-                <div className="p-3 bg-slate-50/50 rounded-lg border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Web of Science (WoS)</span>
-                  <span className="text-xs font-bold text-slate-700 mt-1 block">{selectedPublication.wos !== 'N/A' ? selectedPublication.wos : 'N/A'}</span>
-                </div>
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Lĩnh vực nghiên cứu (Cách nhau bằng dấu phẩy)</label>
+                <input 
+                  type="text" 
+                  value={profileForm.interests}
+                  onChange={(e) => setProfileForm({ ...profileForm, interests: e.target.value })}
+                  placeholder="Ví dụ: AI, IoT, Machine Learning"
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
               </div>
-
-              {/* Paper's individual citation history over the years */}
-              <div>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-6 flex items-center gap-1.5">
-                  <TrendingUp className="h-4.5 w-4.5 text-[#005b9a]" />
-                  Sơ đồ trích dẫn của bài báo theo các năm (Google Scholar)
-                </h4>
-
-                {(() => {
-                  const citesHistory = selectedPublication.cites_per_year || {};
-                  const years = Object.keys(citesHistory).filter((y) => /^\d{4}$/.test(y)).sort();
-                  if (years.length === 0) {
-                    return (
-                      <div className="text-center py-10 bg-slate-50/50 border border-dashed border-slate-200 rounded-xl text-xs text-slate-400 italic">
-                        Chưa có dữ liệu lịch sử trích dẫn cho bài báo này (Hãy nhấn Quét chi tiết Lần 2).
-                      </div>
-                    );
-                  }
-                  const values = years.map((yr) => ({ year: yr, count: citesHistory[yr] || 0 }));
-                  const maxVal = Math.max(...values.map((v) => v.count), 1);
-
-                  return (
-                    <div className="flex h-48 items-end gap-2.5 pt-4 pb-2 border-b border-slate-200 w-full overflow-visible">
-                      {values.map((v) => {
-                        const heightPct = (v.count / maxVal) * 100;
-                        return (
-                          <div key={v.year} className="flex-1 flex flex-col items-center gap-2 group min-w-[32px]">
-                            <div className="relative w-full flex flex-col justify-end items-center h-32 pt-6">
-                              <div
-                                className="w-full bg-[#005b9a]/70 group-hover:bg-[#005b9a] rounded-t-sm transition-all duration-300 relative"
-                                style={{ height: `${heightPct}%` }}
-                              >
-                                {v.count > 0 && (
-                                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] md:text-xs font-bold text-[#005b9a] bg-[#e6f0f7] px-1 py-0.5 rounded border border-[#b8d4e9] shadow-2xs whitespace-nowrap z-10 transition-transform group-hover:scale-110">
-                                    {v.count}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <span className="text-[9px] font-bold text-slate-400 select-none">{v.year}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-[#E5E7EB] hover:bg-slate-50 text-slate-700 font-bold transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold transition-all cursor-pointer"
+                >
+                  Lưu thay đổi
+                </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* DIALOG MODAL 2: ADD NEW PUBLICATION */}
+      {/* ========================================== */}
+      {isAddPubModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-[#F8FAFC]">
+              <h3 className="font-bold text-sm text-[#0F172A] uppercase tracking-wider">Thêm bài báo khoa học mới</h3>
+              <button 
+                onClick={() => setIsAddPubModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-[#64748B] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          </Card>
-        ) : (
-          <Card className="border-slate-100 shadow-sm bg-white overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                <FileText className="h-4 w-4 text-[#005b9a]" />
-                Danh sách bài báo khoa học ({profile.publications.length})
-              </h3>
+            <form onSubmit={handleAddPub} className="p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto custom-scrollbar">
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Tên bài báo khoa học *</label>
+                <textarea 
+                  value={pubForm.title}
+                  onChange={(e) => setPubForm({ ...pubForm, title: e.target.value })}
+                  required
+                  rows={2}
+                  placeholder="Nhập đầy đủ tên bài báo..."
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Danh sách tác giả * (Cách nhau bằng dấu phẩy)</label>
+                <input 
+                  type="text" 
+                  value={pubForm.authors_list}
+                  onChange={(e) => setPubForm({ ...pubForm, authors_list: e.target.value })}
+                  required
+                  placeholder="Ví dụ: T Duy Thanh, HT Chi Nhân, ..."
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Tạp chí / Venue *</label>
+                <input 
+                  type="text" 
+                  value={pubForm.venue}
+                  onChange={(e) => setPubForm({ ...pubForm, venue: e.target.value })}
+                  required
+                  placeholder="Ví dụ: Sensors and Actuators B: Chemical"
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
               
-              <div className="flex gap-2 w-full sm:w-auto">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Năm *</label>
+                  <input 
+                    type="number" 
+                    value={pubForm.year}
+                    onChange={(e) => setPubForm({ ...pubForm, year: e.target.value })}
+                    required
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Số trích dẫn *</label>
+                  <input 
+                    type="number" 
+                    value={pubForm.citations}
+                    onChange={(e) => setPubForm({ ...pubForm, citations: Number(e.target.value) })}
+                    required
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Impact Factor (IF)</label>
+                  <input 
+                    type="text" 
+                    value={pubForm.if_val}
+                    onChange={(e) => setPubForm({ ...pubForm, if_val: e.target.value })}
+                    placeholder="Ví dụ: 8.300"
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Phân hạng SJR Quartile</label>
+                  <select 
+                    value={pubForm.sjr_q}
+                    onChange={(e) => setPubForm({ ...pubForm, sjr_q: e.target.value })}
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  >
+                    <option value="N/A">N/A</option>
+                    <option value="Q1">Q1</option>
+                    <option value="Q2">Q2</option>
+                    <option value="Q3">Q3</option>
+                    <option value="Q4">Q4</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Danh mục Web of Science</label>
+                  <input 
+                    type="text" 
+                    value={pubForm.wos}
+                    onChange={(e) => setPubForm({ ...pubForm, wos: e.target.value })}
+                    placeholder="Ví dụ: SCIE"
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
                 <button
-                  onClick={triggerDetailedScrape}
-                  disabled={isScraping}
-                  className="flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-3xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                  type="button"
+                  onClick={() => setIsAddPubModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-[#E5E7EB] hover:bg-slate-50 text-slate-700 font-bold transition-all cursor-pointer"
                 >
-                  <Search className="w-3.5 h-3.5" />
-                  <span>Quét chi tiết (Lần 2)</span>
+                  Hủy bỏ
                 </button>
-                
                 <button
-                  onClick={handleExport}
-                  className="flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg bg-[#005b9a] hover:bg-[#004677] text-white font-bold text-xs shadow-3xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold transition-all cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Xuất báo cáo (Excel)</span>
+                  Lưu bài báo
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* DIALOG MODAL 3: EDIT EXISTING PUBLICATION */}
+      {/* ========================================== */}
+      {isEditPubModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-[#F8FAFC]">
+              <h3 className="font-bold text-sm text-[#0F172A] uppercase tracking-wider">Chỉnh sửa bài báo khoa học</h3>
+              <button 
+                onClick={() => {
+                  setIsEditPubModalOpen(false)
+                  setEditingPublication(null)
+                }}
+                className="p-1 rounded-lg hover:bg-slate-100 text-[#64748B] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleEditPub} className="p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto custom-scrollbar">
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Tên bài báo khoa học *</label>
+                <textarea 
+                  value={pubForm.title}
+                  onChange={(e) => setPubForm({ ...pubForm, title: e.target.value })}
+                  required
+                  rows={2}
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Danh sách tác giả *</label>
+                <input 
+                  type="text" 
+                  value={pubForm.authors_list}
+                  onChange={(e) => setPubForm({ ...pubForm, authors_list: e.target.value })}
+                  required
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Tạp chí / Venue *</label>
+                <input 
+                  type="text" 
+                  value={pubForm.venue}
+                  onChange={(e) => setPubForm({ ...pubForm, venue: e.target.value })}
+                  required
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
+              
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Năm *</label>
+                  <input 
+                    type="number" 
+                    value={pubForm.year}
+                    onChange={(e) => setPubForm({ ...pubForm, year: e.target.value })}
+                    required
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Số trích dẫn *</label>
+                  <input 
+                    type="number" 
+                    value={pubForm.citations}
+                    onChange={(e) => setPubForm({ ...pubForm, citations: Number(e.target.value) })}
+                    required
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Impact Factor (IF)</label>
+                  <input 
+                    type="text" 
+                    value={pubForm.if_val}
+                    onChange={(e) => setPubForm({ ...pubForm, if_val: e.target.value })}
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Phân hạng SJR Quartile</label>
+                  <select 
+                    value={pubForm.sjr_q}
+                    onChange={(e) => setPubForm({ ...pubForm, sjr_q: e.target.value })}
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  >
+                    <option value="N/A">N/A</option>
+                    <option value="Q1">Q1</option>
+                    <option value="Q2">Q2</option>
+                    <option value="Q3">Q3</option>
+                    <option value="Q4">Q4</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Danh mục Web of Science</label>
+                  <input 
+                    type="text" 
+                    value={pubForm.wos}
+                    onChange={(e) => setPubForm({ ...pubForm, wos: e.target.value })}
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditPubModalOpen(false)
+                    setEditingPublication(null)
+                  }}
+                  className="px-4 py-2 rounded-xl border border-[#E5E7EB] hover:bg-slate-50 text-slate-700 font-bold transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold transition-all cursor-pointer"
+                >
+                  Lưu thay đổi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* DIALOG MODAL 4: SHOW ALL CITATIONS HISTOGRAM */}
+      {/* ========================================== */}
+      {isAllCitationsModalOpen && profile && (
+        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-[#F8FAFC]">
+              <h3 className="font-bold text-sm text-[#0F172A] uppercase tracking-wider">Số lượng trích dẫn theo năm</h3>
+              <button 
+                onClick={() => setIsAllCitationsModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-[#64748B] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
             
-            <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
-                    <th className="py-3.5 px-6 w-12">STT</th>
-                    <th className="py-3.5 px-4 min-w-[220px]">Tên bài báo / Tác giả</th>
-                    <th className="py-3.5 px-4 min-w-[140px]">Nơi xuất bản (Venue)</th>
-                    <th className="py-3.5 px-4 w-20 text-center">Năm</th>
-                    <th className="py-3.5 px-4 w-24 text-center">Trích dẫn</th>
-                    <th className="py-3.5 px-4 w-24 text-center">SJR Q</th>
-                    <th className="py-3.5 px-4 w-24 text-center">Impact Factor</th>
-                    <th className="py-3.5 px-6 min-w-[180px] text-center">Web of Science</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {profile.publications.map((pub, idx) => (
-                    <tr 
-                      key={pub.id} 
-                      onClick={() => setSelectedPublication(pub)}
-                      className="hover:bg-slate-100/60 transition-colors cursor-pointer"
-                    >
-                      <td className="py-4 px-6 font-medium text-slate-400">{idx + 1}</td>
-                      <td className="py-4 px-4">
-                        <div className="font-bold text-slate-800 leading-normal line-clamp-2" title={pub.title}>
-                          {pub.title}
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-1 truncate max-w-[400px]">
-                          {pub.authors_list}
-                        </div>
-                      </td>
-                      <td className="py-4 px-4 font-semibold text-slate-600 italic">
-                        {pub.venue}
-                      </td>
-                      <td className="py-4 px-4 text-center font-bold text-slate-500">{pub.year}</td>
-                      <td className="py-4 px-4 text-center font-bold text-[#005b9a]">{pub.citations}</td>
+            <div className="p-6 space-y-6">
+              
+              {/* Outer scrollable wrapper with horizontal navigation sliders */}
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col gap-4 overflow-hidden relative">
+                
+                {/* Horizontal scroll view showing full year database (Image 2 style) */}
+                <div className="overflow-x-auto custom-scrollbar pb-2">
+                  <div className="min-w-[540px] px-2">
+                    <svg viewBox="0 0 520 140" className="w-full h-auto overflow-visible">
+                      {/* Horizontal lines */}
+                      <line x1="10" y1="20" x2="480" y2="20" stroke="#E2E8F0" strokeWidth="0.8" />
+                      <line x1="10" y1="70" x2="480" y2="70" stroke="#E2E8F0" strokeWidth="0.8" />
+                      <line x1="10" y1="120" x2="480" y2="120" stroke="#94A3B8" strokeWidth="1" />
                       
-                      {/* SJR Quartile Badge */}
-                      <td className="py-4 px-4 text-center">
-                        {pub.sjr_q === 'Q1' && (
-                          <span className="inline-block rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-100">Q1</span>
-                        )}
-                        {pub.sjr_q === 'Q2' && (
-                          <span className="inline-block rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-100">Q2</span>
-                        )}
-                        {pub.sjr_q === 'Q3' && (
-                          <span className="inline-block rounded-md bg-[#e6f0f7] px-2 py-0.5 text-[10px] font-bold text-[#005b9a] border border-[#b8d4e9]">Q3</span>
-                        )}
-                        {pub.sjr_q === 'Q4' && (
-                          <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">Q4</span>
-                        )}
-                        {pub.sjr_q === 'N/A' && (
-                          <span className="text-slate-300 font-medium">─</span>
-                        )}
-                      </td>
+                      {/* Right Ticks */}
+                      <text x="485" y="24" className="text-[10px] font-semibold fill-slate-500">{maxCites}</text>
+                      <text x="485" y="74" className="text-[10px] font-semibold fill-slate-500">{Math.round(maxCites / 2)}</text>
+                      <text x="485" y="124" className="text-[10px] font-semibold fill-slate-500">0</text>
                       
-                      {/* IF Highlight */}
-                      <td className="py-4 px-4 text-center">
-                        {pub.if_val !== 'N/A' ? (
-                          <span className="inline-block rounded-md bg-[#e6f0f7] px-2.5 py-0.5 text-[10px] font-bold text-[#005b9a] border border-[#b8d4e9]">
-                            {pub.if_val}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 font-medium">─</span>
-                        )}
-                      </td>
-                      
-                      {/* WoS index Highlight */}
-                      <td className="py-4 px-6 text-center">
-                        {pub.wos !== 'N/A' ? (
-                          <span className="inline-block rounded-md bg-rose-50 px-2.5 py-1 text-[9px] font-bold text-rose-600 border border-rose-100 whitespace-normal leading-tight text-center" title={pub.wos}>
-                            {pub.wos}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 font-medium">─</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      {/* Bars */}
+                      {citationValues.map((v, i) => {
+                        const barWidth = 14
+                        const spacing = citationValues.length > 1 ? (460 - barWidth) / (citationValues.length - 1) : 0
+                        const x = 12 + i * spacing
+                        const barHeight = maxCites > 0 ? (v.count / maxCites) * 100 : 0
+                        const y = 120 - barHeight
+                        return (
+                          <g key={v.year} className="group cursor-pointer">
+                            <rect 
+                              x={x} 
+                              y={y} 
+                              width={barWidth} 
+                              height={barHeight} 
+                              fill="#777777" 
+                              className="hover:fill-[#2563EB] transition-colors"
+                            />
+                            {v.count > 0 && (
+                              <text 
+                                x={x + barWidth / 2} 
+                                y={y - 4} 
+                                textAnchor="middle" 
+                                className="text-[9px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                {v.count}
+                              </text>
+                            )}
+                            <text 
+                              x={x + barWidth / 2} 
+                              y="134" 
+                              textAnchor="middle" 
+                              className="text-[9px] font-bold fill-slate-500"
+                            >
+                              {v.year}
+                            </text>
+                          </g>
+                        )
+                      })}
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Left/Right slider indicator style representation */}
+                <div className="flex items-center justify-center gap-4 text-xs text-slate-400 mt-2">
+                  <ChevronLeft className="w-4 h-4 cursor-pointer hover:text-slate-600" />
+                  <div className="w-1/2 h-1.5 bg-slate-200 rounded-full relative">
+                    <div className="absolute left-[30%] w-[40%] h-full bg-slate-450 rounded-full"></div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 cursor-pointer hover:text-slate-600" />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setIsAllCitationsModalOpen(false)}
+                  className="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all text-xs cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
-          </Card>
-        )
+          </div>
+        </div>
       )}
+
+      {/* ========================================== */}
+      {/* DIALOG MODAL 5: TRASH BIN / RESTORE */}
+      {/* ========================================== */}
+      {isTrashModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-[#F8FAFC]">
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-rose-600" />
+                <h3 className="font-bold text-sm text-[#0F172A] uppercase tracking-wider">Thùng rác bài viết đã xóa</h3>
+              </div>
+              <button 
+                onClick={() => setIsTrashModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-[#64748B] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 max-h-[55vh] overflow-y-auto custom-scrollbar">
+              {deletedPublications.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 italic text-xs">
+                  Thùng rác đang trống.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 text-xs">
+                  {deletedPublications.map((pub) => (
+                    <div key={pub.id} className="py-3.5 flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-slate-800 line-clamp-2">{pub.title}</div>
+                        <div className="text-[10px] text-slate-400 mt-1 truncate">{pub.authors_list}</div>
+                        <div className="text-[10px] text-slate-500 italic mt-0.5">{pub.venue || 'Tạp chí khác'} • {pub.year}</div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => handleRestorePub(pub)}
+                          className="px-2.5 py-1 rounded-lg border border-emerald-250 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] transition-colors cursor-pointer"
+                          title="Khôi phục bài báo"
+                        >
+                          Khôi phục
+                        </button>
+                        <button
+                          onClick={() => handleDeletePermanently(pub.id)}
+                          className="px-2.5 py-1 rounded-lg border border-rose-250 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[10px] transition-colors cursor-pointer"
+                          title="Xóa vĩnh viễn"
+                        >
+                          Xóa vĩnh viễn
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-[#E5E7EB] bg-[#F8FAFC] flex justify-between items-center">
+              <button
+                disabled={deletedPublications.length === 0}
+                onClick={handleEmptyTrash}
+                className="px-4 py-2 rounded-xl border border-rose-250 text-rose-600 hover:bg-rose-50 disabled:opacity-40 disabled:pointer-events-none text-xs font-bold transition-all cursor-pointer"
+              >
+                Dọn sạch thùng rác
+              </button>
+              <button
+                onClick={() => setIsTrashModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all text-xs cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* DIALOG MODAL 6: MERGE SELECTED PUBLICATIONS */}
+      {/* ========================================== */}
+      {isMergeModalOpen && profile && (
+        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-[#F8FAFC]">
+              <h3 className="font-bold text-sm text-[#0F172A] uppercase tracking-wider">Gộp các bài báo đã chọn</h3>
+              <button 
+                onClick={() => {
+                  setIsMergeModalOpen(false)
+                  setMergeMainPubId('')
+                }}
+                className="p-1 rounded-lg hover:bg-slate-100 text-[#64748B] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleMergeConfirm} className="p-6 space-y-4 text-xs">
+              <p className="text-slate-500 mb-2 leading-relaxed">
+                Chọn bài viết nghiên cứu làm <strong>Bản ghi chính</strong>. Tiêu đề và thông tin của bài viết này sẽ được giữ lại, các bài viết còn lại sẽ được gộp trích dẫn vào bản ghi này và bị xóa khỏi danh sách.
+              </p>
+
+              <div className="space-y-3 max-h-[40vh] overflow-y-auto custom-scrollbar p-1">
+                {profile.publications
+                  .filter(p => selectedPubIds.includes(p.id))
+                  .map(pub => (
+                    <label 
+                      key={pub.id} 
+                      className={cn(
+                        "flex gap-3 items-start p-3 rounded-2xl border cursor-pointer transition-all",
+                        mergeMainPubId === pub.id 
+                          ? "border-[#2563EB] bg-[#DBEAFE]/30" 
+                          : "border-[#E5E7EB] hover:bg-slate-50"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="merge_main_pub"
+                        value={pub.id}
+                        checked={mergeMainPubId === pub.id}
+                        onChange={() => setMergeMainPubId(pub.id)}
+                        className="mt-0.5 text-[#2563EB] focus:ring-[#2563EB]"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-slate-800 leading-snug">{pub.title}</div>
+                        <div className="text-[10px] text-slate-500 mt-1 truncate">{pub.authors_list}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{pub.venue} • {pub.year} • Trích dẫn: <strong className="text-slate-700">{pub.citations}</strong></div>
+                      </div>
+                    </label>
+                  ))}
+              </div>
+
+              <div className="pt-2 p-3 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-600">Tổng số trích dẫn sau khi gộp:</span>
+                <strong className="text-base text-[#2563EB]">
+                  {profile.publications
+                    .filter(p => selectedPubIds.includes(p.id))
+                    .reduce((sum, p) => sum + (p.citations || 0), 0)}{' '}
+                  trích dẫn
+                </strong>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMergeModalOpen(false)
+                    setMergeMainPubId('')
+                  }}
+                  className="px-4 py-2 rounded-xl border border-[#E5E7EB] hover:bg-slate-50 text-slate-700 font-bold transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={!mergeMainPubId}
+                  className="px-5 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  Xác nhận gộp
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

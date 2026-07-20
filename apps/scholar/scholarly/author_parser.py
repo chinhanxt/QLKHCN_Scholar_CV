@@ -440,8 +440,14 @@ class AuthorParser:
             url = '{0}&pagesize={1}'.format(url_citations, _PAGESIZE)
             soup = self.nav._get_soup(url)
 
-            # Update scholar_id
-            scholar_id = re.findall(_CITATIONAUTHRE, soup.find("link", rel="canonical").get('href', ""))[0]
+            # Update scholar_id safely
+            canonical_link = soup.find("link", rel="canonical")
+            if canonical_link is None:
+                if "consent.google.com" in str(soup) or "captcha" in str(soup).lower() or "robot" in str(soup).lower():
+                    raise Exception("Google Scholar has blocked the request with a CAPTCHA/Robot check. Please configure proxies in Settings or try again later.")
+                raise Exception("Could not find canonical link in Google Scholar profile page (IP may be temporarily blocked or rate-limited).")
+
+            scholar_id = re.findall(_CITATIONAUTHRE, canonical_link.get('href', ""))[0]
             if scholar_id != author['scholar_id']:
                 self.nav.logger.warning("Changing the scholar_id following redirect from %s to %s. "
                                         "To avoid this warning, use %s to look up this scholar.",

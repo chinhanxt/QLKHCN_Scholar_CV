@@ -65,6 +65,23 @@ def extract_venue(citation_str):
     return cleaned
 
 
+def clean_citation_venue(citation_str, pub_year=None):
+    """
+    Làm sạch chuỗi trích dẫn, loại bỏ năm xuất bản ở cuối nếu trùng với pub_year,
+    giữ nguyên thông tin tập/trang.
+    """
+    if not citation_str or not isinstance(citation_str, str):
+        return ""
+    citation_str = citation_str.replace("…", "").strip()
+    parts = [p.strip() for p in citation_str.split(',')]
+    if len(parts) > 1:
+        last_part = parts[-1]
+        if last_part.isdigit() and len(last_part) == 4:
+            if pub_year is None or last_part == str(pub_year):
+                return ", ".join(parts[:-1]).strip()
+    return citation_str
+
+
 def get_scholar_settings():
     import json
     filepath = os.path.join(settings.BASE_DIR, 'config/scholar_settings.json')
@@ -342,6 +359,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                 defaults={
                     "name": author.get("name", "Tác giả ẩn danh"),
                     "affiliation": author.get("affiliation", "Không rõ cơ quan công tác"),
+                    "email_domain": author.get("email_domain", "") or None,
                     "citedby": author.get("citedby", 0),
                     "hindex": author.get("hindex", 0),
                     "i10index": author.get("i10index", 0),
@@ -382,15 +400,23 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                 journal = pub.get('bib', {}).get('journal', '')
                 conf = pub.get('bib', {}).get('conference', '')
                 venue_raw = journal if journal else conf
+                
+                # Check for database matching clean title
+                clean_venue_matching = venue_raw
+                if not clean_venue_matching:
+                    citation_str = pub.get('bib', {}).get('citation', '')
+                    clean_venue_matching = extract_venue(citation_str)
+                    
+                # Save display venue including volume/issue/pages for Crawl 1
                 if not venue_raw:
                     citation_str = pub.get('bib', {}).get('citation', '')
-                    venue_raw = extract_venue(citation_str)
+                    venue_raw = clean_citation_venue(citation_str, year)
                 if not venue_raw:
                     venue_raw = "Tạp chí/Hội nghị chưa xác định"
                     
                 # Match to local Journal database
                 whitespace_only = False
-                norm_title = normalize_title(venue_raw)
+                norm_title = normalize_title(clean_venue_matching)
                 journal_fk = journal_cache.get(norm_title)
                 
                 sjr_q = "N/A"
@@ -423,6 +449,53 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                 if existing_pub and existing_pub.cites_per_year and not cites_history:
                     final_cites_history = existing_pub.cites_per_year
                 
+                # Extract new metadata fields
+                pub_date = pub.get('bib', {}).get('pub_date', '')
+                volume = pub.get('bib', {}).get('volume', '')
+                issue = pub.get('bib', {}).get('number', '')
+                pages = pub.get('bib', {}).get('pages', '')
+                publisher = pub.get('bib', {}).get('publisher', '')
+                description = pub.get('bib', {}).get('abstract', '')
+                pub_url = pub.get('pub_url', '')
+                eprint_url = pub.get('eprint_url', '')
+                url_related_articles = pub.get('url_related_articles', '')
+                versions_count = pub.get('versions_count', '')
+                url_all_versions = pub.get('url_all_versions', '')
+                url_scholar_article = pub.get('url_scholar_article', '')
+
+                # Extract cites_id
+                cites_id_list = pub.get('cites_id', [])
+                cites_id = cites_id_list[0] if isinstance(cites_id_list, list) and cites_id_list else (cites_id_list or '')
+
+                # Merge logic: preserve existing metadata fields if already present
+                if existing_pub:
+                    if not pub_date and existing_pub.pub_date:
+                        pub_date = existing_pub.pub_date
+                    if not volume and existing_pub.volume:
+                        volume = existing_pub.volume
+                    if not issue and existing_pub.issue:
+                        issue = existing_pub.issue
+                    if not pages and existing_pub.pages:
+                        pages = existing_pub.pages
+                    if not publisher and existing_pub.publisher:
+                        publisher = existing_pub.publisher
+                    if not description and existing_pub.description:
+                        description = existing_pub.description
+                    if not pub_url and existing_pub.pub_url:
+                        pub_url = existing_pub.pub_url
+                    if not eprint_url and existing_pub.eprint_url:
+                        eprint_url = existing_pub.eprint_url
+                    if not url_related_articles and existing_pub.url_related_articles:
+                        url_related_articles = existing_pub.url_related_articles
+                    if not versions_count and existing_pub.versions_count:
+                        versions_count = existing_pub.versions_count
+                    if not url_all_versions and existing_pub.url_all_versions:
+                        url_all_versions = existing_pub.url_all_versions
+                    if not cites_id and existing_pub.cites_id:
+                        cites_id = existing_pub.cites_id
+                    if not url_scholar_article and existing_pub.url_scholar_article:
+                        url_scholar_article = existing_pub.url_scholar_article
+
                 pub_obj, created = Publication.objects.update_or_create(
                     author=author_profile,
                     display_order=idx,
@@ -437,6 +510,19 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                         "sjr_q": sjr_q,
                         "if_val": if_val,
                         "wos": wos,
+                        "pub_date": pub_date or None,
+                        "volume": volume or None,
+                        "issue": issue or None,
+                        "pages": pages or None,
+                        "publisher": publisher or None,
+                        "description": description or None,
+                        "pub_url": pub_url or None,
+                        "eprint_url": eprint_url or None,
+                        "url_related_articles": url_related_articles or None,
+                        "versions_count": versions_count or None,
+                        "url_all_versions": url_all_versions or None,
+                        "cites_id": cites_id or None,
+                        "url_scholar_article": url_scholar_article or None,
                     }
                 )
                 processed_pub_ids.append(pub_obj.id)

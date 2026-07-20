@@ -56,6 +56,19 @@ class PublicationSerializer(serializers.ModelSerializer):
             "sjr_q",
             "if_val",
             "wos",
+            "pub_date",
+            "volume",
+            "issue",
+            "pages",
+            "publisher",
+            "description",
+            "pub_url",
+            "eprint_url",
+            "url_related_articles",
+            "versions_count",
+            "url_all_versions",
+            "cites_id",
+            "url_scholar_article",
         ]
 
 
@@ -69,6 +82,7 @@ class AuthorProfileSerializer(serializers.ModelSerializer):
             "scholar_id",
             "name",
             "affiliation",
+            "email_domain",
             "citedby",
             "hindex",
             "i10index",

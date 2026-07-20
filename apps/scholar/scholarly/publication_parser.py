@@ -310,7 +310,7 @@ class PublicationParser(object):
                 elif key == 'publisher':
                     publication['bib']['publisher'] = val.text
                 elif key == 'publication date':
-
+                    publication['bib']['pub_date'] = val.text.strip()
                     patterns = ['YYYY/M',
                                 'YYYY/MM/DD',
                                 'YYYY',
@@ -346,10 +346,23 @@ class PublicationParser(object):
                         _SCHOLARPUBRE, val.a['href'])[0].split(',')
                     publication['citedby_url'] = _CITEDBYLINK.format(','.join(publication['cites_id']))
                 elif key == 'scholar articles':
+                    first_link = val.find('a')
+                    if first_link:
+                        title_href = first_link.get('href')
+                        if title_href and title_href.startswith('/'):
+                            title_href = 'https://scholar.google.com' + title_href
+                        publication['url_scholar_article'] = title_href
+
                     for entry in val.find_all('a'):
-                        if entry.text.lower() == 'related articles':
-                            publication['url_related_articles'] = entry.get('href')[26:]
-                            break
+                        text_lower = entry.text.lower()
+                        href = entry.get('href')
+                        if href and href.startswith('/'):
+                            href = 'https://scholar.google.com' + href
+                        if 'related articles' in text_lower:
+                            publication['url_related_articles'] = href
+                        elif 'all' in text_lower and 'version' in text_lower:
+                            publication['versions_count'] = entry.text.strip()
+                            publication['url_all_versions'] = href
             # number of citation per year
             years = [int(y.text) for y in soup.find_all(class_='gsc_oci_g_t')]
             cites = [int(c.text) for c in soup.find_all(class_='gsc_oci_g_al')]

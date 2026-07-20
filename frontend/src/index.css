@@ -1,34 +1,34 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-primary: #005b9a; /* Deep brand blue hex #005B9A */
+  --color-primary: #2563EB; /* SaaS blue hex #2563EB */
   --color-primary-foreground: #ffffff;
-  --color-background: #f0f5fa; /* Very light slate-blue background */
-  --color-foreground: #0f172a;
+  --color-background: #F8FAFC; /* Minimalist clean background */
+  --color-foreground: #0F172A; /* Slate 900 */
   
   --color-card: #ffffff;
-  --color-card-foreground: #0f172a;
+  --color-card-foreground: #0F172A;
   
-  --color-secondary: #e6f0f7; /* Soft blue shade */
-  --color-secondary-foreground: #005b9a;
+  --color-secondary: #DBEAFE; /* Soft blue shade #DBEAFE */
+  --color-secondary-foreground: #2563EB;
   
-  --color-muted: #f8fafc;
-  --color-muted-foreground: #64748b;
+  --color-muted: #F8FAFC;
+  --color-muted-foreground: #64748B; /* Slate 500 */
   
-  --color-accent: #e6f0f7;
-  --color-accent-foreground: #005b9a;
+  --color-accent: #DBEAFE;
+  --color-accent-foreground: #2563EB;
   
-  --color-border: #e2e8f0;
-  --color-input: #e2e8f0;
-  --color-ring: #005b9a;
+  --color-border: #E5E7EB; /* Border color #E5E7EB */
+  --color-input: #E5E7EB;
+  --color-ring: #2563EB;
   
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
+  --color-success: #22C55E; /* Success green #22C55E */
+  --color-warning: #F59E0B; /* Warning yellow #F59E0B */
   --color-destructive: #ef4444;
   
   --color-sidebar: #ffffff;
   --color-sidebar-foreground: #334155;
-  --color-sidebar-accent: #e6f0f7;
+  --color-sidebar-accent: #DBEAFE;
 }
 
 :root {

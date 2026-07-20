@@ -196,6 +196,7 @@ class AuthorProfile(BaseModel):
     scholar_id = models.CharField(_("Scholar ID"), max_length=50, unique=True, db_index=True)
     name = models.CharField(_("Full Name"), max_length=250)
     affiliation = models.CharField(_("Affiliation"), max_length=500, blank=True, null=True)
+    email_domain = models.CharField(_("Email Domain"), max_length=250, blank=True, null=True)
     citedby = models.IntegerField(_("Total Citations"), default=0)
     hindex = models.IntegerField(_("H-Index"), default=0)
     i10index = models.IntegerField(_("i10-Index"), default=0)
@@ -226,6 +227,21 @@ class Publication(BaseModel):
     sjr_q = models.CharField(_("Matched SJR Quartile"), max_length=10, default="N/A")
     if_val = models.CharField(_("Matched Impact Factor"), max_length=20, default="N/A")
     wos = models.CharField(_("Matched Web of Science"), max_length=150, default="N/A")
+
+    # Scraped metadata fields matching Google Scholar exactly
+    pub_date = models.CharField(_("Publication Date"), max_length=150, blank=True, null=True)
+    volume = models.CharField(_("Volume"), max_length=150, blank=True, null=True)
+    issue = models.CharField(_("Issue"), max_length=150, blank=True, null=True)
+    pages = models.CharField(_("Pages"), max_length=150, blank=True, null=True)
+    publisher = models.CharField(_("Publisher"), max_length=500, blank=True, null=True)
+    description = models.TextField(_("Description"), blank=True, null=True)
+    pub_url = models.URLField(_("Publication URL"), max_length=2000, blank=True, null=True)
+    eprint_url = models.URLField(_("Eprint PDF URL"), max_length=2000, blank=True, null=True)
+    url_related_articles = models.CharField(_("Related Articles URL"), max_length=2000, blank=True, null=True)
+    versions_count = models.CharField(_("Versions Count"), max_length=150, blank=True, null=True)
+    url_all_versions = models.CharField(_("All Versions URL"), max_length=2000, blank=True, null=True)
+    cites_id = models.CharField(_("Scholar Cites ID"), max_length=100, blank=True, null=True)
+    url_scholar_article = models.CharField(_("Scholar Article Link"), max_length=2000, blank=True, null=True)
 
     class Meta:
         db_table = "scholar_publications"
