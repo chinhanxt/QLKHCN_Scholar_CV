@@ -7,7 +7,11 @@
     "SCHOLAR_HTTP_PROXY": "",
     "SCHOLAR_HTTPS_PROXY": "",
     "SCHOLAR_RETRIES": 3,
-    "auto_crawl_enabled": false,
-    "auto_crawl_hour": 4,
-    "auto_crawl_minute": 15
+    "auto_crawl_enabled": true,
+    "auto_crawl_hour": 9,
+    "auto_crawl_minute": 42,
+    "active_unified_task_id": null,
+    "last_run_time": "09:47:57 20/07/2026",
+    "last_run_status": "SUCCESS",
+    "last_run_message": "Hoàn tất cào dữ liệu thành công. Không có dữ liệu mới nên đã tự động bỏ qua giai đoạn Mapping."
 }

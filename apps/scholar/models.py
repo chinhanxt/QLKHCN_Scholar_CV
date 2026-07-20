@@ -235,3 +235,32 @@ class Publication(BaseModel):
 
     def __str__(self):
         return self.title
+
+
+class CrawlHistory(BaseModel):
+    task_id = models.CharField(_("Celery Task ID"), max_length=255, unique=True)
+    completed_at = models.DateTimeField(_("Completed At"), null=True, blank=True)
+    status = models.CharField(_("Status"), max_length=50, default='PENDING')
+    is_automated = models.BooleanField(_("Is Automated"), default=False)
+    
+    clarivate_count = models.IntegerField(_("Clarivate Scraped"), default=0)
+    scimago_count = models.IntegerField(_("SCImago Scraped"), default=0)
+    bioxbio_count = models.IntegerField(_("BioxBio Scraped"), default=0)
+    mapped_count = models.IntegerField(_("Mapped Journals"), default=0)
+    
+    clarivate_total = models.IntegerField(_("Clarivate Total"), default=0)
+    scimago_total = models.IntegerField(_("SCImago Total"), default=0)
+    bioxbio_total = models.IntegerField(_("BioxBio Total"), default=0)
+    mapped_total = models.IntegerField(_("Mapped Total"), default=0)
+    
+    log_output = models.TextField(_("Console Log Output"), blank=True, default="")
+    error_message = models.TextField(_("Error Message"), null=True, blank=True)
+
+    class Meta:
+        db_table = "scholar_crawl_history"
+        verbose_name = _("Crawl History")
+        verbose_name_plural = _("Crawl Histories")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.task_id} - {self.status}"

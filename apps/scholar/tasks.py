@@ -9,6 +9,7 @@ import requests
 import io
 import math
 import concurrent.futures
+import threading
 from celery import shared_task
 from django.conf import settings
 from django.db import transaction
@@ -79,6 +80,7 @@ def get_scholar_settings():
         'auto_crawl_enabled': False,
         'auto_crawl_hour': 2,
         'auto_crawl_minute': 0,
+        'active_unified_task_id': None,
     }
     if os.path.exists(filepath):
         try:
@@ -1141,33 +1143,46 @@ def integrate_scores_task(self):
     Optimized to use in-memory caches and bulk creations for maximum speed.
     """
     self.update_state(state='PROGRESS', meta={'message': 'Loading raw databases into memory cache...', 'progress': 5})
-    Journal.objects.filter(is_staging=True).delete()
+    # Optimize staging cleanup: use raw SQL delete to avoid heavy Django ORM cascade in Python memory
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            DELETE FROM scholar_journal_rankings 
+            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = TRUE)
+        """)
+        cursor.execute("""
+            DELETE FROM scholar_journal_issns 
+            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = TRUE)
+        """)
+        cursor.execute("DELETE FROM scholar_journals WHERE is_staging = TRUE")
     
     # 1. Cache BioxBio and SCImago raw databases in memory for fast local lookup
-    biox_cache_by_id = {obj.source_id: obj for obj in BioxbioJournal.objects.exclude(source_id__isnull=True)}
-    biox_cache_by_title = {obj.title_normalized: obj for obj in BioxbioJournal.objects.all()}
+    biox_journals = list(BioxbioJournal.objects.all())
+    biox_cache_by_id = {obj.id: obj for obj in biox_journals}
+    biox_cache_by_title = {obj.title_normalized: obj for obj in biox_journals}
     
     biox_issns = {}
-    for issn_obj in BioxbioISSN.objects.select_related('journal'):
-        biox_issns[issn_obj.issn] = issn_obj.journal
+    for issn, journal_id in BioxbioISSN.objects.values_list('issn', 'journal_id'):
+        biox_issns[issn] = journal_id
         
-    scimago_cache_by_id = {obj.source_id: obj for obj in ScimagoJournal.objects.all()}
-    scimago_cache_by_title = {obj.title_normalized: obj for obj in ScimagoJournal.objects.all()}
+    scimago_journals = list(ScimagoJournal.objects.all())
+    scimago_cache_by_id = {obj.id: obj for obj in scimago_journals}
+    scimago_cache_by_title = {obj.title_normalized: obj for obj in scimago_journals}
     
     scimago_issns = {}
-    for issn_obj in ScimagoISSN.objects.select_related('journal'):
-        scimago_issns[issn_obj.issn] = issn_obj.journal
+    for issn, journal_id in ScimagoISSN.objects.values_list('issn', 'journal_id'):
+        scimago_issns[issn] = journal_id
 
     # Cache rankings in memory to prevent database roundtrips
     from collections import defaultdict
     
     biox_rankings = defaultdict(list)
-    for r in BioxbioRanking.objects.all().order_by('-year'):
-        biox_rankings[r.journal_id].append(r)
+    for r in BioxbioRanking.objects.values('journal_id', 'year', 'impact_factor').order_by('-year'):
+        biox_rankings[r['journal_id']].append(r)
         
     scimago_rankings = defaultdict(list)
-    for r in ScimagoRanking.objects.all().order_by('-year'):
-        scimago_rankings[r.journal_id].append(r)
+    for r in ScimagoRanking.objects.values('journal_id', 'year', 'sjr_score', 'sjr_quartile', 'h_index').order_by('-year'):
+        scimago_rankings[r['journal_id']].append(r)
 
     # Cache existing ISSNs to avoid duplicate key errors
     existing_issns = set(JournalISSN.objects.values_list('issn', flat=True))
@@ -1195,10 +1210,10 @@ def integrate_scores_task(self):
         cleaned_eissn = raw_j.eissn.replace("-", "").strip().upper() if raw_j.eissn else ""
         
         if cleaned_issn and cleaned_issn in biox_issns:
-            biox_journal_fk = biox_issns[cleaned_issn]
+            biox_journal_fk = biox_cache_by_id.get(biox_issns[cleaned_issn])
             biox_match = "ISSN"
         elif cleaned_eissn and cleaned_eissn in biox_issns:
-            biox_journal_fk = biox_issns[cleaned_eissn]
+            biox_journal_fk = biox_cache_by_id.get(biox_issns[cleaned_eissn])
             biox_match = "eISSN"
         elif title_norm in biox_cache_by_title:
             biox_journal_fk = biox_cache_by_title[title_norm]
@@ -1209,10 +1224,10 @@ def integrate_scores_task(self):
         scimago_journal_fk = None
         
         if cleaned_issn and cleaned_issn in scimago_issns:
-            scimago_journal_fk = scimago_issns[cleaned_issn]
+            scimago_journal_fk = scimago_cache_by_id.get(scimago_issns[cleaned_issn])
             scimago_match = "ISSN"
         elif cleaned_eissn and cleaned_eissn in scimago_issns:
-            scimago_journal_fk = scimago_issns[cleaned_eissn]
+            scimago_journal_fk = scimago_cache_by_id.get(scimago_issns[cleaned_eissn])
             scimago_match = "eISSN"
         elif title_norm in scimago_cache_by_title:
             scimago_journal_fk = scimago_cache_by_title[title_norm]
@@ -1226,8 +1241,8 @@ def integrate_scores_task(self):
             biox_ranks_list = biox_rankings.get(biox_journal_fk.id, [])
             if biox_ranks_list:
                 latest_biox_rank = biox_ranks_list[0]
-                biox_if = latest_biox_rank.impact_factor
-                biox_yr = latest_biox_rank.year
+                biox_if = latest_biox_rank.get('impact_factor')
+                biox_yr = latest_biox_rank.get('year')
                 
         scimago_sjr = None
         scimago_yr = None
@@ -1238,10 +1253,10 @@ def integrate_scores_task(self):
             scimago_ranks_list = scimago_rankings.get(scimago_journal_fk.id, [])
             if scimago_ranks_list:
                 latest_s_rank = scimago_ranks_list[0]
-                scimago_sjr = latest_s_rank.sjr_score
-                scimago_yr = latest_s_rank.year
-                scimago_q = latest_s_rank.sjr_quartile
-                scimago_h = latest_s_rank.h_index
+                scimago_sjr = latest_s_rank.get('sjr_score')
+                scimago_yr = latest_s_rank.get('year')
+                scimago_q = latest_s_rank.get('sjr_quartile')
+                scimago_h = latest_s_rank.get('h_index')
 
         defaults = {
             "clarivate_title": raw_j.title,
@@ -1304,13 +1319,15 @@ def integrate_scores_task(self):
         years_to_process = set()
         biox_ranks_map = {}
         for r in biox_ranks_list:
-            years_to_process.add(r.year)
-            biox_ranks_map[r.year] = r
+            yr_val = r.get('year')
+            years_to_process.add(yr_val)
+            biox_ranks_map[yr_val] = r
             
         sjr_ranks_map = {}
         for r in scimago_ranks_list:
-            years_to_process.add(r.year)
-            sjr_ranks_map[r.year] = r
+            yr_val = r.get('year')
+            years_to_process.add(yr_val)
+            sjr_ranks_map[yr_val] = r
             
         for yr in years_to_process:
             b_rank = biox_ranks_map.get(yr)
@@ -1320,10 +1337,10 @@ def integrate_scores_task(self):
                 JournalRanking(
                     journal=j,
                     year=yr,
-                    impact_factor=b_rank.impact_factor if b_rank else None,
-                    sjr_score=s_rank.sjr_score if s_rank else None,
-                    sjr_quartile=s_rank.sjr_quartile if s_rank else None,
-                    h_index=s_rank.h_index if s_rank else None,
+                    impact_factor=b_rank.get('impact_factor') if b_rank else None,
+                    sjr_score=s_rank.get('sjr_score') if s_rank else None,
+                    sjr_quartile=s_rank.get('sjr_quartile') if s_rank else None,
+                    h_index=s_rank.get('h_index') if s_rank else None,
                 )
             )
 
@@ -1365,210 +1382,377 @@ def crawl_and_integrate_all_task(
     5. Đồng bộ tự động nếu is_automated=True và phát hiện dữ liệu mới.
     """
     from celery.result import AsyncResult
-
-    self.update_state(state='PROGRESS', meta={
-        'message': 'Khởi chạy 3 tiến trình cào dữ liệu song song...',
-        'progress': 2,
-        'clarivate': {'status': 'PENDING', 'progress': 0, 'message': ''},
-        'scimago':   {'status': 'PENDING', 'progress': 0, 'message': ''},
-        'bioxbio':   {'status': 'PENDING', 'progress': 0, 'message': ''},
-        'mapping':   {'status': 'PENDING', 'progress': 0, 'message': ''},
-    })
-
-    # --- Phase 1: Launch 3 crawlers in parallel ---
-    cl_task = crawl_clarivate_task.delay(
-        start_url=clarivate_start_url,
-        max_pages=clarivate_max_pages,
-        max_workers=clarivate_workers,
-        delay=clarivate_delay
+    from apps.scholar.models import Journal, ClarivateJournal, ScimagoJournal, BioxbioJournal, CrawlHistory
+    from django.utils import timezone
+    import time
+    
+    task_id = self.request.id or 'manual-run'
+    history_obj = CrawlHistory.objects.create(
+        task_id=task_id,
+        status='RUNNING',
+        is_automated=is_automated,
     )
-    sc_task = crawl_scimago_task.delay(
-        start_url=scimago_start_url,
-        years=scimago_years,
-        max_workers=scimago_workers,
-        delay=scimago_delay
-    )
-    bb_task = crawl_bioxbio_task.delay(
-        start_url=bioxbio_start_url,
-        max_pages=bioxbio_max_pages,
-        max_workers=bioxbio_workers,
-        delay=bioxbio_delay
-    )
+    
+    cl_scraped = 0
+    sc_scraped = 0
+    bb_scraped = 0
+    mapped_count_this_run = 0
 
-    task_ids = {'clarivate': cl_task.id, 'scimago': sc_task.id, 'bioxbio': bb_task.id}
+    logs = []
+    def add_log(msg):
+        from django.utils import timezone
+        timestamp = timezone.now().astimezone(timezone.get_default_timezone()).strftime('%H:%M:%S')
+        full_msg = f"[{timestamp}] {msg}"
+        logs.append(full_msg)
+        logger.info(msg)
 
-    # --- Phase 2: Poller Loop ---
-    POLL_INTERVAL = 5  # seconds
-    MAX_WAIT = 60 * 60 * 12  # 12 giờ timeout tối đa
-    waited = 0
-
-    while waited < MAX_WAIT:
-        time.sleep(POLL_INTERVAL)
-        waited += POLL_INTERVAL
-
-        cl_res = AsyncResult(task_ids['clarivate'])
-        sc_res = AsyncResult(task_ids['scimago'])
-        bb_res = AsyncResult(task_ids['bioxbio'])
-
-        def _get_info(res):
-            status = res.status
-            info = res.info or {} if status == 'PROGRESS' else {}
-            if not isinstance(info, dict):
-                info = {}
-            progress = info.get('progress', 0) if status == 'PROGRESS' else \
-                       (100 if status == 'SUCCESS' else 0)
-            message = info.get('message', '') if status == 'PROGRESS' else status
-            return {'status': status, 'progress': progress, 'message': message}
-
-        cl_info = _get_info(cl_res)
-        sc_info = _get_info(sc_res)
-        bb_info = _get_info(bb_res)
-
-        avg_crawler_pct = (cl_info['progress'] + sc_info['progress'] + bb_info['progress']) // 3
-        master_pct = int(avg_crawler_pct * 0.75)  # Crawlers chiếm 0–75%
-
+    try:
+        add_log("🚀 Khởi chạy hệ thống cào song song không giới hạn (Clarivate + SCImago + BioxBio)...")
+        
         self.update_state(state='PROGRESS', meta={
-            'message': f"Đang cào song song... Tiến độ trung bình: {avg_crawler_pct}%",
-            'progress': master_pct,
-            'clarivate': cl_info,
-            'scimago': sc_info,
-            'bioxbio': bb_info,
-            'mapping': {'status': 'PENDING', 'progress': 0, 'message': 'Đang chờ hoàn tất giai đoạn 1...'},
+            'message': 'Khởi chạy 3 tiến trình cào dữ liệu song song...',
+            'progress': 2,
+            'clarivate': {'status': 'PENDING', 'progress': 0, 'message': ''},
+            'scimago':   {'status': 'PENDING', 'progress': 0, 'message': ''},
+            'bioxbio':   {'status': 'PENDING', 'progress': 0, 'message': ''},
+            'mapping':   {'status': 'PENDING', 'progress': 0, 'message': ''},
         })
 
-        all_done = all(r.status in ('SUCCESS', 'FAILURE')
-                       for r in [cl_res, sc_res, bb_res])
-        if all_done:
-            break
-
-    # --- Phase 3: Self-Healing Check ---
-    self.update_state(state='PROGRESS', meta={
-        'message': 'Đang kiểm tra số lượng dữ liệu đã cào...',
-        'progress': 76,
-        'clarivate': {'status': 'SUCCESS', 'progress': 100, 'message': 'Checking...'},
-        'scimago':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Checking...'},
-        'bioxbio':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Checking...'},
-        'mapping':   {'status': 'PENDING', 'progress': 0, 'message': 'Đang kiểm tra dữ liệu...'},
-    })
-
-    # Clarivate self-heal: So sánh DB count với totalRecords từ API
-    cl_res = AsyncResult(task_ids['clarivate'])
-    cl_result = cl_res.result if cl_res.status == 'SUCCESS' else {}
-    if not isinstance(cl_result, dict):
-        cl_result = {}
-    cl_expected = cl_result.get('total_expected', 0)
-    cl_in_db = ClarivateJournal.objects.count()
-
-    if cl_expected > 0 and cl_in_db < cl_expected * 0.98:  # Chấp nhận sai lệch 2%
-        logger.warning(f"Self-Healing Clarivate: DB={cl_in_db}, Expected={cl_expected}. Đang cào bù...")
-        retry_cl = crawl_clarivate_task.delay(
+        # --- Phase 1: Launch 3 crawlers in parallel ---
+        add_log("Kích hoạt Clarivate Scraper task...")
+        cl_task = crawl_clarivate_task.delay(
             start_url=clarivate_start_url,
             max_pages=clarivate_max_pages,
             max_workers=clarivate_workers,
             delay=clarivate_delay
         )
-        # Wait for recovery sync
-        while not retry_cl.ready():
-            time.sleep(5)
+        add_log("Kích hoạt SCImago Scraper task...")
+        sc_task = crawl_scimago_task.delay(
+            start_url=scimago_start_url,
+            years=scimago_years,
+            max_workers=scimago_workers,
+            delay=scimago_delay
+        )
+        add_log("Kích hoạt BioxBio Scraper task...")
+        bb_task = crawl_bioxbio_task.delay(
+            start_url=bioxbio_start_url,
+            max_pages=bioxbio_max_pages,
+            max_workers=bioxbio_workers,
+            delay=bioxbio_delay
+        )
 
-    # Bioxbio self-heal: Kiểm tra xem còn subject nào incomplete không
-    bioxbio_retry_count = 0
-    while bioxbio_retry_count < 3:
-        incomplete_biox = BioxbioCrawlerProgress.objects.filter(is_completed=False).count()
-        if incomplete_biox > 0:
-            logger.warning(f"Self-Healing BioxBio: {incomplete_biox} incomplete subjects. Rerunning...")
-            bb_heal = crawl_bioxbio_task.delay(
-                start_url=bioxbio_start_url,
-                max_pages=bioxbio_max_pages,
-                max_workers=bioxbio_workers,
-                delay=bioxbio_delay
-            )
-            while not bb_heal.ready():
-                time.sleep(5)
-            bioxbio_retry_count += 1
-        else:
-            break
+        task_ids = {'clarivate': cl_task.id, 'scimago': sc_task.id, 'bioxbio': bb_task.id}
 
-    # --- Phase 4: Trigger Mapping ---
-    self.update_state(state='PROGRESS', meta={
-        'message': 'Giai đoạn 1 hoàn tất! Bắt đầu tích hợp và mapping dữ liệu...',
-        'progress': 78,
-        'clarivate': {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
-        'scimago':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
-        'bioxbio':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
-        'mapping': {'status': 'PROGRESS', 'progress': 5, 'message': 'Đang khởi chạy integrate_scores_task...'},
-    })
+        # --- Phase 2: Poller Loop ---
+        POLL_INTERVAL = 5  # seconds
+        MAX_WAIT = 60 * 60 * 12  # 12 giờ timeout tối đa
+        waited = 0
 
-    map_task = integrate_scores_task.delay()
-    map_task_id = map_task.id
+        add_log("Bắt đầu giám sát các tiến trình cào dữ liệu thô...")
+        while waited < MAX_WAIT:
+            time.sleep(POLL_INTERVAL)
+            waited += POLL_INTERVAL
 
-    # Poller loop cho mapping (78% → 100%)
-    while True:
-        time.sleep(5)
-        map_res = AsyncResult(map_task_id)
-        map_info = map_res.info or {} if map_res.status == 'PROGRESS' else {}
-        if not isinstance(map_info, dict):
-            map_info = {}
-        map_pct = map_info.get('progress', 0) if map_res.status == 'PROGRESS' else \
-                  (100 if map_res.status == 'SUCCESS' else 0)
-        master_pct = 78 + int(map_pct * 0.22)
+            cl_res = AsyncResult(task_ids['clarivate'])
+            sc_res = AsyncResult(task_ids['scimago'])
+            bb_res = AsyncResult(task_ids['bioxbio'])
 
+            def _get_info(res):
+                status = res.status
+                info = res.info or {} if status == 'PROGRESS' else {}
+                if not isinstance(info, dict):
+                    info = {}
+                progress = info.get('progress', 0) if status == 'PROGRESS' else \
+                           (100 if status == 'SUCCESS' else 0)
+                message = info.get('message', '') if status == 'PROGRESS' else status
+                return {'status': status, 'progress': progress, 'message': message}
+
+            cl_info = _get_info(cl_res)
+            sc_info = _get_info(sc_res)
+            bb_info = _get_info(bb_res)
+
+            avg_crawler_pct = (cl_info['progress'] + sc_info['progress'] + bb_info['progress']) // 3
+            master_pct = int(avg_crawler_pct * 0.75)  # Crawlers chiếm 0–75%
+
+            self.update_state(state='PROGRESS', meta={
+                'message': f"Đang cào song song... Tiến độ trung bình: {avg_crawler_pct}%",
+                'progress': master_pct,
+                'clarivate': cl_info,
+                'scimago': sc_info,
+                'bioxbio': bb_info,
+                'mapping': {'status': 'PENDING', 'progress': 0, 'message': 'Đang chờ hoàn tất giai đoạn 1...'},
+            })
+
+            all_done = all(r.status in ('SUCCESS', 'FAILURE')
+                           for r in [cl_res, sc_res, bb_res])
+            if all_done:
+                break
+
+        add_log("Giai đoạn 1 hoàn tất. Kiểm tra và phục hồi dữ liệu cào...")
+        # --- Phase 3: Self-Healing Check ---
         self.update_state(state='PROGRESS', meta={
-            'message': f"Mapping & tích hợp điểm số... {map_pct}%",
-            'progress': master_pct,
+            'message': 'Đang kiểm tra số lượng dữ liệu đã cào...',
+            'progress': 76,
+            'clarivate': {'status': 'SUCCESS', 'progress': 100, 'message': 'Checking...'},
+            'scimago':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Checking...'},
+            'bioxbio':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Checking...'},
+            'mapping':   {'status': 'PENDING', 'progress': 0, 'message': 'Đang kiểm tra dữ liệu...'},
+        })
+
+        # Clarivate self-heal
+        cl_res = AsyncResult(task_ids['clarivate'])
+        cl_result = cl_res.result if cl_res.status == 'SUCCESS' else {}
+        if not isinstance(cl_result, dict):
+            cl_result = {}
+        cl_expected = cl_result.get('total_expected', 0)
+        cl_in_db = ClarivateJournal.objects.count()
+
+        self_healing_triggered = False
+        if cl_expected > 0 and cl_in_db < cl_expected * 0.98:
+            self_healing_triggered = True
+            add_log(f"Self-Healing: Thiếu dữ liệu Clarivate (DB={cl_in_db}, Expected={cl_expected}). Tiến hành cào bù...")
+            retry_cl = crawl_clarivate_task.delay(
+                start_url=clarivate_start_url,
+                max_pages=clarivate_max_pages,
+                max_workers=clarivate_workers,
+                delay=clarivate_delay
+            )
+            while not retry_cl.ready():
+                time.sleep(5)
+            add_log("Self-Healing Clarivate hoàn tất.")
+
+        # Bioxbio self-heal
+        bioxbio_retry_count = 0
+        while bioxbio_retry_count < 3:
+            incomplete_biox = BioxbioCrawlerProgress.objects.filter(is_completed=False).count()
+            if incomplete_biox > 0:
+                self_healing_triggered = True
+                add_log(f"Self-Healing: Phát hiện {incomplete_biox} subjects chưa hoàn tất ở BioxBio. Chạy cào bù...")
+                bb_heal = crawl_bioxbio_task.delay(
+                    start_url=bioxbio_start_url,
+                    max_pages=bioxbio_max_pages,
+                    max_workers=bioxbio_workers,
+                    delay=bioxbio_delay
+                )
+                while not bb_heal.ready():
+                    time.sleep(5)
+                bioxbio_retry_count += 1
+                add_log(f"Self-Healing BioxBio lượt {bioxbio_retry_count} hoàn tất.")
+            else:
+                break
+
+        # --- Phase 4: Trigger Mapping ---
+        cl_res = AsyncResult(task_ids['clarivate'])
+        cl_result = cl_res.result if cl_res.status == 'SUCCESS' else {}
+        if not isinstance(cl_result, dict): cl_result = {}
+        cl_scraped = cl_result.get('scraped_journals', 0)
+
+        sc_res = AsyncResult(task_ids['scimago'])
+        sc_result = sc_res.result if sc_res.status == 'SUCCESS' else {}
+        if not isinstance(sc_result, dict): sc_result = {}
+        sc_scraped = sc_result.get('imported_journals', 0)
+
+        bb_res = AsyncResult(task_ids['bioxbio'])
+        bb_result = bb_res.result if bb_res.status == 'SUCCESS' else {}
+        if not isinstance(bb_result, dict): bb_result = {}
+        bb_scraped = bb_result.get('scraped_journals', 0)
+
+        total_scraped = cl_scraped + sc_scraped + bb_scraped
+        has_confirmed = Journal.objects.filter(is_staging=False).exists()
+
+        if not self_healing_triggered and total_scraped == 0 and has_confirmed:
+            add_log("Skip Mapping Check: Không phát hiện dữ liệu thô mới và đã có dữ liệu chính thức. Bỏ qua giai đoạn Mapping.")
+            self.update_state(state='PROGRESS', meta={
+                'message': 'Không có dữ liệu mới. Bỏ qua Mapping & hoàn tất tác vụ.',
+                'progress': 100,
+                'clarivate': {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed (No new data)'},
+                'scimago':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed (No new data)'},
+                'bioxbio':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed (No new data)'},
+                'mapping':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Bỏ qua (Không có dữ liệu mới)'},
+            })
+            
+            history_obj.status = 'SUCCESS'
+            history_obj.clarivate_count = 0
+            history_obj.scimago_count = 0
+            history_obj.bioxbio_count = 0
+            history_obj.mapped_count = 0
+            
+            history_obj.clarivate_total = ClarivateJournal.objects.count()
+            history_obj.scimago_total = ScimagoJournal.objects.count()
+            history_obj.bioxbio_total = BioxbioJournal.objects.count()
+            history_obj.mapped_total = Journal.objects.count()
+            
+            return {
+                'status': 'success',
+                'message': 'Skipped mapping because no new raw data was scraped.',
+                'clarivate_in_db': ClarivateJournal.objects.count(),
+                'scimago_in_db':   ScimagoJournal.objects.count(),
+                'bioxbio_in_db':   BioxbioJournal.objects.count(),
+                'mapped_journals': Journal.objects.count(),
+            }
+
+        add_log("Kích hoạt tiến trình Mapping & tích hợp điểm số...")
+        self.update_state(state='PROGRESS', meta={
+            'message': 'Giai đoạn 1 hoàn tất! Bắt đầu tích hợp và mapping dữ liệu...',
+            'progress': 78,
             'clarivate': {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
             'scimago':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
             'bioxbio':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
-            'mapping': {'status': map_res.status, 'progress': map_pct,
-                        'message': map_info.get('message', '')},
+            'mapping': {'status': 'PROGRESS', 'progress': 5, 'message': 'Đang khởi chạy integrate_scores_task...'},
         })
 
-        if map_res.status in ('SUCCESS', 'FAILURE'):
-            break
+        map_task = integrate_scores_task.delay()
+        map_task_id = map_task.id
 
-    # --- Phase 5: Auto-Sync (Only for automated Celery Beat runs) ---
-    if is_automated:
-        from apps.scholar.models import Journal
-        from django.db import connection, transaction
+        while True:
+            time.sleep(5)
+            map_res = AsyncResult(map_task_id)
+            map_info = map_res.info or {} if map_res.status == 'PROGRESS' else {}
+            if not isinstance(map_info, dict):
+                map_info = {}
+            map_pct = map_info.get('progress', 0) if map_res.status == 'PROGRESS' else \
+                      (100 if map_res.status == 'SUCCESS' else 0)
+            master_pct = 78 + int(map_pct * 0.22)
 
-        confirmed_titles = set(Journal.objects.filter(is_staging=False).values_list('title_normalized', flat=True))
-        has_new = Journal.objects.filter(is_staging=True).exclude(title_normalized__in=confirmed_titles).exists()
+            self.update_state(state='PROGRESS', meta={
+                'message': f"Mapping & tích hợp điểm số... {map_pct}%",
+                'progress': master_pct,
+                'clarivate': {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
+                'scimago':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
+                'bioxbio':   {'status': 'SUCCESS', 'progress': 100, 'message': 'Completed'},
+                'mapping': {'status': map_res.status, 'progress': map_pct,
+                            'message': map_info.get('message', '')},
+            })
 
-        if has_new:
-            logger.info("Auto-Sync: Phát hiện dữ liệu mới, bắt đầu đồng bộ tự động...")
-            try:
-                with transaction.atomic():
+            if map_res.status in ('SUCCESS', 'FAILURE'):
+                break
+
+        if map_res.status == 'SUCCESS':
+            add_log("Tiến trình Mapping & tích hợp điểm số hoàn tất thành công.")
+            mapped_count_this_run = Journal.objects.filter(is_staging=True).count()
+        else:
+            add_log(f"Tiến trình Mapping & tích hợp điểm số thất bại: {map_res.result}")
+
+        # --- Phase 5: Auto-Sync (Only for automated Celery Beat runs) ---
+        if is_automated:
+            from django.db import connection, transaction
+
+            confirmed_titles = set(Journal.objects.filter(is_staging=False).values_list('title_normalized', flat=True))
+            has_new = Journal.objects.filter(is_staging=True).exclude(title_normalized__in=confirmed_titles).exists()
+
+            if has_new:
+                add_log("Auto-Sync: Phát hiện dữ liệu mới, bắt đầu đồng bộ tự động...")
+                try:
+                    with transaction.atomic():
+                        with connection.cursor() as cursor:
+                            cursor.execute("""
+                                UPDATE scholar_publications 
+                                SET journal_id = NULL 
+                                WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                            """)
+                            cursor.execute("""
+                                DELETE FROM scholar_journal_rankings 
+                                WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                            """)
+                            cursor.execute("""
+                                DELETE FROM scholar_journal_issns 
+                                WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                            """)
+                            cursor.execute("DELETE FROM scholar_journals WHERE is_staging = FALSE")
+                        Journal.objects.filter(is_staging=True).update(is_staging=False)
+                    add_log("Auto-Sync: Đồng bộ dữ liệu thành công.")
+                except Exception as e:
+                    add_log(f"Auto-Sync: Đồng bộ thất bại: {e}")
+            else:
+                add_log("Auto-Sync: Không có dữ liệu mới nào. Đang dọn dẹp dữ liệu staging...")
+                try:
                     with connection.cursor() as cursor:
                         cursor.execute("""
-                            UPDATE scholar_publications 
-                            SET journal_id = NULL 
-                            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
-                        """)
-                        cursor.execute("""
                             DELETE FROM scholar_journal_rankings 
-                            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = TRUE)
                         """)
                         cursor.execute("""
                             DELETE FROM scholar_journal_issns 
-                            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = FALSE)
+                            WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = TRUE)
                         """)
-                        cursor.execute("DELETE FROM scholar_journals WHERE is_staging = FALSE")
-                    Journal.objects.filter(is_staging=True).update(is_staging=False)
-                logger.info("Auto-Sync: Đồng bộ dữ liệu thành công.")
-            except Exception as e:
-                logger.error(f"Auto-Sync: Đồng bộ thất bại: {e}")
-        else:
-            logger.info("Auto-Sync: Không có dữ liệu mới nào. Đang dọn dẹp dữ liệu staging...")
-            try:
-                Journal.objects.filter(is_staging=True).delete()
-                logger.info("Auto-Sync: Dọn dẹp staging thành công.")
-            except Exception as e:
-                logger.error(f"Auto-Sync: Dọn dẹp staging thất bại: {e}")
+                        cursor.execute("DELETE FROM scholar_journals WHERE is_staging = TRUE")
+                    add_log("Auto-Sync: Dọn dẹp staging thành công.")
+                except Exception as e:
+                    add_log(f"Auto-Sync: Dọn dẹp staging thất bại: {e}")
 
-    return {
-        'status': 'success',
-        'clarivate_in_db': ClarivateJournal.objects.count(),
-        'scimago_in_db':   ScimagoJournal.objects.count(),
-        'bioxbio_in_db':   BioxbioJournal.objects.count(),
-        'mapped_journals': Journal.objects.count(),
-    }
+        history_obj.status = 'SUCCESS'
+        history_obj.clarivate_count = cl_scraped
+        history_obj.scimago_count = sc_scraped
+        history_obj.bioxbio_count = bb_scraped
+        history_obj.mapped_count = mapped_count_this_run
+        
+        history_obj.clarivate_total = ClarivateJournal.objects.count()
+        history_obj.scimago_total = ScimagoJournal.objects.count()
+        history_obj.bioxbio_total = BioxbioJournal.objects.count()
+        history_obj.mapped_total = Journal.objects.count()
+
+        add_log("Tác vụ tổng hợp kết thúc thành công.")
+        
+        return {
+            'status': 'success',
+            'clarivate_in_db': ClarivateJournal.objects.count(),
+            'scimago_in_db':   ScimagoJournal.objects.count(),
+            'bioxbio_in_db':   BioxbioJournal.objects.count(),
+            'mapped_journals': Journal.objects.count(),
+        }
+        
+    except Exception as e:
+        import traceback
+        err_msg = traceback.format_exc()
+        add_log(f"💥 Tác vụ thất bại với lỗi: {e}")
+        history_obj.status = 'FAILURE'
+        history_obj.error_message = err_msg
+        raise e
+    finally:
+        history_obj.completed_at = timezone.now()
+        history_obj.log_output = "\n".join(logs)
+        history_obj.save()
+
+from celery.signals import task_prerun, task_postrun
+
+@task_prerun.connect
+def task_prerun_handler(sender=None, task_id=None, task=None, *args, **kwargs):
+    task_name = task.name if task else (sender.name if sender else None)
+    if task_name == 'apps.scholar.tasks.crawl_and_integrate_all_task':
+        try:
+            settings_data = get_scholar_settings()
+            settings_data['active_unified_task_id'] = task_id
+            save_scholar_settings(settings_data)
+        except Exception as e:
+            logger.error(f"Error saving active task ID in signal: {e}")
+
+@task_postrun.connect
+def task_postrun_handler(sender=None, task_id=None, task=None, retval=None, state=None, *args, **kwargs):
+    task_name = task.name if task else (sender.name if sender else None)
+    if task_name == 'apps.scholar.tasks.crawl_and_integrate_all_task':
+        try:
+            settings_data = get_scholar_settings()
+            if settings_data.get('active_unified_task_id') == task_id:
+                settings_data['active_unified_task_id'] = None
+                
+            # Record last run metadata
+            from django.utils import timezone
+            now_vn = timezone.now().astimezone(timezone.get_default_timezone())
+            
+            settings_data['last_run_time'] = now_vn.strftime('%H:%M:%S %d/%m/%Y')
+            settings_data['last_run_status'] = state
+            
+            if state == 'SUCCESS' and isinstance(retval, dict):
+                msg = retval.get('message', '')
+                if 'Skipped mapping' in msg or 'Bỏ qua' in msg:
+                    settings_data['last_run_message'] = 'Hoàn tất cào dữ liệu thành công. Không có dữ liệu mới nên đã tự động bỏ qua giai đoạn Mapping.'
+                else:
+                    settings_data['last_run_message'] = f"Hoàn tất cào và mapping thành công. Đã cập nhật {retval.get('mapped_journals', 0)} tạp chí."
+            else:
+                settings_data['last_run_message'] = f"Tiến trình kết thúc với trạng thái: {state}."
+                
+            save_scholar_settings(settings_data)
+        except Exception as e:
+            logger.error(f"Error clearing active task ID in signal: {e}")
+
+

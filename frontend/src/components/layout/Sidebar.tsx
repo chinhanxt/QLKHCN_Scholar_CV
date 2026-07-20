@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   GraduationCap,
@@ -14,19 +15,18 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  Layers
+  Layers,
+  ChevronDown,
+  ChevronRight,
+  Download
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
 import { fullName } from '@/lib/utils'
 
-const TOOLS_NAV = [
-  { to: '/scholar/unified', label: 'Bộ cào tổng hợp', icon: Layers },
+const OTHER_TOOLS = [
   { to: '/scholar/scraper', label: 'Scholar Scraper', icon: GraduationCap },
-  { to: '/scholar/bioxbio', label: 'BioxBio Crawler', icon: Globe },
-  { to: '/scholar/scimago', label: 'SCImago Crawler', icon: BarChart3 },
-  { to: '/scholar/clarivate', label: 'Clarivate Crawler', icon: Database },
-  { to: '/scholar/integrator', label: 'Score Integrator', icon: GitMerge },
+  { to: '/scholar/integrator', label: 'Data chuẩn', icon: GitMerge },
   { to: '/scholar/profiles', label: 'Profile Manager', icon: FolderHeart },
 ]
 
@@ -45,6 +45,18 @@ interface SidebarProps {
 export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+  const location = useLocation()
+
+  const isCrawlActive = ['/scholar/unified', '/scholar/clarivate', '/scholar/scimago', '/scholar/bioxbio'].some(
+    path => location.pathname === path
+  )
+  const [isCrawlOpen, setIsCrawlOpen] = useState(isCrawlActive)
+
+  useEffect(() => {
+    if (isCrawlActive) {
+      setIsCrawlOpen(true)
+    }
+  }, [location.pathname, isCrawlActive])
 
   return (
     <aside className={cn(
@@ -116,11 +128,144 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
         <div>
           {!isCollapsed && (
             <div className="px-3 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              6 Công cụ chính
+              Công cụ
             </div>
           )}
           <div className="flex flex-col gap-1">
-            {TOOLS_NAV.map(({ to, label, icon: Icon }) => (
+            {/* 1. Parent Menu: Cào dữ liệu */}
+            {!isCollapsed ? (
+              <>
+                <button
+                  onClick={() => setIsCrawlOpen(!isCrawlOpen)}
+                  className={cn(
+                    'w-full flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer',
+                    isCrawlActive && 'bg-slate-50 text-[#005b9a] font-semibold'
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <Download className="h-4.5 w-4.5 shrink-0 text-slate-500" />
+                    <span>Cào dữ liệu</span>
+                  </div>
+                  {isCrawlOpen ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
+                </button>
+
+                {isCrawlOpen && (
+                  <div className="flex flex-col gap-1 ml-4 border-l border-slate-200 pl-3 mt-1 animate-fade-in">
+                    <NavLink
+                      to="/scholar/unified"
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200',
+                          isActive
+                            ? 'bg-[#e6f0f7] text-[#005b9a] font-bold'
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium'
+                        )
+                      }
+                    >
+                      <Layers className="h-3.5 w-3.5 shrink-0" />
+                      <span>Cào tổng hợp</span>
+                    </NavLink>
+                    <NavLink
+                      to="/scholar/clarivate"
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200',
+                          isActive
+                            ? 'bg-[#e6f0f7] text-[#005b9a] font-bold'
+                            : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900 font-medium'
+                        )
+                      }
+                    >
+                      <Database className="h-3.5 w-3.5 shrink-0" />
+                      <span>Clarivate Crawler</span>
+                    </NavLink>
+                    <NavLink
+                      to="/scholar/scimago"
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200',
+                          isActive
+                            ? 'bg-[#e6f0f7] text-[#005b9a] font-bold'
+                            : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900 font-medium'
+                        )
+                      }
+                    >
+                      <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+                      <span>SCImago Crawler</span>
+                    </NavLink>
+                    <NavLink
+                      to="/scholar/bioxbio"
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200',
+                          isActive
+                            ? 'bg-[#e6f0f7] text-[#005b9a] font-bold'
+                            : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900 font-medium'
+                        )
+                      }
+                    >
+                      <Globe className="h-3.5 w-3.5 shrink-0" />
+                      <span>BioxBio Crawler</span>
+                    </NavLink>
+                  </div>
+                )}
+              </>
+            ) : (
+              // Collapsed state: Render the 4 icons flat
+              <>
+                <NavLink
+                  to="/scholar/unified"
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center justify-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                      isActive ? 'bg-[#e6f0f7] text-[#005b9a]' : 'text-slate-650 hover:bg-slate-50'
+                    )
+                  }
+                  title="Cào tổng hợp"
+                >
+                  <Layers className="h-4.5 w-4.5 shrink-0" />
+                </NavLink>
+                <NavLink
+                  to="/scholar/clarivate"
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center justify-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                      isActive ? 'bg-[#e6f0f7] text-[#005b9a]' : 'text-slate-650 hover:bg-slate-50'
+                    )
+                  }
+                  title="Clarivate Crawler"
+                >
+                  <Database className="h-4.5 w-4.5 shrink-0" />
+                </NavLink>
+                <NavLink
+                  to="/scholar/scimago"
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center justify-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                      isActive ? 'bg-[#e6f0f7] text-[#005b9a]' : 'text-slate-650 hover:bg-slate-50'
+                    )
+                  }
+                  title="SCImago Crawler"
+                >
+                  <BarChart3 className="h-4.5 w-4.5 shrink-0" />
+                </NavLink>
+                <NavLink
+                  to="/scholar/bioxbio"
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center justify-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                      isActive ? 'bg-[#e6f0f7] text-[#005b9a]' : 'text-slate-650 hover:bg-slate-50'
+                    )
+                  }
+                  title="BioxBio Crawler"
+                >
+                  <Globe className="h-4.5 w-4.5 shrink-0" />
+                </NavLink>
+              </>
+            )}
+
+            {/* Other Flat Nav links */}
+            {OTHER_TOOLS.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -130,12 +275,12 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     isCollapsed ? 'justify-center px-0' : '',
                     isActive
                       ? 'bg-[#e6f0f7] text-[#005b9a] border-l-4 border-[#005b9a] shadow-sm font-semibold pl-2.5'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                   )
                 }
                 title={isCollapsed ? label : undefined}
               >
-                <Icon className="h-4.5 w-4.5 shrink-0" />
+                <Icon className="h-4.5 w-4.5 shrink-0 text-slate-500" />
                 {!isCollapsed && <span>{label}</span>}
               </NavLink>
             ))}

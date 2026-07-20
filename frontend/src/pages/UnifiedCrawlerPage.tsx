@@ -3,7 +3,7 @@ import { scholarApi } from '@/api/endpoints/scholar'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { Layers, Play, Square, Loader2, Zap, Trash2, Copy, Terminal, CheckCircle2, AlertCircle, ChevronUp, ChevronDown, Database, AlertTriangle, Eye, RefreshCw } from 'lucide-react'
+import { Layers, Play, Square, Loader2, Zap, Trash2, Copy, Terminal, CheckCircle2, AlertCircle, ChevronUp, ChevronDown, Database, Eye, RefreshCw, History, X, Clock, FileText } from 'lucide-react'
 import { useCrawlerStore } from '@/stores/crawler.store'
 
 export function UnifiedCrawlerPage() {
@@ -103,6 +103,7 @@ export function UnifiedCrawlerPage() {
           setMapProgress({ status: 'SUCCESS', progress: 100, message: 'Đồng bộ mapping thành công!' })
           clearInterval(pollInterval)
           fetchStats()
+          checkActiveTask()
           toast.success('Tiến trình cào song song và mapping đã hoàn thành thành công!')
         } else if (res.status === 'FAILURE') {
           setTaskState('unified', { 
@@ -116,6 +117,7 @@ export function UnifiedCrawlerPage() {
           setMapProgress({ status: 'FAILURE', progress: 0, message: 'Mapping thất bại' })
           clearInterval(pollInterval)
           fetchStats()
+          checkActiveTask()
           toast.error('Hệ thống cào song song gặp lỗi thất bại.')
         } else {
           setTaskState('unified', { 
@@ -291,8 +293,67 @@ export function UnifiedCrawlerPage() {
   const [autoCrawlHour, setAutoCrawlHour] = useState<number>(2)
   const [autoCrawlMinute, setAutoCrawlMinute] = useState<number>(0)
   const [savingSchedule, setSavingSchedule] = useState<boolean>(false)
+  const [lastRunInfo, setLastRunInfo] = useState<any>(null)
+  const [showHistory, setShowHistory] = useState(false)
+  const [historyList, setHistoryList] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [selectedHistory, setSelectedHistory] = useState<any>(null)
+  const [historyDetailLogs, setHistoryDetailLogs] = useState<string>('')
+  const [loadingDetail, setLoadingDetail] = useState(false)
 
-  // Load scheduler settings
+  const handleOpenHistory = async () => {
+    setShowHistory(true)
+    setLoadingHistory(true)
+    try {
+      const res = await scholarApi.getCrawlHistory()
+      setHistoryList(res.data || [])
+    } catch (err) {
+      console.error('Lỗi tải lịch sử cào:', err)
+      toast.error('Không thể tải lịch sử các lượt chạy.')
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  const handleViewHistoryDetail = async (historyItem: any) => {
+    setSelectedHistory(historyItem)
+    setLoadingDetail(true)
+    setHistoryDetailLogs('')
+    try {
+      const res = await scholarApi.getCrawlHistoryDetail(historyItem.id)
+      setHistoryDetailLogs(res.data?.log_output || 'Không có logs ghi nhận.')
+    } catch (err) {
+      console.error('Lỗi tải chi tiết logs:', err)
+      toast.error('Không thể tải chi tiết logs của lượt chạy này.')
+    } finally {
+      setLoadingDetail(false)
+    }
+  }
+
+  const checkActiveTask = async () => {
+    try {
+      const res = await scholarApi.getActiveTask().then(r => r.data)
+      if (res.last_run_info) {
+        setLastRunInfo(res.last_run_info)
+      }
+      if (res.task_id) {
+        setTaskState('unified', {
+          taskId: res.task_id,
+          taskStatus: res.status,
+          progress: res.progress || 2,
+        })
+        addConsoleLog('unified', `🔄 Phát hiện tiến trình cào tự động đang chạy ngầm (ID: ${res.task_id}). Đang kết nối giám sát...`)
+        if (res.message) {
+          addConsoleLog('unified', res.message)
+        }
+        toast.info('Hệ thống đang chạy cào tự động trong nền. Đang kết nối giám sát...')
+      }
+    } catch (err) {
+      console.error('Lỗi kiểm tra tiến trình đang chạy:', err)
+    }
+  }
+
+  // Load scheduler settings and check for any running active task
   useEffect(() => {
     const loadScheduleSettings = async () => {
       try {
@@ -304,7 +365,9 @@ export function UnifiedCrawlerPage() {
         console.error('Lỗi tải cấu hình lập lịch:', err)
       }
     }
+
     loadScheduleSettings()
+    checkActiveTask()
   }, [])
 
   const handleSaveSchedule = async () => {
@@ -366,6 +429,13 @@ export function UnifiedCrawlerPage() {
               <Play className="w-3.5 h-3.5" /> Kích Hoạt Hệ Thống
             </button>
           )}
+          <button
+            onClick={handleOpenHistory}
+            className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all text-slate-700 text-xs font-bold gap-2 cursor-pointer bg-white shadow-xs font-sans"
+            title="Xem lịch sử cào"
+          >
+            <History className="w-4 h-4 text-slate-500" /> Lịch sử cào
+          </button>
           <button
             onClick={fetchStats}
             className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-500 cursor-pointer bg-white"
@@ -750,7 +820,26 @@ export function UnifiedCrawlerPage() {
             </div>
           </div>
         </div>
-        <div className="p-6 bg-white min-h-[300px]">
+        <div className="p-6 bg-white min-h-[300px] space-y-4">
+          {/* Last Run History Alert Banner */}
+          {lastRunInfo?.time && (!taskId || taskStatus === 'IDLE' || taskStatus === 'SUCCESS' || taskStatus === 'FAILURE') && (
+            <div className="p-4 px-5 rounded-xl border border-sky-100 bg-sky-50/50 text-sky-950 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-xs animate-fade-in">
+              <div className="flex flex-wrap items-center gap-2 font-medium">
+                <span className="inline-flex w-2 h-2 rounded-full bg-emerald-500 shadow-xs animate-pulse"></span>
+                <span>
+                  Lượt chạy tự động gần nhất: <strong className="text-slate-800 font-bold">{lastRunInfo.time}</strong>
+                </span>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  lastRunInfo.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                }`}>
+                  {lastRunInfo.status === 'SUCCESS' ? 'Thành công' : 'Thất bại'}
+                </span>
+              </div>
+              <div className="opacity-95 font-semibold text-slate-700 flex items-center gap-1.5 bg-white border border-slate-150 px-3 py-1 rounded-lg">
+                <span>{lastRunInfo.message}</span>
+              </div>
+            </div>
+          )}
           {consoleLogs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
               {/* Custom SVG window terminal design as shown in screenshot */}
@@ -815,61 +904,42 @@ export function UnifiedCrawlerPage() {
               )}
               <button
                 disabled={submittingAction}
-                onClick={() => setActionConfirmMode('delete')}
+                onClick={handleDeleteStaging}
                 className="inline-flex items-center justify-center px-4 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors text-rose-600 text-xs font-bold gap-1.5 border border-rose-200 cursor-pointer shadow-xs disabled:opacity-50"
               >
-                Hủy / Xóa Bản Nháp
+                {submittingAction ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang xóa...
+                  </>
+                ) : (
+                  "Hủy / Xóa Bản Nháp"
+                )}
               </button>
             </div>
           )}
         </div>
 
         <CardContent className="p-6 space-y-6 bg-white">
-          {/* Action Warnings Confirmation dialog box */}
-          {actionConfirmMode === 'delete' && (
-            <div className="p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 animate-[pulse_2s_infinite] bg-rose-50 border-rose-200 text-rose-900">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-8 h-8 shrink-0 text-rose-600" />
-                <div>
-                  <h4 className="font-bold text-sm">
-                    ⚠️ CẢNH BÁO: HỦY VÀ XÓA BẢN DỮ LIỆU NHÁP STAGING
-                  </h4>
-                  <p className="text-xs opacity-85 mt-1 font-semibold">
-                    Hành động này sẽ XÓA SẠCH toàn bộ {stats?.staging_journals} bản ghi cào nháp tạm thời. Toàn bộ dữ liệu cào thô gốc của Clarivate, SCImago và BioxBio vẫn được giữ nguyên.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2.5 self-end md:self-auto">
-                <button
-                  disabled={submittingAction}
-                  onClick={handleDeleteStaging}
-                  className="px-4 py-2 rounded-lg text-xs font-bold text-white shadow-sm cursor-pointer disabled:opacity-50 bg-rose-600 hover:bg-rose-700"
-                >
-                  {submittingAction ? (
-                    <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang xử lý...</span>
-                  ) : (
-                    "Tôi Đồng Ý, Hãy Xóa Sạch!"
-                  )}
-                </button>
-                <button
-                  disabled={submittingAction}
-                  onClick={() => setActionConfirmMode('none')}
-                  className="px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 cursor-pointer shadow-sm"
-                >
-                  Hủy Bỏ
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Staging Summary Info bar when empty */}
           {(!stats || stats.staging_journals === 0) ? (
             <div className="flex flex-col items-center justify-center py-8 text-slate-400 gap-2 text-center bg-slate-50/40 rounded-xl border border-dashed border-slate-200">
               <Eye className="w-8 h-8 opacity-45 text-[#005b9a] animate-pulse" />
-              <h5 className="font-bold text-xs text-slate-700">Chưa có dữ liệu cào nháp (Staging) nào trong bộ nhớ tạm.</h5>
-              <p className="text-[10px] text-slate-400 max-w-md px-4">
-                Kích hoạt hệ thống cào song song. Khi giai đoạn mapping hoàn thành 100%, kết quả sẽ xuất hiện ở đây dưới dạng nháp để bạn xem trước, đối chiếu trước khi đồng bộ chính thức.
-              </p>
+              {lastRunInfo?.status === 'SUCCESS' && lastRunInfo?.message?.includes('Không có dữ liệu mới') ? (
+                <>
+                  <h5 className="font-bold text-xs text-emerald-700">Không có dữ liệu mới nào từ các nguồn.</h5>
+                  <p className="text-[10px] text-slate-500 max-w-md px-4 font-semibold">
+                    Lượt chạy lúc {lastRunInfo.time} xác nhận toàn bộ dữ liệu thô của Clarivate, SCImago và BioxBio đã ở phiên bản mới nhất. Hệ thống tự động bỏ qua giai đoạn Mapping và giữ nguyên dữ liệu chính thức hiện tại.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h5 className="font-bold text-xs text-slate-700">Chưa có dữ liệu cào nháp (Staging) nào trong bộ nhớ tạm.</h5>
+                  <p className="text-[10px] text-slate-400 max-w-md px-4">
+                    Kích hoạt hệ thống cào song song. Khi giai đoạn mapping hoàn thành 100%, kết quả sẽ xuất hiện ở đây dưới dạng nháp để bạn xem trước, đối chiếu trước khi đồng bộ chính thức.
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -1068,6 +1138,206 @@ export function UnifiedCrawlerPage() {
           )}
         </CardContent>
       </Card>
+      {/* Crawl History & Logs Overlay Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-md transition-all duration-300 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col overflow-hidden animate-zoom-in font-sans">
+            {/* Modal Header */}
+            <div className="p-4 px-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-[#005b9a] animate-pulse" />
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm">Lịch sử Lượt chạy & Nhật ký Tiến trình</h3>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Hiển thị lịch sử hoạt động của hệ thống cào và đồng bộ.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowHistory(false); setSelectedHistory(null); }}
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 hover:text-rose-600 transition-colors text-slate-400 cursor-pointer bg-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body: Split dual-column layout */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* Left Column: History list */}
+              <div className="w-80 border-r border-slate-100 flex flex-col bg-slate-50/40">
+                <div className="p-3 px-4 border-b border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-500 tracking-wider">
+                  DANH SÁCH LƯỢT CHẠY ({historyList.length})
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                  {loadingHistory ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-2 text-slate-400">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#005b9a]" />
+                      <span className="text-xs">Đang tải lịch sử...</span>
+                    </div>
+                  ) : historyList.length === 0 ? (
+                    <div className="text-center py-20 text-slate-400 text-xs">
+                      Chưa có lịch sử chạy nào được lưu lại.
+                    </div>
+                  ) : (
+                    historyList.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => handleViewHistoryDetail(item)}
+                        className={cn(
+                          "w-full text-left p-3 rounded-xl transition-all border flex flex-col gap-1.5 cursor-pointer",
+                          selectedHistory?.id === item.id
+                            ? "bg-sky-50/70 border-sky-200 shadow-3xs"
+                            : "bg-white border-slate-150 hover:bg-slate-50"
+                        )}
+                      >
+                        <div className="flex justify-between items-start w-full">
+                          <span className="font-bold text-slate-800 text-[11px] flex items-center gap-1">
+                            {item.is_automated ? (
+                              <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-100 text-[9px] font-bold rounded">Auto</span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 text-[9px] font-bold rounded">Manual</span>
+                            )}
+                            {item.triggered_at_formatted ? item.triggered_at_formatted.split(' ')[0] : ''}
+                          </span>
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase",
+                            item.status === 'SUCCESS' ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                            item.status === 'RUNNING' ? "bg-amber-50 text-amber-700 border border-amber-200 animate-pulse" :
+                            "bg-rose-50 text-rose-700 border border-rose-200"
+                          )}>
+                            {item.status === 'SUCCESS' ? 'Thành công' : item.status === 'RUNNING' ? 'Đang chạy' : 'Thất bại'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] text-slate-500 font-semibold">
+                          <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-slate-400" /> {item.duration}</span>
+                          <span>{item.triggered_at_formatted ? item.triggered_at_formatted.split(' ')[1] : ''}</span>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Execution logs and counters detail */}
+              <div className="flex-1 flex flex-col bg-white overflow-hidden">
+                {selectedHistory ? (
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {/* Run Meta Info Cards */}
+                    <div className="p-4 bg-slate-50 border-b border-slate-150 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      {/* Clarivate block */}
+                      <div className="p-3 bg-white border border-slate-200 rounded-xl flex flex-col gap-1.5 shadow-3xs">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase select-none">Clarivate Scraped</span>
+                        {selectedHistory.clarivate_count > 0 && selectedHistory.clarivate_total > 0 ? (
+                          <span className="font-bold text-emerald-600 text-sm">+{selectedHistory.clarivate_count.toLocaleString()} dòng mới</span>
+                        ) : (
+                          <span className="font-bold text-slate-500 text-sm">Không có dữ liệu mới</span>
+                        )}
+                        <span className="text-[10px] text-slate-550 font-semibold select-none">
+                          Hiện tại: {(selectedHistory.clarivate_total > 0 ? selectedHistory.clarivate_total : selectedHistory.clarivate_count)?.toLocaleString() || '-'} dòng
+                        </span>
+                      </div>
+
+                      {/* SCImago block */}
+                      <div className="p-3 bg-white border border-slate-200 rounded-xl flex flex-col gap-1.5 shadow-3xs">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase select-none">SCImago Scraped</span>
+                        {selectedHistory.scimago_count > 0 && selectedHistory.scimago_total > 0 ? (
+                          <span className="font-bold text-emerald-600 text-sm">+{selectedHistory.scimago_count.toLocaleString()} dòng mới</span>
+                        ) : (
+                          <span className="font-bold text-slate-500 text-sm">Không có dữ liệu mới</span>
+                        )}
+                        <span className="text-[10px] text-slate-550 font-semibold select-none">
+                          Hiện tại: {(selectedHistory.scimago_total > 0 ? selectedHistory.scimago_total : selectedHistory.scimago_count)?.toLocaleString() || '-'} dòng
+                        </span>
+                      </div>
+
+                      {/* BioxBio block */}
+                      <div className="p-3 bg-white border border-slate-200 rounded-xl flex flex-col gap-1.5 shadow-3xs">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase select-none">BioxBio Scraped</span>
+                        {selectedHistory.bioxbio_count > 0 && selectedHistory.bioxbio_total > 0 ? (
+                          <span className="font-bold text-emerald-600 text-sm">+{selectedHistory.bioxbio_count.toLocaleString()} dòng mới</span>
+                        ) : (
+                          <span className="font-bold text-slate-500 text-sm">Không có dữ liệu mới</span>
+                        )}
+                        <span className="text-[10px] text-slate-550 font-semibold select-none">
+                          Hiện tại: {(selectedHistory.bioxbio_total > 0 ? selectedHistory.bioxbio_total : selectedHistory.bioxbio_count)?.toLocaleString() || '-'} dòng
+                        </span>
+                      </div>
+
+                      {/* Mapped block */}
+                      <div className="p-3 bg-white border border-slate-200 rounded-xl flex flex-col gap-1.5 shadow-3xs">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase select-none">Mapped Journals</span>
+                        {selectedHistory.mapped_count > 0 && selectedHistory.mapped_total > 0 ? (
+                          <span className="font-bold text-[#005b9a] text-sm">+{selectedHistory.mapped_count.toLocaleString()} dòng mới</span>
+                        ) : (
+                          <span className="font-bold text-slate-500 text-sm">Bỏ qua Mapping</span>
+                        )}
+                        <span className="text-[10px] text-slate-550 font-semibold select-none">
+                          Hiện tại: {(selectedHistory.mapped_total > 0 ? selectedHistory.mapped_total : selectedHistory.mapped_count)?.toLocaleString() || '-'} dòng
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Console logs header */}
+                    <div className="p-3 px-6 border-b border-slate-100 flex items-center justify-between text-slate-800 font-semibold text-xs bg-white">
+                      <span className="flex items-center gap-1.5"><Terminal className="w-4 h-4 text-[#005b9a]" /> Console Logs Log-output</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(historyDetailLogs)
+                          toast.success('Đã sao chép logs lượt chạy vào clipboard!')
+                        }}
+                        disabled={!historyDetailLogs || loadingDetail}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 rounded-md text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-800 cursor-pointer disabled:opacity-50"
+                      >
+                        <Copy className="w-3 h-3" /> Sao chép logs
+                      </button>
+                    </div>
+
+                    {/* Console terminal window - light theme (white background, border gray) */}
+                    <div className="flex-1 bg-white p-4 font-mono text-[11px] leading-relaxed text-slate-800 overflow-y-auto select-text scrollbar-thin border-t border-slate-100">
+                      {loadingDetail ? (
+                        <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400">
+                          <Loader2 className="w-6 h-6 animate-spin text-[#005b9a]" />
+                          <span>Đang tải log chi tiết...</span>
+                        </div>
+                      ) : historyDetailLogs ? (
+                        historyDetailLogs.split('\n').map((line, idx) => (
+                          <div key={idx} className="hover:bg-slate-100 py-0.5 rounded px-2 w-full break-words border-b border-slate-50">
+                            <span className="text-slate-400 select-none mr-3 inline-block w-6 text-right font-semibold">{(idx + 1)}</span>
+                            <span>{line}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-slate-500 italic p-4 text-center">Không tìm thấy bản ghi logs.</div>
+                      )}
+                      
+                      {selectedHistory.error_message && (
+                        <div className="mt-4 p-4 border border-rose-200 bg-rose-50/50 text-rose-950 rounded-lg text-xs leading-relaxed max-w-full overflow-x-auto whitespace-pre-wrap font-sans">
+                          <div className="font-bold text-rose-700 mb-1 flex items-center gap-1">
+                            <AlertCircle className="w-4 h-4" /> ERROR TRACEBACK:
+                          </div>
+                          {selectedHistory.error_message}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-400 gap-3 text-center p-6 bg-slate-50/30">
+                    <FileText className="w-12 h-12 opacity-35 text-[#005b9a]" />
+                    <h4 className="font-bold text-xs text-slate-700">Chọn một lượt chạy để xem logs.</h4>
+                    <p className="text-[10px] text-slate-400 max-w-xs leading-relaxed">
+                      Danh sách các lượt chạy thô trên cột bên trái chứa cả lịch cào tự động và kích hoạt bằng tay.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 px-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400 font-bold">
+              <span>HỆ THỐNG GHI NHẬT KÝ HOẠT ĐỘNG (MAX 50 LƯỢT GẦN NHẤT)</span>
+              <span className="text-[#005b9a]">EDU ECOSYSTEM SCHOLAR MATCHER</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

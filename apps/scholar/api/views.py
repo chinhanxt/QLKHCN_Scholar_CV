@@ -147,6 +147,112 @@ class CrawlerViewSet(viewsets.ViewSet):
         data = get_scholar_settings()
         return Response(data)
 
+    @action(detail=False, methods=["get"], url_path="history")
+    def history_list(self, request):
+        """
+        Lấy danh sách lịch sử các lượt chạy cào và mapping.
+        """
+        from apps.scholar.models import CrawlHistory
+        from rest_framework import serializers
+        
+        class CrawlHistorySerializer(serializers.ModelSerializer):
+            triggered_at_formatted = serializers.SerializerMethodField()
+            completed_at_formatted = serializers.SerializerMethodField()
+            duration = serializers.SerializerMethodField()
+
+            class Meta:
+                model = CrawlHistory
+                fields = [
+                    'id', 'task_id', 'created_at', 'triggered_at_formatted',
+                    'completed_at', 'completed_at_formatted', 'duration',
+                    'status', 'is_automated',
+                    'clarivate_count', 'scimago_count', 'bioxbio_count', 'mapped_count',
+                    'clarivate_total', 'scimago_total', 'bioxbio_total', 'mapped_total',
+                    'error_message'
+                ]
+
+            def get_triggered_at_formatted(self, obj):
+                from django.utils import timezone
+                if obj.created_at:
+                    local_dt = obj.created_at.astimezone(timezone.get_default_timezone())
+                    return local_dt.strftime('%H:%M:%S %d/%m/%Y')
+                return ""
+
+            def get_completed_at_formatted(self, obj):
+                from django.utils import timezone
+                if obj.completed_at:
+                    local_dt = obj.completed_at.astimezone(timezone.get_default_timezone())
+                    return local_dt.strftime('%H:%M:%S %d/%m/%Y')
+                return ""
+
+            def get_duration(self, obj):
+                if obj.created_at and obj.completed_at:
+                    diff = obj.completed_at - obj.created_at
+                    secs = int(diff.total_seconds())
+                    if secs < 60:
+                        return f"{secs}s"
+                    mins = secs // 60
+                    rem_secs = secs % 60
+                    return f"{mins}m {rem_secs}s"
+                return "--"
+
+        queryset = CrawlHistory.objects.all().order_by('-created_at')[:50]
+        serializer = CrawlHistorySerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="history-detail")
+    def history_detail(self, request, pk=None):
+        """
+        Lấy chi tiết log của một lượt chạy cụ thể.
+        """
+        from apps.scholar.models import CrawlHistory
+        try:
+            obj = CrawlHistory.objects.get(pk=pk)
+            return Response({
+                "id": obj.id,
+                "task_id": obj.task_id,
+                "status": obj.status,
+                "log_output": obj.log_output,
+                "error_message": obj.error_message
+            })
+        except CrawlHistory.DoesNotExist:
+            return Response({"error": "Không tìm thấy lịch sử lượt chạy."}, status=404)
+
+    @action(detail=False, methods=["get"], url_path="active-task")
+    def active_task(self, request):
+        from apps.scholar.tasks import get_scholar_settings
+        from celery.result import AsyncResult
+        
+        data = get_scholar_settings()
+        task_id = data.get('active_unified_task_id')
+        
+        last_run_info = {
+            "time": data.get("last_run_time"),
+            "status": data.get("last_run_status"),
+            "message": data.get("last_run_message"),
+        }
+        
+        if task_id:
+            res = AsyncResult(task_id)
+            if res.status in ('PENDING', 'PROGRESS'):
+                info = res.info or {}
+                if not isinstance(info, dict):
+                    info = {}
+                return Response({
+                    "task_id": task_id,
+                    "status": res.status,
+                    "progress": info.get('progress', 0),
+                    "message": info.get('message', ''),
+                    "last_run_info": last_run_info,
+                })
+        
+        return Response({
+            "task_id": None, 
+            "status": "IDLE",
+            "last_run_info": last_run_info,
+        })
+
+
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
         from django.db.models import Q
@@ -307,11 +413,25 @@ class CrawlerViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="delete-staging")
     def delete_staging(self, request):
         """
-        Xóa toàn bộ dữ liệu staging.
+        Xóa toàn bộ dữ liệu staging bằng Raw SQL cực nhanh.
         """
-        from apps.scholar.models import Journal
+        from django.db import transaction, connection
         try:
-            deleted_count, _ = Journal.objects.filter(is_staging=True).delete()
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT COUNT(*) FROM scholar_journals WHERE is_staging = TRUE")
+                    deleted_count = cursor.fetchone()[0]
+                    
+                    cursor.execute("""
+                        DELETE FROM scholar_journal_rankings 
+                        WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = TRUE)
+                    """)
+                    cursor.execute("""
+                        DELETE FROM scholar_journal_issns 
+                        WHERE journal_id IN (SELECT id FROM scholar_journals WHERE is_staging = TRUE)
+                    """)
+                    cursor.execute("DELETE FROM scholar_journals WHERE is_staging = TRUE")
+                    
             return Response({"status": "success", "deleted_count": deleted_count}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

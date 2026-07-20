@@ -134,6 +134,16 @@ export const scholarApi = {
   getSettings: () => 
     apiClient.get<any>('/scholar/crawlers/settings/'),
 
+  getActiveTask: () =>
+    apiClient.get<any>('/scholar/crawlers/active-task/'),
+
+  getCrawlHistory: () =>
+    apiClient.get<any[]>('/scholar/crawlers/history/'),
+
+  getCrawlHistoryDetail: (historyId: number) =>
+    apiClient.get<any>(`/scholar/crawlers/${historyId}/history-detail/`),
+
+
   saveSettings: (payload: any) => 
     apiClient.post<any>('/scholar/crawlers/settings/', payload),
 
