@@ -202,6 +202,11 @@ class AuthorProfile(BaseModel):
     i10index = models.IntegerField(_("i10-Index"), default=0)
     interests = models.JSONField(_("Interests"), default=list, blank=True)
     
+    auto_scan_enabled = models.BooleanField(_("Auto Scan Enabled"), default=True)
+    last_scraped_at = models.DateTimeField(_("Last Scraped At"), null=True, blank=True)
+    last_scan_status = models.CharField(_("Last Scan Status"), max_length=50, default="PENDING")
+    publication_count_cached = models.IntegerField(_("Publication Count Cached"), default=0)
+
     class Meta:
         db_table = "scholar_authors"
         verbose_name = _("Author Profile")
@@ -210,6 +215,29 @@ class AuthorProfile(BaseModel):
 
     def __str__(self):
         return self.name
+
+
+class AutoScanConfig(models.Model):
+    is_active = models.BooleanField(_("Is Active"), default=True)
+    scan_interval_hours = models.IntegerField(_("Scan Interval Hours"), default=24)
+    batch_size_per_hour = models.IntegerField(_("Batch Size Per Hour"), default=8)
+    delay_min_seconds = models.IntegerField(_("Delay Min Seconds"), default=8)
+    delay_max_seconds = models.IntegerField(_("Delay Max Seconds"), default=15)
+    cooldown_min_seconds = models.IntegerField(_("Cooldown Min Seconds"), default=45)
+    cooldown_max_seconds = models.IntegerField(_("Cooldown Max Seconds"), default=90)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "scholar_auto_scan_config"
+        verbose_name = _("Auto Scan Config")
+        verbose_name_plural = _("Auto Scan Configs")
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(id=1)
+        return obj
+
 
 
 class Publication(BaseModel):
