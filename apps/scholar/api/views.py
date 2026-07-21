@@ -1,10 +1,14 @@
 import logging
-from rest_framework import viewsets, status
+import os
+from rest_framework import viewsets, status, permissions
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 
-from apps.scholar.models import AuthorProfile
+from apps.scholar.models import AuthorProfile, AutoScanConfig
+from apps.scholar.scholarly.tor_helper import renew_tor_ip, get_tor_status
+from apps.scholar.tasks import scrape_author_cv_smart_task
 from apps.scholar.api.serializers import (
     AuthorProfileSerializer,
     ScrapeAuthorRequestSerializer,
@@ -665,5 +669,83 @@ class CrawlerViewSet(viewsets.ViewSet):
         return Response(serializer.data)
 
 
+class TorStatusView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        tor_info = get_tor_status(
+            control_host=os.environ.get("TOR_CONTROL_HOST", "tor"),
+            control_port=int(os.environ.get("TOR_CONTROL_PORT", 9051))
+        )
+        return Response(tor_info)
+
+    def post(self, request):
+        success = renew_tor_ip(
+            control_host=os.environ.get("TOR_CONTROL_HOST", "tor"),
+            control_port=int(os.environ.get("TOR_CONTROL_PORT", 9051)),
+            rebuild_wait=5
+        )
+        if success:
+            return Response({"message": "Tor IP renewed successfully (NEWNYM signal sent)"})
+        return Response({"error": "Failed to renew Tor IP"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class BulkImportAuthorsView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        raw_text = request.data.get("scholar_ids_or_urls", "")
+        lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+        imported = []
+
+        for line in lines:
+            scholar_id = line
+            if "user=" in line:
+                scholar_id = line.split("user=")[1].split("&")[0]
+            
+            author, created = AuthorProfile.objects.get_or_create(
+                scholar_id=scholar_id,
+                defaults={
+                    "name": f"Author {scholar_id}",
+                    "auto_scan_enabled": True,
+                    "last_scan_status": "PENDING"
+                }
+            )
+            if not created and not author.auto_scan_enabled:
+                author.auto_scan_enabled = True
+                author.save(update_fields=["auto_scan_enabled"])
+
+            if created or request.data.get("trigger_now"):
+                scrape_author_cv_smart_task.delay(author.id)
+            imported.append({"id": author.id, "scholar_id": scholar_id, "created": created})
+
+        return Response({"message": f"Successfully imported {len(imported)} CVs", "data": imported})
+
+
+class AutoScanConfigView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        config = AutoScanConfig.get_solo()
+        return Response({
+            "is_active": config.is_active,
+            "scan_interval_hours": config.scan_interval_hours,
+            "batch_size_per_hour": config.batch_size_per_hour,
+            "delay_min_seconds": config.delay_min_seconds,
+            "delay_max_seconds": config.delay_max_seconds,
+            "cooldown_min_seconds": config.cooldown_min_seconds,
+            "cooldown_max_seconds": config.cooldown_max_seconds,
+        })
+
+    def patch(self, request):
+        config = AutoScanConfig.get_solo()
+        fields = [
+            "is_active", "scan_interval_hours", "batch_size_per_hour", 
+            "delay_min_seconds", "delay_max_seconds", 
+            "cooldown_min_seconds", "cooldown_max_seconds"
+        ]
+        for field in fields:
+            if field in request.data:
+                setattr(config, field, request.data[field])
+        config.save()
+        return Response({"message": "Configuration updated successfully"})
