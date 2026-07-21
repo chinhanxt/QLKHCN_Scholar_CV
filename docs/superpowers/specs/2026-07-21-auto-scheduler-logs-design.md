@@ -1,4 +1,4 @@
-# Design Spec: Auto-Scheduler Real-Time Execution Log System & Data Control Panel
+# Design Spec: Auto-Scheduler Floating Modal Log System (Vietnamese & Light Theme)
 
 **Date:** 2026-07-21  
 **Status:** Approved  
@@ -7,62 +7,63 @@
 ---
 
 ## 1. Overview
-The **Scholar Auto Scheduler & Tor Control** page (`/scholar/auto-scheduler`) handles automated background author CV scanning, bulk imports, Tor SOCKS5 proxy rotation, and schedule configurations. 
-
-This feature introduces a **Real-Time Execution Log System & Data Control Panel** on `/scholar/auto-scheduler` that records, categorizes, and displays all activities, data updates, and background scan results with clear visual distinction.
+Redesign the **Scholar Auto Scheduler & Tor Control** page (`/scholar/auto-scheduler`) log system:
+1. Replace inline dark terminal box with a **Floating Modal Dialog (Form nổi)** triggered by a prominent header action button: `📋 Nhật Ký Cào Dữ Liệu`.
+2. Use a clean **Light Theme (Màn trắng - `bg-white`)** matching the rest of the application styling.
+3. 100% Vietnamese localization for all labels, statuses, categories, badges, and messages (except proper nouns like `Tor`, `Google Scholar`, `ID`, `SOCKS5`).
+4. Simplify logging: Focus on recording event history (cào/quét CV, lỗi, thành công, nhập CV, đổi IP Tor, lưu cấu hình) without complex real-time streaming polling overhead.
 
 ---
 
-## 2. Log Data Model & Categories
+## 2. Log Model & Categories (Vietnamese)
 
-### A. AutoSchedulerLogEntry Interface
 ```typescript
 export interface AutoSchedulerLogEntry {
   id: string
   timestamp: string // HH:mm:ss DD/MM/YYYY
-  category: 'IMPORT' | 'SCAN' | 'TOR' | 'CONFIG' | 'SYSTEM'
-  level: 'SUCCESS' | 'INFO' | 'UPDATE' | 'WARN' | 'ERROR'
-  action: string // e.g. "Bulk Import", "Fast Smart Check", "Tor IP Rotate", "Config Update"
-  target?: string // Author name or Scholar ID or system component
-  details: string // Description of what ran & what updated
+  category: 'CÀO_CV' | 'NHẬP_CV' | 'PROXY_TOR' | 'CẤU_HÌNH' | 'HỆ_THỐNG'
+  level: 'THÀNH_CÔNG' | 'BÁO_LỖI' | 'CẢNH_BÁO' | 'THÔNG_TIN'
+  action: string // Tên hành động tiếng Việt
+  target?: string // Tên tác giả hoặc Scholar ID
+  details: string // Nội dung chi tiết kết quả cào / lỗi
 }
 ```
-
-### B. Categories & Color-Coded Badges
-- `IMPORT` (`#005b9a` blue): Bulk author CV import & validation.
-- `SCAN` (`#7c3aed` purple / `#2563eb` blue): Fast Smart Check, background scan triggers, author status updates.
-- `TOR` (`#4f46e5` indigo): Tor Proxy startup, IP rotation (NEWNYM signal), IP renewal confirmation.
-- `CONFIG` (`#0f172a` slate): Schedule frequency, batch size, delay/cooldown updates.
-- `SYSTEM` (`#64748b` gray): Initialization, system status refresh.
 
 ---
 
 ## 3. UI Component Architecture
 
-### Log Console Component Layout
-In `ScholarAutoSchedulerPage.tsx`:
-1. **Log Panel Container Card**:
-   - Header with Terminal/Activity icon, log counter, and live status indicator ("● LIVE LOGGING").
-   - Filter controls:
-     - Search input (filter by keyword/author).
-     - Category filter tabs (`All`, `Scan CV`, `Import`, `Tor Proxy`, `Config`).
-     - Level filter select (`All Levels`, `Success`, `Update`, `Warning`, `Error`).
-     - Action buttons: `Clear Logs`, `Export Log (TXT/JSON)`, `Auto-Scroll Toggle`.
-   - Scrollable Terminal-style Log Box:
-     - Fixed height (e.g. 380px) with custom scrollbar.
-     - Dark slate styling (`bg-slate-950 text-slate-100 font-mono text-xs`).
-     - Each line includes: Timestamp badge, Category tag, Level badge, Action/Target name, and Detail message.
-2. **Log Trigger Hooks**:
-   - Automatic logging when user performs actions (Bulk import, IP rotation, Config update, Manual scan trigger).
-   - Automated status monitoring logs when background job status (`config.current_job_status` or author status) changes during polling.
-3. **Persistence**:
-   - Store log entries in `localStorage` (`auto_scheduler_logs`) up to 200 entries to maintain history across page refreshes.
+### A. Action Button on Main Page
+- Positioned in page header / section header.
+- Text: `📋 Nhật Ký Cào Dữ Liệu` with counter badge `(N)`.
+
+### B. Floating Log Modal (`isLogModalOpen`)
+- White background (`bg-white`), `rounded-3xl`, `max-w-4xl`, backdrop blur.
+- Header:
+  - Title: **"Nhật Ký Hoạt Động & Kết Quả Quét CV"**
+  - Subtitle: *"Lưu vết thông tin cào dữ liệu, trạng thái thành công và báo lỗi"*
+  - Close button (`X`).
+- Filters:
+  - Search input: `Tìm kiếm từ khóa, tên tác giả, ID...`
+  - Category filter select: `Tất cả danh mục`, `Quét & Cào CV`, `Nhập danh sách CV`, `Proxy Tor`, `Cấu hình hệ thống`.
+  - Level filter select: `Tất cả kết quả`, `Thành công`, `Báo lỗi`, `Cảnh báo`, `Thông tin`.
+- Log Item List (Light Theme):
+  - Scrollable container (`max-h-[60vh]`).
+  - Item card with light badges:
+    - `THÀNH_CÔNG`: Green badge (`bg-emerald-50 text-emerald-700 border-emerald-200`)
+    - `BÁO_LỖI`: Red badge (`bg-rose-50 text-rose-700 border-rose-200`)
+    - `CẢNH_BÁO`: Yellow badge (`bg-amber-50 text-amber-700 border-amber-200`)
+    - `THÔNG_TIN`: Blue badge (`bg-blue-50 text-blue-700 border-blue-200`)
+  - Displays Timestamp, Action, Target Author, and Detailed message.
+- Footer:
+  - Button: `Xuất file nhật ký (TXT/JSON)`
+  - Button: `Xóa nhật ký`
+  - Button: `Đóng`
 
 ---
 
 ## 4. Verification & Testing Plan
-- Execute actions (rotate IP, update config, import IDs, trigger scan).
-- Verify log entries are generated with correct category, level, timestamp, and details.
-- Test filtering by category, level, and search keyword.
-- Verify log persistence in `localStorage` across page reloads.
-- Run `npm run build` to confirm TypeScript compilation.
+- Test opening/closing the log modal.
+- Verify logging when doing actions (Import CV, Scan authors, Rotate Tor IP, Save config).
+- Verify filters and search work correctly in light theme modal.
+- Verify TypeScript compilation via `npm run build`.
