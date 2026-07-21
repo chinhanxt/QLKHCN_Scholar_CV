@@ -53,18 +53,7 @@ const WEEKDAYS = [
   { value: 6, label: 'Chủ Nhật' },
 ]
 
-const HOUR_SLOTS = Array.from({ length: 24 }, (_, i) => {
-  let period = 'Đêm'
-  if (i >= 6 && i < 12) period = 'Sáng'
-  else if (i >= 12 && i < 14) period = 'Trưa'
-  else if (i >= 14 && i < 18) period = 'Chiều'
-  else if (i >= 18) period = 'Tối'
-  return {
-    hour: i,
-    label: `${i < 10 ? '0' : ''}${i}:00`,
-    period,
-  }
-})
+
 
 export function ScholarAutoSchedulerPage() {
   const [torInfo, setTorInfo] = useState<any>(null)
@@ -936,13 +925,13 @@ export function ScholarAutoSchedulerPage() {
           {/* Grid Layout: Calendar & Analog Clock */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-1">
             {/* Left Column: 📅 Chọn Ngày Cào (Select Date - Calendar Widget) */}
-            <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/70 space-y-3 flex flex-col justify-between">
+            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-xl shadow-slate-200/50 space-y-4 flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                   <Calendar className="w-4 h-4 text-[#005b9a]" />
                   <span>📅 Chọn Ngày Cào (Select Date)</span>
                 </label>
-                <span className="text-[11px] font-mono font-semibold text-slate-600 bg-white px-2.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-mono font-semibold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200/70">
                   {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && `Lặp lại: ${WEEKDAYS.find(w => w.value === (config.preferred_weekday ?? 0))?.label}`}
                   {config.frequency_type === 'MONTHLY' && `Lặp lại: Ngày ${config.preferred_day_of_month ?? 1} hằng tháng`}
                   {config.frequency_type === 'DAILY' && '⚡ Lặp lại hằng ngày'}
@@ -981,10 +970,10 @@ export function ScholarAutoSchedulerPage() {
                                 setConfig((prev: any) => ({ ...prev, preferred_weekday: w.value }))
                                 addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chọn Thứ cào CV', `Đã chọn ${w.label} hàng tuần`, 'WeekdayPill')
                               }}
-                              className={`py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer text-center ${
+                              className={`py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer text-center ${
                                 isSelected
-                                  ? 'bg-[#005b9a] text-white shadow-xs'
-                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                  ? 'bg-[#00A3E0] text-white shadow-xs'
+                                  : 'bg-slate-100/70 text-slate-600 border border-slate-200/70 hover:bg-slate-100'
                               }`}
                             >
                               {w.label}
@@ -996,16 +985,51 @@ export function ScholarAutoSchedulerPage() {
                   )}
 
                   {/* Month Navigation & Calendar Grid */}
-                  <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs space-y-2">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="font-bold text-slate-800 text-xs">
-                        Tháng {currentCalendarDate.getMonth() + 1}, {currentCalendarDate.getFullYear()}
-                      </span>
+                  <div className="bg-white p-3 rounded-2xl space-y-2">
+                    {/* Header with Soft Pill Month & Year selects */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={currentCalendarDate.getMonth()}
+                          onChange={(e) =>
+                            setCurrentCalendarDate(
+                              new Date(currentCalendarDate.getFullYear(), parseInt(e.target.value, 10), 1)
+                            )
+                          }
+                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
+                        >
+                          {[
+                            'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+                            'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
+                          ].map((m, idx) => (
+                            <option key={idx} value={idx}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={currentCalendarDate.getFullYear()}
+                          onChange={(e) =>
+                            setCurrentCalendarDate(
+                              new Date(parseInt(e.target.value, 10), currentCalendarDate.getMonth(), 1)
+                            )
+                          }
+                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
+                        >
+                          {Array.from({ length: 7 }, (_, i) => 2024 + i).map((y) => (
+                            <option key={y} value={y}>
+                              {y}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={handlePrevMonth}
-                          className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-full hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
                           title="Tháng trước"
                         >
                           <ChevronLeft className="w-4 h-4" />
@@ -1013,7 +1037,7 @@ export function ScholarAutoSchedulerPage() {
                         <button
                           type="button"
                           onClick={handleNextMonth}
-                          className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-full hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
                           title="Tháng sau"
                         >
                           <ChevronRight className="w-4 h-4" />
@@ -1021,23 +1045,37 @@ export function ScholarAutoSchedulerPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-7 gap-1 text-center font-semibold text-[11px] text-slate-500 border-b border-slate-100 pb-1">
-                      {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map((dayName) => (
-                        <div key={dayName} className="py-0.5">{dayName}</div>
+                    {/* Weekday Row */}
+                    <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-slate-400 tracking-wider py-2 border-b border-slate-100 mb-2">
+                      {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((dayName) => (
+                        <div key={dayName}>{dayName}</div>
                       ))}
                     </div>
 
+                    {/* Day Grid with Previous Month, Current Month, and Next Month Days */}
                     {(() => {
                       const year = currentCalendarDate.getFullYear()
                       const month = currentCalendarDate.getMonth()
                       const firstDayIndex = new Date(year, month, 1).getDay()
                       const totalDays = new Date(year, month + 1, 0).getDate()
-                      const daysArray = []
+                      const prevMonthLastDate = new Date(year, month, 0).getDate()
 
-                      for (let i = 0; i < firstDayIndex; i++) {
-                        daysArray.push(<div key={`empty-${i}`} className="w-7 h-7 mx-auto" />)
+                      const daysElements = []
+
+                      // 1. Previous month padding days
+                      for (let i = firstDayIndex - 1; i >= 0; i--) {
+                        const prevDay = prevMonthLastDate - i
+                        daysElements.push(
+                          <div
+                            key={`prev-${prevDay}`}
+                            className="text-slate-300 font-medium text-xs w-8 h-8 flex items-center justify-center mx-auto"
+                          >
+                            {prevDay}
+                          </div>
+                        )
                       }
 
+                      // 2. Current month days
                       for (let d = 1; d <= totalDays; d++) {
                         const clickedDate = new Date(year, month, d)
                         const weekday = (clickedDate.getDay() + 6) % 7
@@ -1046,7 +1084,7 @@ export function ScholarAutoSchedulerPage() {
                           ? (config.preferred_day_of_month ?? 1) === d
                           : (config.preferred_weekday ?? 0) === weekday
 
-                        daysArray.push(
+                        daysElements.push(
                           <button
                             key={`day-${d}`}
                             type="button"
@@ -1064,18 +1102,32 @@ export function ScholarAutoSchedulerPage() {
                                 'CalendarWidget'
                               )
                             }}
-                            className={`w-7 h-7 rounded-full text-xs transition-all cursor-pointer mx-auto flex items-center justify-center ${
+                            className={
                               isSelected
-                                ? 'bg-[#005b9a] text-white font-bold shadow-md ring-2 ring-blue-300 scale-105'
-                                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-100 font-medium'
-                            }`}
+                                ? 'bg-[#00A3E0] text-white font-bold rounded-full w-8 h-8 flex items-center justify-center shadow-md shadow-cyan-400/40 scale-105 transition-all mx-auto cursor-pointer'
+                                : 'text-slate-800 font-bold text-xs w-8 h-8 flex items-center justify-center mx-auto rounded-full hover:bg-slate-100 cursor-pointer transition-all'
+                            }
                           >
                             {d}
                           </button>
                         )
                       }
 
-                      return <div className="grid grid-cols-7 gap-1">{daysArray}</div>
+                      // 3. Next month padding days
+                      const totalGridCells = Math.ceil((firstDayIndex + totalDays) / 7) * 7
+                      const nextMonthDaysCount = totalGridCells - (firstDayIndex + totalDays)
+                      for (let nextD = 1; nextD <= nextMonthDaysCount; nextD++) {
+                        daysElements.push(
+                          <div
+                            key={`next-${nextD}`}
+                            className="text-slate-300 font-medium text-xs w-8 h-8 flex items-center justify-center mx-auto"
+                          >
+                            {nextD}
+                          </div>
+                        )
+                      }
+
+                      return <div className="grid grid-cols-7 gap-1">{daysElements}</div>
                     })()}
                   </div>
                 </div>
@@ -1083,76 +1135,132 @@ export function ScholarAutoSchedulerPage() {
             </div>
 
             {/* Right Column: 🕒 Chọn Giờ Kích Hoạt (Set Time - Analog Clock Widget) */}
-            <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/70 space-y-3 flex flex-col justify-between">
+            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-xl shadow-slate-200/50 space-y-4 flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-[#005b9a]" />
                   <span>🕒 Chọn Giờ Kích Hoạt (Set Time)</span>
                 </label>
-                <span className="text-[11px] font-mono text-[#005b9a] font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                  {HOUR_SLOTS.find(h => h.hour === (config.preferred_hour ?? 2))?.label}
+                <span className="text-[11px] font-mono text-[#005b9a] font-bold bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
+                  {((config.preferred_hour ?? 2) < 10 ? `0${config.preferred_hour ?? 2}` : config.preferred_hour ?? 2)}:{(config.preferred_minute ?? 0) < 10 ? `0${config.preferred_minute ?? 0}` : config.preferred_minute ?? 0}
                 </span>
               </div>
 
-              {/* Visual Analog Clock Face */}
+              {/* Visual Soft Analog Clock Face */}
               <div className="py-2">
-                <div className="w-40 h-40 border-4 border-slate-800 rounded-full bg-white relative shadow-lg mx-auto flex items-center justify-center">
-                  {/* Hour tick marks */}
+                <div className="w-44 h-44 border-4 border-slate-100 rounded-full bg-slate-50/60 relative shadow-inner mx-auto flex items-center justify-center border-slate-200/60">
+                  {/* 12 tick marks */}
                   {Array.from({ length: 12 }).map((_, i) => (
                     <div
                       key={i}
-                      style={{ transform: `rotate(${i * 30}deg) translateY(-64px)` }}
-                      className="absolute w-1 h-2.5 bg-slate-400 rounded-full"
+                      style={{ transform: `rotate(${i * 30}deg) translateY(-70px)` }}
+                      className="absolute w-1 h-2.5 bg-slate-300 rounded-full"
                     />
                   ))}
                   {/* Hour Hand */}
-                  <div
-                    style={{ transform: `rotate(${((config.preferred_hour ?? 2) % 12) * 30 + (config.preferred_minute ?? 0) * 0.5}deg)` }}
-                    className="w-1.5 h-11 bg-slate-900 absolute top-5 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
-                  />
-                  {/* Minute Hand */}
-                  <div
-                    style={{ transform: 'rotate(0deg)' }}
-                    className="w-1 h-14 bg-rose-500 absolute top-3 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
-                  />
+                  {(() => {
+                    const hour24 = config.preferred_hour ?? 2
+                    const minute = config.preferred_minute ?? 0
+                    const hour12 = hour24 % 12
+                    const hourAngle = hour12 * 30 + minute * 0.5
+                    const minuteAngle = minute * 6
+                    return (
+                      <>
+                        <div
+                          style={{ transform: `rotate(${hourAngle}deg)` }}
+                          className="w-1.5 h-12 bg-slate-700 absolute top-5 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
+                        />
+                        <div
+                          style={{ transform: `rotate(${minuteAngle}deg)` }}
+                          className="w-1 h-16 bg-[#00A3E0] absolute top-3 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
+                        />
+                      </>
+                    )
+                  })()}
                   {/* Center pivot dot */}
-                  <div className="w-3 h-3 bg-slate-900 rounded-full z-10 border-2 border-white" />
+                  <div className="w-3 h-3 bg-slate-800 rounded-full z-10 border-2 border-white shadow-xs" />
                 </div>
               </div>
 
-              {/* Digital Time Controls under clock face */}
+              {/* Digital Time Controls: Soft Pill Selectors */}
               <div className="flex flex-col items-center gap-2">
                 <div className="flex items-center gap-2">
-                  <select
-                    value={config.preferred_hour ?? 2}
-                    onChange={(e) => {
-                      const hour = parseInt(e.target.value, 10)
-                      setConfig((prev: any) => ({ ...prev, preferred_hour: hour }))
-                      addSchedulerLog(
-                        'CẤU_HÌNH',
-                        'THÔNG_TIN',
-                        'Chọn giờ cào CV',
-                        `Đã chọn mốc giờ ${hour.toString().padStart(2, '0')}:00`,
-                        'ClockWidget'
-                      )
-                    }}
-                    className="border border-slate-200 rounded-xl px-3 py-1.5 font-mono font-bold text-xs bg-white text-slate-800 focus:outline-none focus:border-[#005b9a] cursor-pointer shadow-2xs"
-                  >
-                    {HOUR_SLOTS.map((slot) => (
-                      <option key={slot.hour} value={slot.hour}>
-                        {slot.label} ({slot.period})
-                      </option>
-                    ))}
-                  </select>
-                  <span className="px-2.5 py-1.5 bg-slate-100 border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-600 shadow-2xs">
-                    :00
-                  </span>
-                </div>
+                  {/* Hour Select Pill */}
+                  {(() => {
+                    const hour24 = config.preferred_hour ?? 2
+                    const minute = config.preferred_minute ?? 0
+                    const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12
+                    const ampm = hour24 >= 12 ? 'PM' : 'AM'
 
-                <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-[#005b9a] text-[11px] font-bold">
-                  <span>
-                    ({(config.preferred_hour ?? 2) < 10 ? `0${config.preferred_hour ?? 2}` : config.preferred_hour ?? 2}:00 - {HOUR_SLOTS.find(h => h.hour === (config.preferred_hour ?? 2))?.period})
-                  </span>
+                    return (
+                      <>
+                        <select
+                          value={hour12}
+                          onChange={(e) => {
+                            const selectedH12 = parseInt(e.target.value, 10)
+                            let newH24 = selectedH12
+                            if (ampm === 'PM') {
+                              newH24 = selectedH12 === 12 ? 12 : selectedH12 + 12
+                            } else {
+                              newH24 = selectedH12 === 12 ? 0 : selectedH12
+                            }
+                            setConfig((prev: any) => ({ ...prev, preferred_hour: newH24 }))
+                            addSchedulerLog(
+                              'CẤU_HÌNH',
+                              'THÔNG_TIN',
+                              'Chọn giờ cào CV',
+                              `Đã chọn mốc giờ ${newH24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
+                              'ClockWidget'
+                            )
+                          }}
+                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                            <option key={h} value={h}>
+                              {h < 10 ? `0${h}` : h}
+                            </option>
+                          ))}
+                        </select>
+
+                        <span className="text-slate-400 font-bold">:</span>
+
+                        {/* Minute Select Pill */}
+                        <select
+                          value={minute}
+                          onChange={(e) => {
+                            const selectedMin = parseInt(e.target.value, 10)
+                            setConfig((prev: any) => ({ ...prev, preferred_minute: selectedMin }))
+                          }}
+                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
+                        >
+                          {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                            <option key={m} value={m}>
+                              {m < 10 ? `0${m}` : m}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* AM/PM Select Pill */}
+                        <select
+                          value={ampm}
+                          onChange={(e) => {
+                            const newAmPm = e.target.value
+                            let newH24 = hour12
+                            if (newAmPm === 'PM') {
+                              newH24 = hour12 === 12 ? 12 : hour12 + 12
+                            } else {
+                              newH24 = hour12 === 12 ? 0 : hour12
+                            }
+                            setConfig((prev: any) => ({ ...prev, preferred_hour: newH24 }))
+                          }}
+                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             </div>
@@ -1195,9 +1303,9 @@ export function ScholarAutoSchedulerPage() {
             <button
               onClick={handleSaveConfig}
               disabled={loadingConfig}
-              className="w-full px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs cursor-pointer transition-all shadow-md flex items-center justify-center gap-2"
+              className="w-full bg-[#E6F4EA] text-[#137333] hover:bg-[#D2E3FC] hover:text-[#174EA6] disabled:opacity-50 font-bold py-2.5 px-6 rounded-full border border-emerald-200/60 shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 text-xs"
             >
-              {loadingConfig ? <Spinner className="w-4 h-4 text-white" /> : <Settings className="w-4 h-4 text-cyan-300" />}
+              {loadingConfig ? <Spinner className="w-4 h-4 text-emerald-700" /> : <Settings className="w-4 h-4 text-[#137333]" />}
               Lưu Cấu Hình Hẹn Giờ
             </button>
           </div>
