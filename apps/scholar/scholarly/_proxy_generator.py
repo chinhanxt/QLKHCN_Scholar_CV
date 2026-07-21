@@ -159,13 +159,13 @@ class ProxyGenerator(object):
     def Tor(self, socks_host="tor", socks_port=9050):
         """Setups SOCKS5 proxy via Tor gateway container."""
         proxy = f"socks5h://{socks_host}:{socks_port}"
-        proxy_works = self._use_proxy(http=proxy, https=proxy)
-        if proxy_works:
-            self.logger.info("Tor proxy set up successfully")
-            self.proxy_mode = ProxyMode.TOR
-        else:
-            self.logger.warning("Unable to setup Tor proxy at %s", proxy)
-        return proxy_works
+        self._proxies = {'http': proxy, 'https': proxy}
+        self._proxy_works = True
+        self.proxy_mode = ProxyMode.TOR
+        self._can_refresh_tor = True
+        self._new_session(proxies=self._proxies)
+        self.logger.info("Tor proxy set up successfully at %s", proxy)
+        return True
 
     def _check_proxy(self, proxies) -> bool:
         """Checks if a proxy is working.
@@ -693,12 +693,17 @@ class ProxyGenerator(object):
 
     def get_next_proxy(self, num_tries = None, old_timeout = 3, old_proxy=None):
         new_timeout = old_timeout
-        if self._can_refresh_tor:
-            # Check if Tor is running and refresh it
-            self.logger.info("Refreshing Tor ID...")
-            self._refresh_tor_id(self._tor_control_port, self._tor_password)
-            time.sleep(5) # wait for the refresh to happen
-            new_timeout = self._TIMEOUT # Reset timeout to default
+        if self.proxy_mode == ProxyMode.TOR or self._can_refresh_tor:
+            self.logger.info("Refreshing Tor Exit Node IP via NEWNYM...")
+            try:
+                from apps.scholar.scholarly.tor_helper import renew_tor_ip
+                control_host = os.environ.get("TOR_CONTROL_HOST", "tor")
+                control_port = int(os.environ.get("TOR_CONTROL_PORT", 9051))
+                renew_tor_ip(control_host=control_host, control_port=control_port, rebuild_wait=1.5)
+            except Exception as e:
+                self.logger.warning("Tor renewal failed: %s", e)
+            new_timeout = self._TIMEOUT
+            self._new_session(proxies=self._proxies)
         elif self._proxy_gen:
             if (num_tries):
                 self.logger.info("Try #%d failed. Switching proxy.", num_tries)

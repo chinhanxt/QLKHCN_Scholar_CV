@@ -182,8 +182,15 @@ def setup_scholarly_proxy():
     config = get_scholar_settings()
     mode = config.get('SCHOLAR_PROXY_MODE', 'DIRECT')
     
-    if not mode or mode == 'DIRECT':
-        logger.info("Scholarly: No proxy configured, using direct connection.")
+    if not mode or mode == 'DIRECT' or mode == 'TOR':
+        # Try setting up Tor Proxy with Host Fallback first if available
+        from apps.scholar.scholarly.tor_helper import setup_tor_proxy_with_fallback
+        tor_host = os.environ.get("TOR_SOCKS_HOST", "tor")
+        tor_port = int(os.environ.get("TOR_SOCKS_PORT", 9050))
+        if setup_tor_proxy_with_fallback(socks_host=tor_host, socks_port=tor_port):
+            logger.info("Scholarly: Configured Tor SOCKS5 Proxy successfully.")
+            return scholarly
+        logger.info("Scholarly: Tor Proxy not available, using direct connection.")
         scholarly.use_proxy(None)
         return scholarly
         
@@ -242,21 +249,68 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
         logger.exception("Proxy setup failed")
         raise Exception(f"Proxy setup error: {str(e)}") from e
         
-    self.update_state(state='PROGRESS', meta={'message': f"Fetching author profile: {author_id}...", 'progress': 15})
-    
-    try:
-        author = scholarly_instance.search_author_id(author_id)
-    except Exception as e:
+    tor_host = os.environ.get("TOR_SOCKS_HOST", "tor")
+    tor_port = int(os.environ.get("TOR_SOCKS_PORT", 9050))
+    control_host = os.environ.get("TOR_CONTROL_HOST", "tor")
+    control_port = int(os.environ.get("TOR_CONTROL_PORT", 9051))
+    password = os.environ.get("TOR_PASSWORD", "scholar_secret_control_pass")
+
+    max_attempts = 6
+    author = None
+    last_err = None
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            if attempt == 1:
+                msg = f"Đang kết nối Tor Proxy & cào hồ sơ tác giả: {author_id}..."
+            else:
+                msg = f"Tự động đổi IP Tor thành công. Đang thử lại cào hồ sơ cho {author_id} (Lần {attempt}/{max_attempts})..."
+
+            self.update_state(state='PROGRESS', meta={'message': msg, 'progress': 15})
+
+            from apps.scholar.scholarly.tor_helper import renew_tor_ip, setup_tor_proxy_with_fallback
+            setup_tor_proxy_with_fallback(socks_host=tor_host, socks_port=tor_port)
+
+            author = scholarly_instance.search_author_id(author_id, filled=False)
+            if author:
+                break
+        except Exception as e:
+            last_err = e
+            logger.warning(f"Single CV Scraper Attempt {attempt}/{max_attempts} failed for ID {author_id}: {e}")
+            if attempt < max_attempts:
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'message': f"Bị Google Scholar chặn IP (Lần {attempt}). Đang phát tín hiệu NEWNYM tự động đổi IP Tor mới...",
+                        'progress': 15
+                    }
+                )
+                renew_tor_ip(control_host=control_host, control_port=control_port, password=password, rebuild_wait=1.5)
+
+    if not author:
         logger.exception(f"Author fetch failed for ID {author_id}")
-        raise Exception(f"Author profile not found: {str(e)}") from e
-        
-    self.update_state(state='PROGRESS', meta={'message': f"Filling publications (limit={limit})...", 'progress': 30})
-    
+        raise Exception(f"Đã tự động đổi {max_attempts} IP Tor nhưng vẫn bị Google Captcha cho ID {author_id}: {str(last_err)}")
+
+    author_name = author.get("name", author_id)
+    initial_pubs = author.get("publications", [])
+    initial_count = len(initial_pubs)
+
+    msg = f"Đã tìm thấy hồ sơ tác giả: {author_name} ({initial_count} bài báo trang 1). Đang nạp dữ liệu..."
+    self.update_state(state='PROGRESS', meta={'message': msg, 'progress': 35})
+
     try:
-        author = scholarly_instance.fill(author, sections=['basics', 'indices', 'counts', 'publications'], publication_limit=limit)
+        if limit > 0 and limit <= 100 and initial_count >= limit:
+            # We already have all requested publications from Page 1! No extra pub list requests needed!
+            author = scholarly_instance.fill(author, sections=['basics', 'indices', 'counts'])
+            author['publications'] = initial_pubs[:limit]
+        elif limit > 0 and limit <= 100:
+            author = scholarly_instance.fill(author, sections=['basics', 'indices', 'counts', 'publications'], publication_limit=limit)
+        else: # limit == 0 (Unlimited)
+            self.update_state(state='PROGRESS', meta={'message': f"Đang nạp toàn bộ bài báo cho {author_name}...", 'progress': 45})
+            author = scholarly_instance.fill(author, sections=['basics', 'indices', 'counts', 'publications'], publication_limit=0)
     except Exception as e:
         logger.exception(f"Author fill failed for ID {author_id}")
-        raise Exception(f"Failed to fill profile details: {str(e)}") from e
+        raise Exception(f"Failed to fill profile details for {author_name}: {str(e)}") from e
         
     pubs = author.get('publications', [])
     total_pubs = len(pubs)
@@ -267,30 +321,32 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
         import concurrent.futures
         import random
         import threading
-        
+
         state_lock = threading.Lock()
         processed_count = 0
-        
-        # Determine speed and concurrency based on Proxy settings
-        config = get_scholar_settings()
-        proxy_mode = config.get('SCHOLAR_PROXY_MODE', 'DIRECT')
-        
-        if proxy_mode in ('SCRAPERAPI', 'LUMINATI'):
-            max_workers = 12
-            min_delay, max_delay = 0.1, 0.4
-        elif proxy_mode in ('FREE_PROXIES', 'SINGLEPROXY'):
-            max_workers = 6
-            min_delay, max_delay = 0.4, 1.0
-        else: # DIRECT
-            max_workers = 3
-            min_delay, max_delay = 0.8, 2.0
-            
+
+        # High-performance parallel workers over Tor SOCKS5 proxy (10 parallel threads!)
+        max_workers = 10
+        min_delay, max_delay = 0.02, 0.1
+
+        last_renew_time = 0.0
+        renew_lock = threading.Lock()
+
+        def safe_renew_tor_ip():
+            nonlocal last_renew_time
+            with renew_lock:
+                now = time.time()
+                if now - last_renew_time > 3.0:
+                    from apps.scholar.scholarly.tor_helper import renew_tor_ip
+                    renew_tor_ip(rebuild_wait=0.5)
+                    last_renew_time = time.time()
+
         def fill_one_pub(idx_and_pub):
             nonlocal processed_count
             idx, pub = idx_and_pub
             pub_title = pub.get('bib', {}).get('title', '')
             
-            # Random delay before starting request to avoid bot rate limiting
+            # Tiny stagger delay before request
             time.sleep(random.uniform(min_delay, max_delay))
             
             success = False
@@ -306,7 +362,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                     last_err = fill_err
                     logger.warning(f"Attempt {attempt+1} failed to fill publication {idx+1}: {fill_err}")
                     if attempt < 2:
-                        time.sleep(1.0 + attempt * 1.5)
+                        safe_renew_tor_ip()
             
             if not success:
                 logger.warning(f"Failed to fill publication {idx+1} after 3 attempts: {last_err}")
@@ -319,7 +375,7 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
             with state_lock:
                 processed_count += 1
                 current_progress = 30 + int((processed_count / total_pubs) * 50)
-                msg = f"Cào chi tiết bài báo: {processed_count}/{total_pubs}..."
+                msg = f"Cào chi tiết bài báo (Đa luồng 10 IP Tor): {processed_count}/{total_pubs}..."
                 self.update_state(
                     state='PROGRESS', 
                     meta={
@@ -587,18 +643,15 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
 # FAST SMART CHECK & CELERY BEAT AUTO-SCAN TASKS
 # ==============================================================================
 
-@shared_task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=5)
 def scrape_author_cv_smart_task(self, author_id):
     """
     Executes a Fast Smart Check (1-request profile inspection) over Tor SOCKS5 proxy.
-    Compares online publication_count and top 3 titles against local DB.
-    If unchanged, completes task in 1 request (status = UP_TO_DATE).
-    If new publications exist, ingests missing articles with human-like delays.
-    If 429/403/CAPTCHA occurs, renews Tor IP via NEWNYM and retries with backoff.
+    Automatically rotates Tor Exit Node IP in an internal loop if rate-limited by Google Scholar.
     """
     from apps.scholar.models import AuthorProfile, Publication, AutoScanConfig
-    from apps.scholar.scholarly import scholarly, ProxyGenerator
-    from apps.scholar.scholarly.tor_helper import renew_tor_ip
+    from apps.scholar.scholarly import scholarly
+    from apps.scholar.scholarly.tor_helper import renew_tor_ip, setup_tor_proxy_with_fallback
     from django.utils import timezone
     import random
     import time
@@ -610,19 +663,53 @@ def scrape_author_cv_smart_task(self, author_id):
     except AuthorProfile.DoesNotExist:
         return {"status": "error", "message": f"Author {author_id} not found"}
 
-    # Setup Tor Proxy
-    try:
-        pg = ProxyGenerator()
-        tor_host = os.environ.get("TOR_SOCKS_HOST", "tor")
-        tor_port = int(os.environ.get("TOR_SOCKS_PORT", 9050))
-        pg.Tor(socks_host=tor_host, socks_port=tor_port)
-        scholarly.use_proxy(pg)
-    except Exception as e:
-        logger.warning(f"Failed to setup Tor proxy, falling back: {e}")
+    tor_host = os.environ.get("TOR_SOCKS_HOST", "tor")
+    tor_port = int(os.environ.get("TOR_SOCKS_PORT", 9050))
+    control_host = os.environ.get("TOR_CONTROL_HOST", "tor")
+    control_port = int(os.environ.get("TOR_CONTROL_PORT", 9051))
+    password = os.environ.get("TOR_PASSWORD", "scholar_secret_control_pass")
+
+    max_attempts = 6
+    author_online = None
+    last_exception = None
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            config.current_job_status = "RUNNING"
+            config.current_job_progress = min(15 + attempt * 10, 85)
+            if attempt == 1:
+                config.current_job_detail = f"Đang kết nối Tor Proxy & kiểm tra Fast Smart Check cho: {author.name}"
+            else:
+                config.current_job_detail = f"Tự động đổi IP Tor lần {attempt-1} thành công. Đang thử lại cào CV cho {author.name} (Lần {attempt}/{max_attempts})..."
+            config.save(update_fields=["current_job_status", "current_job_progress", "current_job_detail"])
+
+            setup_tor_proxy_with_fallback(socks_host=tor_host, socks_port=tor_port)
+
+            # Step 1: Light Fetch (Page 1 Profile, pagesize=100) - 1 Request Only!
+            author_online = scholarly.search_author_id(author.scholar_id, filled=False)
+            if author_online:
+                break
+        except Exception as exc:
+            last_exception = exc
+            logger.warning(f"Attempt {attempt}/{max_attempts} failed for author {author.name}: {exc}")
+            if attempt < max_attempts:
+                config.current_job_detail = f"Bị Google chặn IP (Lần {attempt}). Đang phát tín hiệu NEWNYM tự động đổi IP Tor..."
+                config.save(update_fields=["current_job_detail"])
+                renew_tor_ip(control_host=control_host, control_port=control_port, password=password, rebuild_wait=5)
+
+    if not author_online:
+        author.last_scan_status = "FAILED_CAPTCHA"
+        author.save(update_fields=["last_scan_status"])
+
+        config.current_job_status = "FAILED"
+        config.current_job_progress = 0
+        config.current_job_detail = f"Đã tự động đổi {max_attempts} IP Tor nhưng vẫn bị Google Captcha cho {author.name}."
+        config.save(update_fields=["current_job_status", "current_job_progress", "current_job_detail"])
+
+        retry_delay = random.randint(30, 60)
+        raise self.retry(exc=last_exception, countdown=retry_delay)
 
     try:
-        # Step 1: Light Fetch (Page 1 Profile, pagesize=100) - 1 Request Only!
-        author_online = scholarly.search_author_id(author.scholar_id, fill=False)
         online_pubs = author_online.get("publications", [])
         online_count = len(online_pubs)
 
@@ -640,6 +727,11 @@ def scrape_author_cv_smart_task(self, author_id):
             author.publication_count_cached = online_count
             author.save(update_fields=["last_scraped_at", "last_scan_status", "publication_count_cached"])
 
+            config.current_job_status = "COMPLETED"
+            config.current_job_progress = 100
+            config.current_job_detail = f"CV tác giả {author.name} chưa có bài mới. Hoàn thành 1-request!"
+            config.save(update_fields=["current_job_status", "current_job_progress", "current_job_detail"])
+
             # Cooldown sleep between CVs
             cooldown = random.uniform(config.cooldown_min_seconds, config.cooldown_max_seconds)
             time.sleep(cooldown)
@@ -653,6 +745,10 @@ def scrape_author_cv_smart_task(self, author_id):
         # Step 2: New publications detected -> Fill & Ingest missing publications
         author.last_scan_status = "IN_PROGRESS"
         author.save(update_fields=["last_scan_status"])
+
+        config.current_job_progress = 90
+        config.current_job_detail = f"Phát hiện bài mới cho {author.name}. Đang cào bổ sung..."
+        config.save(update_fields=["current_job_progress", "current_job_detail"])
 
         # Process new/missing publications
         new_count = 0
@@ -685,6 +781,11 @@ def scrape_author_cv_smart_task(self, author_id):
         author.publication_count_cached = author.publications.count()
         author.save(update_fields=["last_scraped_at", "last_scan_status", "publication_count_cached"])
 
+        config.current_job_status = "COMPLETED"
+        config.current_job_progress = 100
+        config.current_job_detail = f"Đã bổ sung {new_count} bài báo mới cho tác giả {author.name}"
+        config.save(update_fields=["current_job_status", "current_job_progress", "current_job_detail"])
+
         # Cooldown between CVs
         time.sleep(random.uniform(config.cooldown_min_seconds, config.cooldown_max_seconds))
 
@@ -696,20 +797,15 @@ def scrape_author_cv_smart_task(self, author_id):
         }
 
     except Exception as exc:
-        logger.error(f"Error scraping author {author.name if 'author' in locals() else author_id}: {exc}")
-        if 'author' in locals():
-            author.last_scan_status = "FAILED_CAPTCHA"
-            author.save(update_fields=["last_scan_status"])
+        logger.error(f"Error processing publications for author {author.name}: {exc}")
+        author.last_scan_status = "FAILED_CAPTCHA"
+        author.save(update_fields=["last_scan_status"])
 
-        # Trigger Tor IP rotation via NEWNYM
-        control_host = os.environ.get("TOR_CONTROL_HOST", "tor")
-        control_port = int(os.environ.get("TOR_CONTROL_PORT", 9051))
-        password = os.environ.get("TOR_PASSWORD", "scholar_secret_control_pass")
-        renew_tor_ip(control_host=control_host, control_port=control_port, password=password)
-
-        # Retry with random countdown
-        retry_delay = random.randint(30, 60)
-        raise self.retry(exc=exc, countdown=retry_delay)
+        config.current_job_status = "FAILED"
+        config.current_job_progress = 0
+        config.current_job_detail = f"Lỗi xử lý bài báo cho tác giả {author.name}: {exc}"
+        config.save(update_fields=["current_job_status", "current_job_progress", "current_job_detail"])
+        raise exc
 
 
 @shared_task
@@ -717,6 +813,7 @@ def scheduled_auto_scan_cv_task():
     """
     Celery Beat task triggered periodically.
     Selects eligible author CVs needing scanning and dispatches smart check tasks.
+    Checks preferred_hour, preferred_weekday, and preferred_day_of_month settings.
     """
     from apps.scholar.models import AuthorProfile, AutoScanConfig
     from django.db import models
@@ -726,6 +823,14 @@ def scheduled_auto_scan_cv_task():
     config = AutoScanConfig.get_solo()
     if not config.is_active:
         return {"status": "skipped", "reason": "Auto scan configuration is disabled"}
+
+    now = timezone.now()
+    if config.frequency_type == "WEEKLY" and now.weekday() != config.preferred_weekday:
+        return {"status": "skipped", "reason": f"Today (weekday {now.weekday()}) is not preferred weekday ({config.preferred_weekday})"}
+    if config.frequency_type == "MONTHLY" and now.day != config.preferred_day_of_month:
+        return {"status": "skipped", "reason": f"Today (day {now.day}) is not preferred day of month ({config.preferred_day_of_month})"}
+    if now.hour < config.preferred_hour:
+        return {"status": "skipped", "reason": f"Current hour ({now.hour}) is earlier than preferred hour ({config.preferred_hour}:00)"}
 
     threshold_time = timezone.now() - timedelta(hours=config.scan_interval_hours)
 

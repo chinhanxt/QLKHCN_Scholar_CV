@@ -193,11 +193,7 @@ class Navigator(object, metaclass=Singleton):
             except (Timeout, TimeoutException) as e:
                 err = "Timeout Exception %s while fetching page: %s" % (type(e).__name__, e.args)
                 self.logger.info(err)
-                if timeout < 3*self._TIMEOUT:
-                    self.logger.info("Increasing timeout and retrying within same session.")
-                    timeout = timeout + self._TIMEOUT
-                    continue
-                self.logger.info("Giving up this session.")
+                self.logger.info("Timeout on current proxy/Tor circuit. Switching proxy...")
             except Exception as e:
                 err = "Exception %s while fetching page: %s" % (type(e).__name__, e.args)
                 self.logger.info(err)
@@ -323,6 +319,26 @@ class Navigator(object, metaclass=Singleton):
         """
         return _SearchScholarIterator(self, url)
 
+    def _generate_id_variants(self, scholar_id: str) -> list:
+        variants = []
+        chars = list(scholar_id)
+        ambiguous_map = {
+            'l': ['I', '1'],
+            'I': ['l', '1'],
+            '1': ['l', 'I'],
+            'O': ['0'],
+            '0': ['O']
+        }
+        for i, c in enumerate(chars):
+            if c in ambiguous_map:
+                for replacement in ambiguous_map[c]:
+                    cand = list(chars)
+                    cand[i] = replacement
+                    cand_str = "".join(cand)
+                    if cand_str not in variants:
+                        variants.append(cand_str)
+        return variants
+
     def search_author_id(self, id: str, filled: bool = False, sortby: str = "citedby", publication_limit: int = 0) -> Author:
         """Search by author ID and return a Author object
         :param id: the Google Scholar id of a particular author
@@ -337,12 +353,27 @@ class Navigator(object, metaclass=Singleton):
         :rtype: {Author}
         """
         author_parser = AuthorParser(self)
-        res = author_parser.get_author(id)
-        if filled:
-            res = author_parser.fill(res, sortby=sortby, publication_limit=publication_limit)
-        else:
-            res = author_parser.fill(res, sections=['basics'], sortby=sortby, publication_limit=publication_limit)
-        return res
+        try:
+            res = author_parser.get_author(id)
+            if filled:
+                res = author_parser.fill(res, sortby=sortby, publication_limit=publication_limit)
+            else:
+                res = author_parser.fill(res, sections=['basics'], sortby=sortby, publication_limit=publication_limit)
+            return res
+        except Exception as primary_error:
+            candidate_ids = self._generate_id_variants(id)
+            for cand in candidate_ids:
+                try:
+                    res = author_parser.get_author(cand)
+                    if filled:
+                        res = author_parser.fill(res, sortby=sortby, publication_limit=publication_limit)
+                    else:
+                        res = author_parser.fill(res, sections=['basics'], sortby=sortby, publication_limit=publication_limit)
+                    self.logger.info(f"Auto-corrected Scholar ID from '{id}' to '{cand}'")
+                    return res
+                except Exception:
+                    continue
+            raise primary_error
 
     def search_organization(self, url: str, fromauthor: bool) -> list:
         """Generate instiution object from author search page.

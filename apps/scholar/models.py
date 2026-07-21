@@ -219,12 +219,20 @@ class AuthorProfile(BaseModel):
 
 class AutoScanConfig(models.Model):
     is_active = models.BooleanField(_("Is Active"), default=True)
-    scan_interval_hours = models.IntegerField(_("Scan Interval Hours"), default=24)
+    scan_interval_hours = models.IntegerField(_("Scan Interval Hours"), default=168)
+    frequency_type = models.CharField(_("Frequency Type"), max_length=20, default="WEEKLY")  # DAILY, WEEKLY, MONTHLY
+    preferred_hour = models.IntegerField(_("Preferred Hour"), default=2)  # 0-23 (e.g. 2:00 AM)
+    preferred_minute = models.IntegerField(_("Preferred Minute"), default=0)
+    preferred_weekday = models.IntegerField(_("Preferred Weekday"), default=0)  # 0=Mon, 1=Tue, ..., 6=Sun
+    preferred_day_of_month = models.IntegerField(_("Preferred Day of Month"), default=1)  # 1-31
     batch_size_per_hour = models.IntegerField(_("Batch Size Per Hour"), default=8)
     delay_min_seconds = models.IntegerField(_("Delay Min Seconds"), default=8)
     delay_max_seconds = models.IntegerField(_("Delay Max Seconds"), default=15)
     cooldown_min_seconds = models.IntegerField(_("Cooldown Min Seconds"), default=45)
     cooldown_max_seconds = models.IntegerField(_("Cooldown Max Seconds"), default=90)
+    current_job_status = models.CharField(_("Current Job Status"), max_length=50, default="IDLE")  # IDLE, RUNNING, COMPLETED, FAILED
+    current_job_progress = models.IntegerField(_("Current Job Progress"), default=0)
+    current_job_detail = models.CharField(_("Current Job Detail"), max_length=255, default="", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

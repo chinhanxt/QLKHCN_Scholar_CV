@@ -259,12 +259,19 @@ class PublicationParser(object):
         publication["num_citations"] = 0
 
         for link in lowerlinks:
-            if 'Cited by' in link.text:
-                publication['num_citations'] = int(re.findall(r'\d+', link.text)[0].strip())
+            text_lower = link.text.lower()
+            if 'cited by' in text_lower or 'trích dẫn' in text_lower:
+                match = re.findall(r'\d+', link.text)
+                if match:
+                    publication['num_citations'] = int(match[0].strip())
                 publication['citedby_url'] = link['href']
 
-            if 'Related articles' in link.text:
+            if 'related articles' in text_lower or 'bài viết' in text_lower or 'liên quan' in text_lower:
                 publication['url_related_articles'] = link['href']
+
+            if ('all' in text_lower and 'version' in text_lower) or ('tất cả' in text_lower) or ('phiên bản' in text_lower):
+                publication['versions_count'] = link.text.strip()
+                publication['url_all_versions'] = link['href']
 
         if __data.find('div', class_='gs_ggs gs_fl'):
             publication['eprint_url'] = __data.find(
@@ -358,9 +365,9 @@ class PublicationParser(object):
                         href = entry.get('href')
                         if href and href.startswith('/'):
                             href = 'https://scholar.google.com' + href
-                        if 'related articles' in text_lower:
+                        if 'related articles' in text_lower or 'bài viết' in text_lower or 'liên quan' in text_lower:
                             publication['url_related_articles'] = href
-                        elif 'all' in text_lower and 'version' in text_lower:
+                        elif ('all' in text_lower and 'version' in text_lower) or ('tất cả' in text_lower) or ('phiên bản' in text_lower):
                             publication['versions_count'] = entry.text.strip()
                             publication['url_all_versions'] = href
             # number of citation per year

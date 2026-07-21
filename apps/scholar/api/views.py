@@ -690,6 +690,30 @@ class TorStatusView(APIView):
         return Response({"error": "Failed to renew Tor IP"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class StartTorServiceView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        import subprocess
+        base_dir = settings.BASE_DIR
+        cmd1 = ["docker", "compose", "-f", "docker-compose.local.yml", "up", "-d", "tor"]
+        try:
+            res = subprocess.run(cmd1, cwd=base_dir, capture_output=True, text=True, timeout=30)
+            if res.returncode == 0:
+                return Response({"message": "Đã khởi động Tor Proxy Service qua Docker thành công!"})
+        except Exception as e:
+            logger.warning(f"docker compose up -d tor failed: {e}")
+
+        try:
+            cmd2 = ["docker", "start", "scholar_tor_proxy"]
+            res2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=30)
+            if res2.returncode == 0:
+                return Response({"message": "Đã khởi động Tor Container (scholar_tor_proxy) thành công!"})
+            return Response({"error": f"Không thể bật Docker Tor: {res2.stderr}"}, status=400)
+        except Exception as e:
+            return Response({"error": f"Lỗi khi gọi Docker: {str(e)}"}, status=500)
+
+
 class BulkImportAuthorsView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -730,22 +754,70 @@ class AutoScanConfigView(APIView):
         return Response({
             "is_active": config.is_active,
             "scan_interval_hours": config.scan_interval_hours,
+            "frequency_type": config.frequency_type,
+            "preferred_hour": config.preferred_hour,
+            "preferred_minute": config.preferred_minute,
+            "preferred_weekday": config.preferred_weekday,
+            "preferred_day_of_month": config.preferred_day_of_month,
             "batch_size_per_hour": config.batch_size_per_hour,
             "delay_min_seconds": config.delay_min_seconds,
             "delay_max_seconds": config.delay_max_seconds,
             "cooldown_min_seconds": config.cooldown_min_seconds,
             "cooldown_max_seconds": config.cooldown_max_seconds,
+            "current_job_status": config.current_job_status,
+            "current_job_progress": config.current_job_progress,
+            "current_job_detail": config.current_job_detail,
         })
 
     def patch(self, request):
         config = AutoScanConfig.get_solo()
         fields = [
-            "is_active", "scan_interval_hours", "batch_size_per_hour", 
-            "delay_min_seconds", "delay_max_seconds", 
+            "is_active", "scan_interval_hours", "frequency_type",
+            "preferred_hour", "preferred_minute", "preferred_weekday", "preferred_day_of_month",
+            "batch_size_per_hour", "delay_min_seconds", "delay_max_seconds", 
             "cooldown_min_seconds", "cooldown_max_seconds"
         ]
         for field in fields:
             if field in request.data:
                 setattr(config, field, request.data[field])
+        
+        if config.frequency_type == "DAILY":
+            config.scan_interval_hours = 24
+        elif config.frequency_type == "WEEKLY":
+            config.scan_interval_hours = 168
+        elif config.frequency_type == "MONTHLY":
+            config.scan_interval_hours = 720
+
         config.save()
         return Response({"message": "Configuration updated successfully"})
+
+
+class TriggerAuthorsScanView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        author_ids = request.data.get("author_ids", [])
+        if not author_ids or not isinstance(author_ids, list):
+            return Response({"error": "Vui lòng chọn ít nhất 1 tác giả!"}, status=status.HTTP_400_BAD_REQUEST)
+
+        config = AutoScanConfig.get_solo()
+        config.current_job_status = "RUNNING"
+        config.current_job_progress = 10
+        config.current_job_detail = f"Đã phát lệnh quét ngầm trực tiếp cho {len(author_ids)} tác giả. Đang kết nối Tor..."
+        config.save(update_fields=["current_job_status", "current_job_progress", "current_job_detail"])
+
+        dispatched = []
+        for author_id in author_ids:
+            try:
+                author = AuthorProfile.objects.get(id=author_id)
+                author.last_scan_status = "PENDING"
+                author.save(update_fields=["last_scan_status"])
+                scrape_author_cv_smart_task.delay(author.id)
+                dispatched.append(author.name)
+            except AuthorProfile.DoesNotExist:
+                pass
+
+        return Response({
+            "message": f"Đã phát lệnh quét ngầm trực tiếp cho {len(dispatched)} tác giả!",
+            "dispatched": dispatched
+        })

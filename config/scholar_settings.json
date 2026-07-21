@@ -10,7 +10,7 @@
     "auto_crawl_enabled": true,
     "auto_crawl_hour": 9,
     "auto_crawl_minute": 42,
-    "active_unified_task_id": null,
+    "active_unified_task_id": "52bed98e-2e76-4d0f-b70e-123d15cac08b",
     "last_run_time": "09:47:57 20/07/2026",
     "last_run_status": "SUCCESS",
     "last_run_message": "Hoàn tất cào dữ liệu thành công. Không có dữ liệu mới nên đã tự động bỏ qua giai đoạn Mapping."

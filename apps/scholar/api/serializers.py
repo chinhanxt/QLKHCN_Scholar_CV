@@ -88,6 +88,10 @@ class AuthorProfileSerializer(serializers.ModelSerializer):
             "i10index",
             "interests",
             "publications",
+            "auto_scan_enabled",
+            "last_scraped_at",
+            "last_scan_status",
+            "publication_count_cached",
             "created_at",
             "updated_at",
         ]
