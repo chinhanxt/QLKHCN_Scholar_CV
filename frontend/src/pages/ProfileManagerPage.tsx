@@ -5,17 +5,16 @@ import { Card } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { PublicationDetailPanel } from '@/components/scholar/PublicationDetailPanel'
+import { PublicationTableList } from '@/components/scholar/PublicationTableList'
 import { 
   FolderHeart, 
   Trash2, 
   Search, 
   User, 
-  TrendingUp, 
-  Filter, 
   Download,
   ChevronRight,
   ChevronLeft,
-  ArrowLeft,
   Menu
 } from 'lucide-react'
 
@@ -142,21 +141,6 @@ export function ProfileManagerPage() {
     (a.affiliation && a.affiliation.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
-  // Filter selected author publications
-  const filteredPublications = selectedProfile?.publications?.filter((pub) => {
-    const matchesKeyword = pub.title.toLowerCase().includes(pubKeyword.toLowerCase()) ||
-                          pub.venue.toLowerCase().includes(pubKeyword.toLowerCase()) ||
-                          pub.authors_list.toLowerCase().includes(pubKeyword.toLowerCase())
-    const matchesQuartile = pubQuartile === 'all' || pub.sjr_q === pubQuartile
-    const matchesYear = pubYear === 'all' || pub.year.toString() === pubYear
-    return matchesKeyword && matchesQuartile && matchesYear
-  }) || []
-
-  // Extract years for publication filter dropdown
-  const pubYears = selectedProfile?.publications
-    ? Array.from(new Set(selectedProfile.publications.map((p) => p.year.toString()).filter(Boolean))).sort((a, b) => b.localeCompare(a))
-    : []
-
 
 
   return (
@@ -267,161 +251,25 @@ export function ProfileManagerPage() {
             </Card>
           ) : selectedProfile ? (
             selectedPubId ? (
-              // PAPER DETAIL VIEW - Takes 100% of the Right Pane
+              // PAPER DETAIL VIEW
               (() => {
                 const selectedPub = selectedProfile.publications?.find((p) => p.id === selectedPubId)
-                const pubCitationYears = selectedPub?.cites_per_year
-                  ? Object.keys(selectedPub.cites_per_year)
-                      .filter((y) => /^\d{4}$/.test(y))
-                      .sort()
-                  : []
-
-                const pubCitationValues = pubCitationYears.map((year) => ({
-                  year,
-                  count: selectedPub?.cites_per_year?.[year] || 0
-                }))
-
-                const pubMaxCites = Math.max(...pubCitationValues.map((v) => v.count), 1)
+                if (!selectedPub) return null
 
                 return (
-                  <div className="flex-1 flex flex-col min-h-0 gap-4 overflow-y-auto p-1 animate-in fade-in duration-200">
-                    {/* Header Controls */}
-                    <div className="flex items-center justify-between shrink-0 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => {
-                            setSelectedPubId(null)
-                            setIsSidebarCollapsed(false)
-                          }}
-                          className="flex items-center gap-1.5 text-xs font-bold text-[#005b9a] hover:text-[#004677] cursor-pointer transition-colors"
-                        >
-                          <ArrowLeft className="w-4 h-4" />
-                          <span>Quay lại danh sách</span>
-                        </button>
-                      </div>
-
-                      {/* Tên chủ bài báo */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hồ sơ tác giả:</span>
-                        <span className="text-xs font-bold text-slate-700 bg-white rounded px-2.5 py-1 border border-slate-200 shadow-3xs">{selectedProfile.name}</span>
-                      </div>
-                    </div>
-
-                    {/* Paper Title Card */}
-                    <Card className="p-6 border-slate-200 bg-white shadow-xs">
-                      <span className="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-wider block">Tiêu đề bài viết</span>
-                      <h3 className="text-base md:text-xl font-extrabold text-slate-900 mt-2 leading-snug">{selectedPub?.title}</h3>
-                      <p className="text-xs md:text-sm text-slate-600 mt-3 font-semibold leading-relaxed">Tác giả: {selectedPub?.authors_list}</p>
-                    </Card>
-
-                    {/* Metadata & Rankings Grid */}
-                    <div className="grid gap-6 md:grid-cols-2">
-                      {/* Publishing Details */}
-                      <Card className="p-5 border-slate-200 bg-white shadow-xs flex flex-col gap-4 justify-between">
-                        <h4 className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-2.5">Thông tin xuất bản</h4>
-                        <div className="space-y-3.5 text-xs md:text-sm">
-                          <div className="flex justify-between gap-4 items-start">
-                            <span className="text-slate-500 font-bold shrink-0">Nơi xuất bản (Venue):</span>
-                            <span className="font-bold text-slate-800 italic text-right leading-normal text-sm md:text-base" title={selectedPub?.venue}>
-                              {selectedPub?.venue}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-500 font-bold">Năm xuất bản:</span>
-                            <span className="font-extrabold text-slate-800 text-sm md:text-base">{selectedPub?.year}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-500 font-bold">Tổng trích dẫn:</span>
-                            <span className="font-extrabold text-[#005b9a] text-sm md:text-base">{selectedPub?.citations}</span>
-                          </div>
-                        </div>
-                      </Card>
-
-                      {/* Rank & Indices */}
-                      <Card className="p-5 border-slate-200 bg-white shadow-xs flex flex-col gap-4 justify-between">
-                        <h4 className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-2.5">Phân hạng & Chỉ số</h4>
-                        <div className="space-y-3.5 text-xs md:text-sm">
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-500 font-bold">SJR Quartile:</span>
-                            {selectedPub?.sjr_q === 'N/A' ? (
-                              <span className="text-slate-500 font-bold text-sm md:text-base">N/A</span>
-                            ) : (
-                              <span className={cn(
-                                "inline-block rounded-md px-2.5 py-1 text-xs md:text-sm font-extrabold border shadow-3xs",
-                                selectedPub?.sjr_q === 'Q1' && "bg-emerald-50 text-emerald-700 border-emerald-100",
-                                selectedPub?.sjr_q === 'Q2' && "bg-amber-50 text-amber-700 border-amber-100",
-                                selectedPub?.sjr_q === 'Q3' && "bg-[#e6f0f7] text-[#005b9a] border-[#b8d4e9]",
-                                selectedPub?.sjr_q === 'Q4' && "bg-slate-100 text-slate-600 border-slate-200"
-                              )}>
-                                {selectedPub?.sjr_q}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-500 font-bold">Impact Factor:</span>
-                            {selectedPub?.if_val === 'N/A' ? (
-                              <span className="text-slate-500 font-bold text-sm md:text-base">N/A</span>
-                            ) : (
-                              <span className="inline-block rounded-md bg-[#e6f0f7] px-3 py-1 text-xs md:text-sm font-extrabold text-[#005b9a] border border-[#b8d4e9] shadow-3xs">
-                                {selectedPub?.if_val}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex justify-between items-center gap-4">
-                            <span className="text-slate-500 font-bold shrink-0">Web of Science:</span>
-                            {selectedPub?.wos === 'N/A' ? (
-                              <span className="text-slate-500 font-bold text-sm md:text-base">N/A</span>
-                            ) : (
-                              <span className="font-extrabold text-rose-600 text-right leading-normal text-sm md:text-base" title={selectedPub?.wos}>
-                                {selectedPub?.wos}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </Card>
-                    </div>
-
-                    {/* Citation History Chart */}
-                    <Card className="p-6 border-slate-200 bg-white shadow-xs">
-                      <h4 className="text-xs md:text-sm font-bold text-slate-600 uppercase tracking-wider mb-6 flex items-center gap-2">
-                        <TrendingUp className="h-4.5 w-4.5 text-[#005b9a]" />
-                        Lịch sử trích dẫn theo năm của bài báo (Google Scholar)
-                      </h4>
-
-                      {pubCitationValues.length === 0 ? (
-                        <div className="flex h-40 items-center justify-center text-sm text-slate-400 italic">
-                          Không có dữ liệu trích dẫn theo năm cho bài báo này.
-                        </div>
-                      ) : (
-                        <div className="flex h-56 items-end gap-3.5 pt-6 pb-2 border-b border-slate-200 overflow-x-auto custom-scrollbar">
-                          {pubCitationValues.map((v) => {
-                            const heightPct = (v.count / pubMaxCites) * 100
-                            return (
-                              <div key={v.year} className="flex-1 flex flex-col items-center gap-2.5 group min-w-[36px]">
-                                <div className="w-full flex flex-col justify-end items-center h-36">
-                                  <div
-                                    className="w-full bg-[#005b9a]/70 group-hover:bg-[#005b9a] rounded-t-md transition-all duration-300 shadow-3xs relative"
-                                    style={{ height: `${heightPct}%` }}
-                                  >
-                                    {/* Permanently visible label sitting directly on top of this bar */}
-                                    <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-xs md:text-sm font-extrabold text-[#005b9a] bg-[#e6f0f7] px-2.5 py-0.5 rounded border border-[#b8d4e9] shadow-3xs whitespace-nowrap z-10 transition-transform group-hover:scale-110">
-                                      {v.count}
-                                    </span>
-                                  </div>
-                                </div>
-                                <span className="text-xs font-bold text-slate-500 select-none mt-1">{v.year}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </Card>
-                  </div>
+                  <PublicationDetailPanel
+                    publication={selectedPub}
+                    authorName={selectedProfile.name}
+                    onBack={() => {
+                      setSelectedPubId(null)
+                      setIsSidebarCollapsed(false)
+                    }}
+                  />
                 )
               })()
             ) : (
-              // DEFAULT AUTHOR PROFILE VIEW - Headers + Publications list
-              <div className="flex-1 flex flex-col min-h-0 gap-4 overflow-hidden animate-in fade-in duration-200">
+              // DEFAULT AUTHOR PROFILE VIEW - Headers + Shared Publications Table Component
+              <div className="flex-1 flex flex-col min-h-0 gap-4 overflow-y-auto animate-in fade-in duration-200">
                 {/* Author Header Banner Card */}
                 <Card className="border-slate-200 bg-white p-4 shrink-0 shadow-xs">
                   <div className="flex flex-col md:flex-row justify-between gap-4">
@@ -480,106 +328,26 @@ export function ProfileManagerPage() {
                   </div>
                 </Card>
 
-                {/* Table Card (Replaces the Tabs container) */}
-                <Card className="flex-1 min-h-0 border-slate-200 bg-white flex flex-col shadow-xs overflow-hidden">
-                  {/* Filters Row */}
-                  <div className="p-3 bg-slate-50/50 border-b border-slate-100 flex flex-wrap gap-3 items-center shrink-0">
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                      <Filter className="w-3.5 h-3.5 text-[#005b9a]" />
-                      Lọc ấn phẩm:
-                    </div>
-
-                    <input
-                      type="text"
-                      placeholder="Tìm từ khóa..."
-                      value={pubKeyword}
-                      onChange={(e) => setPubKeyword(e.target.value)}
-                      className="bg-white border border-slate-200 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#005b9a] w-44 font-medium"
-                    />
-
-                    <select
-                      value={pubQuartile}
-                      onChange={(e) => setPubQuartile(e.target.value)}
-                      className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#005b9a] text-slate-600 font-medium cursor-pointer"
-                    >
-                      <option value="all">Mọi Phân hạng Q</option>
-                      <option value="Q1">Q1</option>
-                      <option value="Q2">Q2</option>
-                      <option value="Q3">Q3</option>
-                      <option value="Q4">Q4</option>
-                      <option value="N/A">Chưa xếp hạng (N/A)</option>
-                    </select>
-
-                    <select
-                      value={pubYear}
-                      onChange={(e) => setPubYear(e.target.value)}
-                      className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#005b9a] text-slate-600 font-medium cursor-pointer"
-                    >
-                      <option value="all">Mọi năm</option>
-                      {pubYears.map((y) => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Table wrapper */}
-                  <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                    <table className="w-full text-left text-xs border-collapse relative">
-                      <thead className="sticky top-0 bg-slate-50 text-slate-500 font-bold border-b border-slate-100 z-10 shadow-3xs">
-                        <tr>
-                          <th className="py-2.5 px-4 w-10 text-center">STT</th>
-                          <th className="py-2.5 px-4">Tên bài báo</th>
-                          <th className="py-2.5 px-4 w-16 text-center">Năm</th>
-                          <th className="py-2.5 px-4 w-20 text-center">Trích dẫn</th>
-                          <th className="py-2.5 px-4 w-18 text-center">SJR Q</th>
-                          <th className="py-2.5 px-4 w-20 text-center">IF</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {filteredPublications.map((pub, idx) => (
-                          <tr 
-                            key={pub.id} 
-                            onClick={() => {
-                              setSelectedPubId(pub.id)
-                              setIsSidebarCollapsed(true)
-                            }}
-                            className="hover:bg-slate-50/50 cursor-pointer transition-all"
-                          >
-                            <td className="py-3 px-4 font-semibold text-slate-400 text-center">{idx + 1}</td>
-                            <td className="py-3 px-4">
-                              <div className="text-slate-800 leading-normal line-clamp-2">{pub.title}</div>
-                              <div className="text-[10px] text-slate-400 mt-1 truncate max-w-lg">{pub.venue}</div>
-                            </td>
-                            <td className="py-3 px-4 text-center font-bold text-slate-500">{pub.year}</td>
-                            <td className="py-3 px-4 text-center font-bold text-[#005b9a]">{pub.citations}</td>
-                            <td className="py-3 px-4 text-center">
-                              {pub.sjr_q === 'Q1' && (
-                                <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-100">Q1</span>
-                              )}
-                              {pub.sjr_q === 'Q2' && (
-                                <span className="inline-block rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 border border-amber-100">Q2</span>
-                              )}
-                              {pub.sjr_q === 'Q3' && (
-                                <span className="inline-block rounded bg-[#e6f0f7] px-1.5 py-0.5 text-[9px] font-bold text-[#005b9a] border border-[#b8d4e9]">Q3</span>
-                              )}
-                              {pub.sjr_q === 'Q4' && (
-                                <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">Q4</span>
-                              )}
-                              {pub.sjr_q === 'N/A' && <span className="text-slate-300 font-medium">─</span>}
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              {pub.if_val !== 'N/A' ? (
-                                <span className="inline-block rounded bg-[#e6f0f7] px-2 py-0.5 text-[9px] font-bold text-[#005b9a] border border-[#b8d4e9]">{pub.if_val}</span>
-                              ) : (
-                                <span className="text-slate-300 font-medium">─</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
+                {/* Shared Publication Table List */}
+                <PublicationTableList
+                  publications={selectedProfile.publications}
+                  selectedPubIds={[]}
+                  onSelectPub={(pub) => {
+                    setSelectedPubId(pub.id)
+                    setIsSidebarCollapsed(true)
+                  }}
+                  onToggleSelectPub={() => {}}
+                  onToggleSelectAll={() => {}}
+                  onExport={() => handleExportCSV(selectedProfile)}
+                  searchKeyword={pubKeyword}
+                  setSearchKeyword={setPubKeyword}
+                  yearFilter={pubYear}
+                  setYearFilter={setPubYear}
+                  quartileFilter={pubQuartile}
+                  setQuartileFilter={setPubQuartile}
+                  sortBy="citations_desc"
+                  setSortBy={() => {}}
+                />
               </div>
             )
           ) : (

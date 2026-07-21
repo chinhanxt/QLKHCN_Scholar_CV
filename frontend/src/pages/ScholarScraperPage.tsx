@@ -7,13 +7,13 @@ import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useCrawlerStore } from '@/stores/crawler.store'
+import { PublicationDetailPanel } from '@/components/scholar/PublicationDetailPanel'
+import { PublicationTableList } from '@/components/scholar/PublicationTableList'
 import { 
   Search, 
   TrendingUp, 
   Download, 
   FileText,
-  ArrowLeft,
-  Plus,
   Edit,
   CheckCircle2,
   BookOpen,
@@ -48,9 +48,8 @@ export function ScholarScraperPage() {
   // Interactive UI State
   const [pubSearch, setPubSearch] = useState('')
   const [yearFilter, setYearFilter] = useState('All')
+  const [quartileFilter, setQuartileFilter] = useState('all')
   const [sortBy, setSortBy] = useState('citations_desc')
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 12
 
   // Multi-select State
   const [selectedPubIds, setSelectedPubIds] = useState<string[]>([])
@@ -774,114 +773,22 @@ export function ScholarScraperPage() {
     return `10.1016/j.${cleanVenue}.${year}.${hash}`
   }
 
-  // Shorten authors list to Google Scholar format
-  const getShortenedAuthors = (authorsStr: string) => {
-    if (!authorsStr) return ''
-    const list = authorsStr.split(',').map(s => s.trim())
-    const shortened = list.map(name => {
-      const parts = name.split(/\s+/).filter(Boolean)
-      if (parts.length > 1) {
-        const lastName = parts[parts.length - 1]
-        const initials = parts.slice(0, parts.length - 1).map(p => p[0].toUpperCase()).join('')
-        return `${initials} ${lastName}`
-      }
-      return name
-    })
-    if (shortened.length > 5) {
-      return shortened.slice(0, 5).join(', ') + '…'
-    }
-    return shortened.join(', ')
-  }
-
-  // Clean venue string for search result snippet line
-  const getCleanSnippetVenue = (venue: string) => {
-    if (!venue) return ''
-    return venue.replace(/\s+\d+(\s*\([^)]+\))?,\s*\d+$/, '').trim()
-  }
-
-  // Translate "All X versions" to Vietnamese "Tất cả X phiên bản"
-  const translateVersionsCount = (text: string) => {
-    if (!text) return 'Tất cả phiên bản'
-    const match = text.match(/all\s+(\d+)\s+versions/i)
-    if (match && match[1]) {
-      return `Tất cả ${match[1]} phiên bản`
-    }
-    return 'Tất cả phiên bản'
-  }
-
-  // Publication list filter & sort
-  const filteredPubs = profile
-    ? profile.publications
-        .filter(p => {
-          const matchSearch = p.title.toLowerCase().includes(pubSearch.toLowerCase()) || 
-                              (p.authors_list && p.authors_list.toLowerCase().includes(pubSearch.toLowerCase()))
-          const matchYear = yearFilter === 'All' ? true : p.year === yearFilter
-          return matchSearch && matchYear
-        })
-        .sort((a, b) => {
-          if (sortBy === 'citations_desc') return b.citations - a.citations
-          if (sortBy === 'citations_asc') return a.citations - b.citations
-          if (sortBy === 'year_desc') return parseInt(b.year) - parseInt(a.year)
-          if (sortBy === 'year_asc') return parseInt(a.year) - parseInt(b.year)
-          if (sortBy === 'title_asc') return a.title.localeCompare(b.title)
-          if (sortBy === 'title_desc') return b.title.localeCompare(a.title)
-          return 0
-        })
-    : []
-
-  // Pagination calculation
-  const totalPages = Math.ceil(filteredPubs.length / itemsPerPage)
-  const paginatedPubs = filteredPubs.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [pubSearch, yearFilter, sortBy])
-
-  // Multi-select actions
-  const paginatedPubIds = paginatedPubs.map(p => p.id)
-  const isAllSelectedOnPage = paginatedPubIds.length > 0 && paginatedPubIds.every(id => selectedPubIds.includes(id))
-
   const handleToggleSelectAll = () => {
-    if (isAllSelectedOnPage) {
-      setSelectedPubIds(prev => prev.filter(id => !paginatedPubIds.includes(id)))
+    if (!profile) return
+    const allIds = profile.publications.map(p => p.id)
+    const isAllSelected = allIds.length > 0 && allIds.every(id => selectedPubIds.includes(id))
+    if (isAllSelected) {
+      setSelectedPubIds([])
     } else {
-      const newSelections = [...selectedPubIds]
-      paginatedPubIds.forEach(id => {
-        if (!newSelections.includes(id)) {
-          newSelections.push(id)
-        }
-      })
-      setSelectedPubIds(newSelections)
+      setSelectedPubIds(allIds)
     }
   }
 
-  const handleToggleSelect = (id: string, e: React.MouseEvent) => {
+  const handleToggleSelect = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation()
-    setSelectedPubIds(prev => 
+    setSelectedPubIds(prev =>
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     )
-  }
-
-  const handleDeleteSelected = () => {
-    if (!profile || selectedPubIds.length === 0) return
-    if (window.confirm(`Bạn có chắc muốn xóa ${selectedPubIds.length} bài báo đã chọn và chuyển vào thùng rác?`)) {
-      const pubsToDelete = profile.publications.filter(p => selectedPubIds.includes(p.id))
-      setDeletedPublications(prev => [...pubsToDelete, ...prev])
-
-      const deletedCites = pubsToDelete.reduce((sum, p) => sum + (p.citations || 0), 0)
-      const newPubs = profile.publications.filter(p => !selectedPubIds.includes(p.id))
-      
-      setProfile({
-        ...profile,
-        publications: newPubs,
-        citedby: Math.max(0, profile.citedby - deletedCites)
-      })
-      toast.success(`Đã chuyển ${selectedPubIds.length} bài báo vào thùng rác!`)
-      setSelectedPubIds([])
-    }
   }
 
   // Trash & Restore functions
@@ -1416,581 +1323,34 @@ export function ScholarScraperPage() {
             {/* LEFT (70% - Columns 7/10) */}
             <div className="lg:col-span-7 flex flex-col gap-6">
               
-              {/* Detailed View Panel */}
+              {/* Detailed View Panel or Table List */}
               {selectedPublication ? (
-                <Card className="border-[#E5E7EB] rounded-3xl bg-white p-6 shadow-sm animate-fade-in">
-                  
-                  {/* Action back, edit & delete */}
-                  <div className="flex flex-wrap justify-between items-center pb-4 border-b border-[#E5E7EB] mb-5 gap-3">
-                    <button
-                      onClick={() => setSelectedPublication(null)}
-                      className="px-3.5 py-1.5 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
-                    >
-                      <ArrowLeft className="h-3.5 w-3.5" />
-                      Quay lại danh sách
-                    </button>
-                    
-                    <div className="flex gap-2">
-                      <button
-                        onClick={(e) => openEditPubModal(selectedPublication, e)}
-                        className="px-3.5 py-1.5 rounded-xl border border-[#E5E7EB] bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                        Sửa bài báo
-                      </button>
-                      <button
-                        onClick={(e) => handleDeletePub(selectedPublication.id, e)}
-                        className="px-3.5 py-1.5 rounded-xl border border-[#E5E7EB] bg-white hover:bg-rose-50 text-rose-600 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Xóa bài báo
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    
-                    {/* Paper Title */}
-                    <div>
-                      <h2 className="text-lg font-bold text-[#2563EB] leading-snug">
-                        {selectedPublication.title}
-                      </h2>
-                    </div>
-
-                    {/* Paper Details Info Table (Matching Image 3) */}
-                    <div className="space-y-3.5 text-xs text-slate-800">
-                      
-                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                        <span className="font-bold text-slate-500">Tác giả</span>
-                        <span className="col-span-3 text-slate-700 font-medium">{selectedPublication.authors_list || '─'}</span>
-                      </div>
-                      
-                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                        <span className="font-bold text-slate-500">Ngày xuất bản</span>
-                        <span className="col-span-3 text-slate-700">{selectedPublication.pub_date || selectedPublication.year || '─'}</span>
-                      </div>
-
-                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                        <span className="font-bold text-slate-500">Tạp chí / Nơi xuất bản</span>
-                        <span className="col-span-3 text-slate-700 italic">{selectedPublication.venue || '─'}</span>
-                      </div>
-
-                      {selectedPublication.volume && (
-                        <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                          <span className="font-bold text-slate-500">Tập (Volume)</span>
-                          <span className="col-span-3 text-slate-700">{selectedPublication.volume}</span>
-                        </div>
-                      )}
-
-                      {selectedPublication.issue && (
-                        <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                          <span className="font-bold text-slate-500">Số (Issue)</span>
-                          <span className="col-span-3 text-slate-700">{selectedPublication.issue}</span>
-                        </div>
-                      )}
-
-                      {selectedPublication.pages && (
-                        <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                          <span className="font-bold text-slate-500">Trang (Pages)</span>
-                          <span className="col-span-3 text-slate-700">{selectedPublication.pages}</span>
-                        </div>
-                      )}
-
-
-
-                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                        <span className="font-bold text-slate-500">Nhà xuất bản</span>
-                        <span className="col-span-3 text-slate-700 font-medium">{selectedPublication.publisher || '─'}</span>
-                      </div>
-
-                      {(selectedPublication.pub_url || selectedPublication.eprint_url) && (
-                        <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                          <span className="font-bold text-slate-500">Liên kết</span>
-                          <div className="col-span-3 flex flex-wrap gap-3">
-                            {selectedPublication.pub_url && (
-                              <a 
-                                href={selectedPublication.pub_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[#2563EB] hover:underline font-semibold"
-                              >
-                                Xem bài viết gốc 🔗
-                              </a>
-                            )}
-                            {selectedPublication.eprint_url && (
-                              <a 
-                                href={selectedPublication.eprint_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-emerald-600 hover:underline font-semibold"
-                              >
-                                Tải PDF / Bản xem trước 📄
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                        <span className="font-bold text-slate-500">Mô tả</span>
-                        <span className="col-span-3 text-slate-600 leading-relaxed font-normal whitespace-pre-line max-h-40 overflow-y-auto block pr-1">
-                          {selectedPublication.description || '─'}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-4 py-2 border-b border-slate-100 items-start">
-                        <span className="font-bold text-slate-500">Tổng trích dẫn</span>
-                        <span className="col-span-3 text-[#2563EB] font-bold">
-                          Trích dẫn {selectedPublication.citations || 0} bài viết
-                        </span>
-                      </div>
-
-                      {/* Scientific Indexes (IF in violet/purple color) */}
-                      <div className="grid grid-cols-4 py-2 items-start">
-                        <span className="font-bold text-slate-500">Chỉ số khoa học</span>
-                        <div className="col-span-3 flex flex-wrap gap-2">
-                          {selectedPublication.sjr_q !== 'N/A' && (
-                            <span className="inline-block rounded-lg bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-100">
-                              {selectedPublication.sjr_q}
-                            </span>
-                          )}
-                          {selectedPublication.if_val !== 'N/A' && (
-                            <span className="inline-block rounded-lg bg-purple-50 px-2.5 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-100">
-                              IF: {selectedPublication.if_val}
-                            </span>
-                          )}
-                          {selectedPublication.wos !== 'N/A' && (
-                            <span className="inline-block rounded-lg bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600 border border-rose-100">
-                              WoS: {selectedPublication.wos}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* Paper Cites Histogram SVG */}
-                    <div>
-                      <h4 className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                        <TrendingUp className="h-4 w-4 text-[#2563EB]" />
-                        Lịch sử trích dẫn theo năm của bài báo
-                      </h4>
-
-                      {(() => {
-                        const citesHistory = selectedPublication.cites_per_year || {}
-                        const years = Object.keys(citesHistory).filter(y => /^\d{4}$/.test(y)).sort()
-                        if (years.length === 0) {
-                          return (
-                            <div className="text-center py-8 bg-[#F8FAFC] border border-dashed border-[#E5E7EB] rounded-2xl text-xs text-[#64748B] italic">
-                              Chưa có dữ liệu trích dẫn theo năm cho bài báo này (Hãy nhấn Quét chi tiết Lần 2).
-                            </div>
-                          )
-                        }
-
-                        const values = years.map(yr => ({ year: yr, count: citesHistory[yr] || 0 }))
-                        const maxVal = Math.max(...values.map(v => v.count), 1)
-
-                        return (
-                          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex justify-center items-center">
-                            <svg viewBox="0 0 460 140" className="w-full h-auto overflow-visible">
-                              <line x1="10" y1="20" x2="420" y2="20" stroke="#E2E8F0" strokeWidth="0.8" />
-                              <line x1="10" y1="70" x2="420" y2="70" stroke="#E2E8F0" strokeWidth="0.8" />
-                              <line x1="10" y1="120" x2="420" y2="120" stroke="#94A3B8" strokeWidth="1" />
-                              
-                              <text x="425" y="24" className="text-[10px] font-semibold fill-slate-500">{maxVal}</text>
-                              <text x="425" y="74" className="text-[10px] font-semibold fill-slate-500">{Math.round(maxVal / 2)}</text>
-                              <text x="425" y="124" className="text-[10px] font-semibold fill-slate-500">0</text>
-                              
-                              {values.map((v, i) => {
-                                const barWidth = 14
-                                const spacing = values.length > 1 ? (400 - barWidth) / (values.length - 1) : 0
-                                const x = 12 + i * spacing
-                                const barHeight = maxVal > 0 ? (v.count / maxVal) * 100 : 0
-                                const y = 120 - barHeight
-                                return (
-                                  <g key={v.year} className="group cursor-pointer">
-                                    <rect 
-                                      x={x} 
-                                      y={y} 
-                                      width={barWidth} 
-                                      height={barHeight} 
-                                      fill="#777777" 
-                                      className="hover:fill-[#2563EB] transition-colors"
-                                    />
-                                    {v.count > 0 && (
-                                      <text 
-                                        x={x + barWidth / 2} 
-                                        y={y - 4} 
-                                        textAnchor="middle" 
-                                        className="text-[8px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      >
-                                        {v.count}
-                                      </text>
-                                    )}
-                                    <text 
-                                      x={x + barWidth / 2} 
-                                      y="134" 
-                                      textAnchor="middle" 
-                                      className="text-[9px] font-bold fill-slate-500"
-                                    >
-                                      {v.year}
-                                    </text>
-                                  </g>
-                                )
-                              })}
-                            </svg>
-                          </div>
-                        )
-                      })()}
-                    </div>
-
-                    {/* Scholar articles section (Matching Google Scholar exactly) */}
-                    <div className="pt-5 border-t border-slate-100">
-                      <h4 className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                        <GraduationCap className="h-4 w-4 text-[#2563EB]" />
-                        Các bài viết Scholar
-                      </h4>
-                      
-                      <div className="bg-[#F8FAFC] border border-[#E5E7EB] rounded-2xl p-4 shadow-3xs text-left">
-                        {/* Title link */}
-                        <a 
-                          href={selectedPublication.url_scholar_article || selectedPublication.pub_url || (selectedPublication.cites_id ? `https://scholar.google.com/scholar?cluster=${selectedPublication.cites_id}` : `https://scholar.google.com/scholar?q=${encodeURIComponent(selectedPublication.title)}`)}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="block text-sm font-semibold text-[#1a0dab] hover:underline leading-snug"
-                        >
-                          {selectedPublication.title}
-                        </a>
-                        
-                        {/* Shortened Authors & Venue snippet */}
-                        <div className="text-xs text-slate-650 mt-1.5 font-medium leading-relaxed">
-                          <span className="text-slate-700">{getShortenedAuthors(selectedPublication.authors_list)}</span>
-                          <span className="text-[#006621]"> - {getCleanSnippetVenue(selectedPublication.venue)}</span>
-                          {selectedPublication.year && <span className="text-[#006621]">, {selectedPublication.year}</span>}
-                        </div>
-                        
-                        {/* Action links */}
-                        <div className="flex flex-wrap items-center gap-4 mt-2.5 text-[11px] text-[#1a0dab] font-medium">
-                          {selectedPublication.citations > 0 || selectedPublication.cites_id ? (
-                            <a 
-                              href={selectedPublication.cites_id ? `https://scholar.google.com/scholar?cites=${selectedPublication.cites_id}` : `https://scholar.google.com/scholar?q=${encodeURIComponent(selectedPublication.title)}`}
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="hover:underline"
-                            >
-                              Trích dẫn {selectedPublication.citations || 0} bài viết
-                            </a>
-                          ) : (
-                            <span className="text-slate-400 select-none">Trích dẫn 0 bài viết</span>
-                          )}
-                          
-                          {selectedPublication.url_related_articles || selectedPublication.cites_id ? (
-                            <a 
-                              href={selectedPublication.url_related_articles || `https://scholar.google.com/scholar?q=related:${selectedPublication.cites_id}`}
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="hover:underline"
-                            >
-                              Bài viết có liên quan
-                            </a>
-                          ) : (
-                            <span className="text-slate-400 select-none">Bài viết có liên quan</span>
-                          )}
-                          
-                          {selectedPublication.url_all_versions || selectedPublication.cites_id ? (
-                            <a 
-                              href={selectedPublication.url_all_versions || `https://scholar.google.com/scholar?cluster=${selectedPublication.cites_id}`}
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="hover:underline"
-                            >
-                              {translateVersionsCount(selectedPublication.versions_count || '')}
-                            </a>
-                          ) : (
-                            <span className="text-slate-400 select-none">Tất cả phiên bản</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                  </div>
-                </Card>
+                <PublicationDetailPanel
+                  publication={selectedPublication}
+                  authorName={profile.name}
+                  onBack={() => setSelectedPublication(null)}
+                  onEdit={(pub, e) => openEditPubModal(pub, e)}
+                  onDelete={(pubId, e) => handleDeletePub(pubId, e)}
+                />
               ) : (
-                
-                /* List of Papers - Structured EXACTLY as Google Scholar Table */
-                <Card className="border-[#E5E7EB] rounded-3xl bg-white p-6 shadow-sm">
-                  
-                  {/* Toolbar options right above the table */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-5 border-b border-slate-100 mb-4">
-                    
-                    <div className="flex-1 flex flex-col sm:flex-row gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          type="text"
-                          placeholder="Lọc tên bài báo khoa học..."
-                          value={pubSearch}
-                          onChange={(e) => setPubSearch(e.target.value)}
-                          className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-1.5 pl-9 text-xs text-[#0F172A] placeholder-slate-400 focus:outline-none"
-                        />
-                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                      </div>
-                      
-                      <select
-                        value={yearFilter}
-                        onChange={(e) => setYearFilter(e.target.value)}
-                        className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs text-slate-600 font-semibold focus:outline-none cursor-pointer"
-                      >
-                        <option value="All">Tất cả năm</option>
-                        {Array.from(new Set(profile.publications.map(p => p.year).filter(y => y && y !== 'Không rõ'))).sort().reverse().map(y => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs text-slate-650 font-semibold focus:outline-none cursor-pointer"
-                      >
-                        <option value="citations_desc">Trích dẫn (Cao-Thấp)</option>
-                        <option value="citations_asc">Trích dẫn (Thấp-Cao)</option>
-                        <option value="year_desc">Năm (Mới nhất)</option>
-                        <option value="year_asc">Năm (Cũ nhất)</option>
-                        <option value="title_asc">Tựa đề (A-Z)</option>
-                        <option value="title_desc">Tựa đề (Z-A)</option>
-                      </select>
-                    </div>
-
-                    <button
-                      onClick={handleExport}
-                      className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Xuất Excel</span>
-                    </button>
-
-                  </div>
-
-                  {/* Publications Table */}
-                  <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        {selectedPubIds.length > 0 ? (
-                          /* Contextual header bar (Image 6 style) in Vietnamese (Merge button now functional) */
-                          <tr className="bg-slate-100 border-b border-[#E5E7EB] text-slate-700 font-semibold h-11 transition-all">
-                            <th className="py-2.5 px-3 w-8">
-                              <input 
-                                type="checkbox" 
-                                className="rounded border-slate-300 accent-[#2563EB]"
-                                checked={isAllSelectedOnPage}
-                                onChange={handleToggleSelectAll}
-                              />
-                            </th>
-                            <th colSpan={3} className="py-2.5 px-4 text-left">
-                              <div className="flex items-center gap-6 text-slate-650 font-bold text-[11px]">
-                                <button 
-                                  type="button"
-                                  onClick={() => {
-                                    if (selectedPubIds.length >= 2) {
-                                      setMergeMainPubId(selectedPubIds[0])
-                                      setIsMergeModalOpen(true)
-                                    }
-                                  }}
-                                  disabled={selectedPubIds.length < 2}
-                                  className={cn(
-                                    "flex items-center gap-1 font-bold text-[11px] transition-colors",
-                                    selectedPubIds.length >= 2
-                                      ? "text-[#2563EB] hover:underline cursor-pointer"
-                                      : "opacity-45 text-[#64748B] cursor-not-allowed"
-                                  )}
-                                >
-                                  <span>🔧 GỘP BÀI</span>
-                                </button>
-                                <button 
-                                  type="button"
-                                  onClick={handleDeleteSelected}
-                                  className="flex items-center gap-1 hover:text-rose-600 transition-colors cursor-pointer text-slate-650"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 text-slate-600" />
-                                  <span>XÓA ĐÃ CHỌN ({selectedPubIds.length})</span>
-                                </button>
-                                <button 
-                                  type="button"
-                                  onClick={handleExport}
-                                  className="flex items-center gap-1 hover:text-[#2563EB] transition-colors cursor-pointer"
-                                >
-                                  <Download className="h-3.5 w-3.5" />
-                                  <span>XUẤT EXCEL</span>
-                                </button>
-                              </div>
-                            </th>
-                          </tr>
-                        ) : (
-                          /* Standard table header in Vietnamese */
-                          <tr className="bg-slate-50/50 text-[#2563EB] font-bold border-b border-[#E5E7EB]">
-                            <th className="py-3 px-3 w-8">
-                              <input 
-                                type="checkbox" 
-                                className="rounded border-slate-300" 
-                                checked={isAllSelectedOnPage}
-                                onChange={handleToggleSelectAll}
-                              />
-                            </th>
-                            <th 
-                              className="py-3 px-4 font-bold text-[#2563EB] hover:underline cursor-pointer uppercase tracking-wider text-[10px]"
-                              onClick={() => setSortBy(sortBy === 'title_asc' ? 'title_desc' : 'title_asc')}
-                            >
-                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                <span className="cursor-pointer hover:underline" onClick={() => setSortBy(sortBy === 'title_asc' ? 'title_desc' : 'title_asc')}>
-                                  TIÊU ĐỀ
-                                </span>
-                                <button 
-                                  onClick={() => setIsAddPubModalOpen(true)}
-                                  className="p-0.5 rounded hover:bg-slate-200 text-[#2563EB] transition-colors ml-1" 
-                                  title="Thêm công báo mới"
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                </button>
-                                <button 
-                                  onClick={() => setIsTrashModalOpen(true)}
-                                  className="p-0.5 rounded hover:bg-slate-200 text-rose-600 transition-colors"
-                                  title="Xem Thùng rác bài viết"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </th>
-                            <th 
-                              className="py-3 px-4 font-bold text-[#2563EB] hover:underline cursor-pointer uppercase tracking-wider text-[10px] w-28 text-right"
-                              onClick={() => setSortBy(sortBy === 'citations_desc' ? 'citations_asc' : 'citations_desc')}
-                            >
-                              TRÍCH DẪN
-                            </th>
-                            <th 
-                              className="py-3 px-4 font-bold text-[#2563EB] hover:underline cursor-pointer uppercase tracking-wider text-[10px] w-20 text-right"
-                              onClick={() => setSortBy(sortBy === 'year_desc' ? 'year_asc' : 'year_desc')}
-                            >
-                              NĂM
-                            </th>
-                          </tr>
-                        )}
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {paginatedPubs.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="py-12 text-center text-slate-550 italic">
-                              Không tìm thấy bài báo nào khớp điều kiện lọc.
-                            </td>
-                          </tr>
-                        ) : (
-                          paginatedPubs.map((pub) => {
-                            return (
-                              <tr 
-                                key={pub.id} 
-                                className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
-                                onClick={() => setSelectedPublication(pub)}
-                              >
-                                <td className="py-4 px-3" onClick={(e) => e.stopPropagation()}>
-                                  <input 
-                                    type="checkbox" 
-                                    className="rounded border-slate-300 accent-[#2563EB]" 
-                                    checked={selectedPubIds.includes(pub.id)}
-                                    onChange={(e) => handleToggleSelect(pub.id, e as any)}
-                                  />
-                                </td>
-                                <td className="py-4 px-4">
-                                  <div className="font-bold text-[#2563EB] hover:underline text-sm leading-snug">
-                                    {pub.title}
-                                  </div>
-                                  <div className="text-[11px] text-slate-500 mt-1 font-medium leading-relaxed">
-                                    {pub.authors_list}
-                                  </div>
-                                  <div className="text-[11px] text-slate-500 italic mt-0.5 font-medium flex items-center gap-1.5 flex-wrap">
-                                    <span>
-                                      {pub.volume || pub.pages ? (
-                                        `${pub.venue || ''} ${pub.volume || ''}${pub.issue ? `(${pub.issue})` : ''}${pub.pages ? `, ${pub.pages}` : ''}`.trim()
-                                      ) : (
-                                        pub.venue || 'Tạp chí khác'
-                                      )}
-                                    </span>
-                                  </div>
-
-                                  {/* Badges inline below metadata (IF styled in purple) */}
-                                  <div className="flex flex-wrap gap-1.5 mt-2">
-                                    {pub.sjr_q === 'Q1' && (
-                                      <span className="inline-flex items-center rounded bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-100">Q1</span>
-                                    )}
-                                    {pub.sjr_q === 'Q2' && (
-                                      <span className="inline-flex items-center rounded bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700 border border-amber-100">Q2</span>
-                                    )}
-                                    {pub.sjr_q === 'Q3' && (
-                                      <span className="inline-flex items-center rounded bg-[#DBEAFE] px-2 py-0.5 text-[9px] font-bold text-[#2563EB] border border-[#BFDBFE]">Q3</span>
-                                    )}
-                                    {pub.sjr_q === 'Q4' && (
-                                      <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-650">Q4</span>
-                                    )}
-                                    {pub.if_val !== 'N/A' && (
-                                      <span className="inline-flex items-center rounded bg-purple-50 px-2 py-0.5 text-[9px] font-bold text-purple-700 border border-purple-100">IF: {pub.if_val}</span>
-                                    )}
-                                    {pub.wos !== 'N/A' && (
-                                      <span className="inline-flex items-center rounded bg-rose-50 px-2 py-0.5 text-[9px] font-bold text-rose-600 border border-rose-100">WoS: {pub.wos}</span>
-                                    )}
-                                  </div>
-                                </td>
-                                
-                                {/* CITED BY count */}
-                                <td className="py-4 px-4 text-right">
-                                  <span 
-                                    className="font-bold text-[#2563EB] hover:underline cursor-pointer"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setSelectedPublication(pub)
-                                    }}
-                                  >
-                                    {pub.citations || '─'}
-                                  </span>
-                                </td>
-                                
-                                {/* YEAR */}
-                                <td className="py-4 px-4 text-right font-medium text-slate-600">
-                                  {pub.year || '─'}
-                                </td>
-                              </tr>
-                            )
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Pagination Controls */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between pt-5 border-t border-slate-100 mt-4 text-xs text-[#64748B]">
-                      <span>
-                        Hiển thị <strong>{paginatedPubs.length}</strong> trên tổng số <strong>{filteredPubs.length}</strong> bài báo
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          disabled={currentPage === 1}
-                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                          className="p-1.5 rounded-lg border border-[#E5E7EB] hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <span className="font-bold">
-                          Trang {currentPage} / {totalPages}
-                        </span>
-                        <button
-                          disabled={currentPage === totalPages}
-                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                          className="p-1.5 rounded-lg border border-[#E5E7EB] hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                </Card>
+                <PublicationTableList
+                  publications={profile.publications}
+                  selectedPubIds={selectedPubIds}
+                  onSelectPub={(pub) => setSelectedPublication(pub)}
+                  onToggleSelectPub={(pubId, e) => handleToggleSelect(pubId, e as any)}
+                  onToggleSelectAll={handleToggleSelectAll}
+                  onAddPub={() => setIsAddPubModalOpen(true)}
+                  onOpenTrash={() => setIsTrashModalOpen(true)}
+                  onExport={handleExport}
+                  searchKeyword={pubSearch}
+                  setSearchKeyword={setPubSearch}
+                  yearFilter={yearFilter}
+                  setYearFilter={setYearFilter}
+                  quartileFilter={quartileFilter}
+                  setQuartileFilter={setQuartileFilter}
+                  sortBy={sortBy}
+                  setSortBy={setSortBy}
+                />
               )}
 
             </div>
