@@ -15,7 +15,19 @@ import {
   Search,
   Calendar,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Upload,
+  FileText,
+  RefreshCw,
+  Play,
+  ShieldAlert,
+  Server,
+  Zap,
+  Settings,
+  List,
+  Download,
+  Trash2,
+  Check
 } from 'lucide-react'
 
 export interface AutoSchedulerLogEntry {
@@ -496,7 +508,7 @@ export function ScholarAutoSchedulerPage() {
       case 'UPDATED':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-3xs">
-            ⚡ UPDATED
+            UPDATED
           </span>
         )
       case 'FAILED_CAPTCHA':
@@ -528,7 +540,10 @@ export function ScholarAutoSchedulerPage() {
       <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
-            <h2 className="font-bold text-slate-800 text-base">📥 Nhập Danh Sách Hồ Sơ CV Tác Giả</h2>
+            <h2 className="font-bold text-slate-800 text-base flex items-center gap-2">
+              <Upload className="w-5 h-5 text-slate-700" />
+              <span>Nhập Danh Sách Hồ Sơ CV Tác Giả</span>
+            </h2>
             <p className="text-xs text-slate-500">Đưa hàng loạt ID/URL tác giả vào hàng chờ cào CV tự động</p>
           </div>
 
@@ -546,7 +561,8 @@ export function ScholarAutoSchedulerPage() {
               onClick={() => setIsLogModalOpen(true)}
               className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 border border-slate-200 cursor-pointer transition-all shadow-3xs"
             >
-              <span>📋 Nhật Ký ({logs.length})</span>
+              <FileText className="w-4 h-4 text-slate-600" />
+              <span>Nhật Ký ({logs.length})</span>
             </button>
 
             <button
@@ -555,9 +571,10 @@ export function ScholarAutoSchedulerPage() {
                 fetchConfig()
                 fetchAuthors()
               }}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 border border-slate-200 cursor-pointer transition-all shadow-3xs"
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 border border-slate-200 cursor-pointer transition-all shadow-3xs"
             >
-              <span>🔄 Làm mới</span>
+              <RefreshCw className="w-4 h-4 text-slate-600" />
+              <span>Làm mới</span>
             </button>
           </div>
         </div>
@@ -581,8 +598,12 @@ export function ScholarAutoSchedulerPage() {
             disabled={loadingImport || !bulkText.trim()}
             className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#005b9a] to-indigo-600 hover:from-[#004b80] hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-indigo-200 hover:scale-[1.01] active:scale-[0.99]"
           >
-            {loadingImport && <Spinner className="w-4 h-4 text-white" />}
-            🚀 Nhập CV & Kích Hoạt Quét Ngay
+            {loadingImport ? (
+              <Spinner className="w-4 h-4 text-white" />
+            ) : (
+              <Play className="w-4 h-4 text-white fill-white" />
+            )}
+            <span>Nhập CV & Kích Hoạt Quét Ngay</span>
           </button>
         </div>
       </Card>
@@ -688,11 +709,14 @@ export function ScholarAutoSchedulerPage() {
         {/* Card 1: Tor Proxy Status Card (Content-fitted height) */}
         <Card className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
           <div className="space-y-3">
-            {/* Header: Title "🛡️ Tor Proxy Gateway", Status pill */}
+            {/* Header: Title "Tor Proxy Gateway", Status pill */}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="font-bold text-slate-800 text-xs sm:text-sm">🛡️ Tor Proxy Gateway</h2>
+                  <h2 className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-2">
+                    <ShieldAlert className="w-5 h-5 text-slate-700" />
+                    <span>Tor Proxy Gateway</span>
+                  </h2>
                   <span className="font-mono text-[10px] text-[#005b9a] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 font-semibold">
                     Exit IP: {torInfo?.ip || '185.xxx.xxx.xxx'}
                   </span>
@@ -715,7 +739,8 @@ export function ScholarAutoSchedulerPage() {
             <div className="grid grid-cols-2 gap-2.5 text-xs">
               <div className="bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-200/70 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
-                  🔌 SOCKS5 Proxy
+                  <Server className="w-4 h-4 text-slate-500" />
+                  <span>SOCKS5 Proxy</span>
                 </span>
                 <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
                   Port 9050
@@ -723,7 +748,8 @@ export function ScholarAutoSchedulerPage() {
               </div>
               <div className="bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-200/70 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
-                  ⚡ Control Port
+                  <Zap className="w-4 h-4 text-slate-500" />
+                  <span>Control Port</span>
                 </span>
                 <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
                   Port 9051
@@ -741,7 +767,7 @@ export function ScholarAutoSchedulerPage() {
                 className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-200"
               >
                 <Power className={`h-4 w-4 ${loadingTor ? 'animate-spin' : ''}`} />
-                ⚡ Khởi Động Tor Container (Ports 9050/9051)
+                Khởi Động Tor Container (Ports 9050/9051)
               </button>
             )}
             <button
@@ -749,8 +775,12 @@ export function ScholarAutoSchedulerPage() {
               disabled={loadingTor || torInfo?.status !== 'online'}
               className="w-full flex-1 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#005b9a] via-indigo-600 to-indigo-700 hover:from-[#004b80] hover:to-indigo-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-200 text-center leading-tight"
             >
-              {loadingTor && <Spinner className="w-4 h-4 text-white" />}
-              <span>🔄 Đổi IP Tor Ngẫu Nhiên (9050 • 9051)</span>
+              {loadingTor ? (
+                <Spinner className="w-4 h-4 text-white" />
+              ) : (
+                <RefreshCw className="w-4 h-4 text-white" />
+              )}
+              <span>Đổi IP Tor Ngẫu Nhiên (9050 • 9051)</span>
             </button>
           </div>
         </Card>
@@ -758,10 +788,13 @@ export function ScholarAutoSchedulerPage() {
         {/* Card 2: Auto-Scan Schedule Status Card (Content-fitted height) */}
         <Card className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
           <div className="space-y-3">
-            {/* Header: Title "⚙️ Cấu Hình Lịch Auto-Scan", Active toggle switch */}
+            {/* Header: Title "Cấu Hình Lịch Auto-Scan", Active toggle switch */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <h2 className="font-bold text-slate-800 text-xs sm:text-sm">⚙️ Cấu Hình Lịch Auto-Scan</h2>
+                <h2 className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-slate-700" />
+                  <span>Cấu Hình Lịch Auto-Scan</span>
+                </h2>
                 <p className="text-[11px] text-slate-500">Chu kỳ & mốc giờ quét tự động</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -782,10 +815,10 @@ export function ScholarAutoSchedulerPage() {
                 {(() => {
                   const modeText =
                     config.frequency_type === 'MONTHLY'
-                      ? '🗓️ Mode Hằng Tháng'
+                      ? 'Mode Hằng Tháng'
                       : config.frequency_type === 'DAILY'
-                      ? '⚡ Mode Hằng Ngày'
-                      : '📅 Mode Hằng Tuần'
+                      ? 'Mode Hằng Ngày'
+                      : 'Mode Hằng Tuần'
 
                   const dayText =
                     config.frequency_type === 'MONTHLY'
@@ -816,7 +849,8 @@ export function ScholarAutoSchedulerPage() {
               onClick={() => setIsScheduleModalOpen(true)}
               className="w-full px-4 py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-[#4F46E5] font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-indigo-200/80 shadow-2xs"
             >
-              <span>⚙️ Cấu Hình Thời Gian Quét</span>
+              <Settings className="w-4 h-4 text-[#4F46E5]" />
+              <span>Cấu Hình Thời Gian Quét</span>
             </button>
           </div>
         </Card>
@@ -830,7 +864,8 @@ export function ScholarAutoSchedulerPage() {
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  ⚙️ Cấu Hình Thời Gian Quét Auto-Scan
+                  <Settings className="w-5 h-5 text-slate-700" />
+                  <span>Cấu Hình Thời Gian Quét Auto-Scan</span>
                 </h3>
                 <p className="text-xs text-slate-500">Thiết lập chu kỳ, mốc giờ & hạn ngạch</p>
               </div>
@@ -838,7 +873,7 @@ export function ScholarAutoSchedulerPage() {
                 onClick={() => setIsScheduleModalOpen(false)}
                 className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
@@ -859,7 +894,7 @@ export function ScholarAutoSchedulerPage() {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-base">📅</span>
+                    <Calendar className="w-4 h-4" />
                     <div className="text-left leading-tight">
                       <div>Hằng Tuần</div>
                       <div className="text-[10px] text-slate-400 font-normal">Chạy theo Thứ</div>
@@ -885,7 +920,7 @@ export function ScholarAutoSchedulerPage() {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-base">🗓️</span>
+                    <Calendar className="w-4 h-4" />
                     <div className="text-left leading-tight">
                       <div>Hằng Tháng</div>
                       <div className="text-[10px] text-slate-400 font-normal">Chạy theo Ngày</div>
@@ -911,7 +946,7 @@ export function ScholarAutoSchedulerPage() {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-base">⚡</span>
+                    <Zap className="w-4 h-4" />
                     <div className="text-left leading-tight">
                       <div>Hằng Ngày</div>
                       <div className="text-[10px] text-slate-400 font-normal">Mỗi 24 giờ</div>
@@ -937,14 +972,14 @@ export function ScholarAutoSchedulerPage() {
                     <span className="text-[10px] font-mono font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
                       {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && `Lặp lại: ${WEEKDAYS.find(w => w.value === (config.preferred_weekday ?? 0))?.label}`}
                       {config.frequency_type === 'MONTHLY' && `Lặp lại: Ngày ${config.preferred_day_of_month ?? 1} hằng tháng`}
-                      {config.frequency_type === 'DAILY' && '⚡ Lặp lại hằng ngày'}
+                      {config.frequency_type === 'DAILY' && 'Lặp lại hằng ngày'}
                     </span>
                   </div>
 
                   {config.frequency_type === 'DAILY' ? (
                     <div className="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100 text-center space-y-2 my-auto">
                       <div className="w-10 h-10 rounded-xl bg-white text-[#4F46E5] font-bold text-lg flex items-center justify-center mx-auto shadow-xs border border-indigo-100">
-                        ⚡
+                        <Zap className="w-5 h-5 text-[#4F46E5]" />
                       </div>
                       <h4 className="font-bold text-xs text-slate-800">Chế độ Quét Hằng Ngày</h4>
                       <p className="text-[11px] text-slate-600 leading-relaxed max-w-xs mx-auto">
@@ -1248,7 +1283,7 @@ export function ScholarAutoSchedulerPage() {
                 onClick={() => setIsScheduleModalOpen(false)}
                 className="bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl px-5 py-2 text-xs font-bold cursor-pointer transition-all"
               >
-                ✖ Hủy
+                Hủy
               </button>
               <button
                 type="button"
@@ -1259,8 +1294,12 @@ export function ScholarAutoSchedulerPage() {
                 disabled={loadingConfig}
                 className="bg-[#4F46E5] text-white hover:bg-indigo-700 disabled:opacity-50 rounded-xl px-6 py-2 text-xs font-bold shadow-md cursor-pointer transition-all flex items-center gap-1.5"
               >
-                {loadingConfig && <Spinner className="w-3.5 h-3.5 text-white" />}
-                💾 Lưu Cấu Hình Hẹn Giờ
+                {loadingConfig ? (
+                  <Spinner className="w-3.5 h-3.5 text-white" />
+                ) : (
+                  <Check className="w-4 h-4 text-white" />
+                )}
+                <span>Lưu Cấu Hình Hẹn Giờ</span>
               </button>
             </div>
           </div>
@@ -1272,7 +1311,10 @@ export function ScholarAutoSchedulerPage() {
       <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
-            <h2 className="font-bold text-slate-800 text-base">📊 Trạng Thái Tự Động Quét CV Tác Giả</h2>
+            <h2 className="font-bold text-slate-800 text-base flex items-center gap-2">
+              <List className="w-5 h-5 text-slate-700" />
+              <span>Trạng Thái Tự Động Quét CV Tác Giả</span>
+            </h2>
             <p className="text-xs text-slate-500">Danh sách tác giả và trạng thái Fast Smart Check mới nhất</p>
           </div>
 
@@ -1283,8 +1325,12 @@ export function ScholarAutoSchedulerPage() {
                 disabled={loadingScan}
                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-md shadow-blue-200 transition-all animate-pulse"
               >
-                {loadingScan && <Spinner className="w-3.5 h-3.5 text-white" />}
-                ⚡ Quét Ngay Tác Giả Đã Chọn
+                {loadingScan ? (
+                  <Spinner className="w-3.5 h-3.5 text-white" />
+                ) : (
+                  <Play className="w-4 h-4 text-white" />
+                )}
+                <span>Quét Ngay Tác Giả Đã Chọn</span>
               </button>
             )}
             <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200/80">
@@ -1362,7 +1408,8 @@ export function ScholarAutoSchedulerPage() {
                         disabled={loadingScan}
                         className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] inline-flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-3xs"
                       >
-                        🔄 Quét lại
+                        <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Quét lại</span>
                       </button>
                     </td>
                   </tr>
@@ -1381,7 +1428,8 @@ export function ScholarAutoSchedulerPage() {
             <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  📋 Nhật Ký Hoạt Động & Kết Quả Quét CV
+                  <FileText className="w-5 h-5 text-slate-700" />
+                  <span>Nhật Ký Hoạt Động & Kết Quả Quét CV</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Lưu vết thông tin cào dữ liệu, trạng thái thành công và báo lỗi
@@ -1391,7 +1439,7 @@ export function ScholarAutoSchedulerPage() {
                 onClick={() => setIsLogModalOpen(false)}
                 className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
@@ -1416,11 +1464,11 @@ export function ScholarAutoSchedulerPage() {
                   className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-[#005b9a] cursor-pointer"
                 >
                   <option value="ALL">Tất cả danh mục</option>
-                  <option value="NHẬP_CV">📥 Nhập CV</option>
-                  <option value="CÀO_CV">⚡ Cào CV</option>
-                  <option value="PROXY_TOR">🛡️ Proxy Tor</option>
-                  <option value="CẤU_HÌNH">⚙️ Cấu Hình</option>
-                  <option value="HỆ_THỐNG">🖥️ Hệ Thống</option>
+                  <option value="NHẬP_CV">Nhập CV</option>
+                  <option value="CÀO_CV">Cào CV</option>
+                  <option value="PROXY_TOR">Proxy Tor</option>
+                  <option value="CẤU_HÌNH">Cấu Hình</option>
+                  <option value="HỆ_THỐNG">Hệ Thống</option>
                 </select>
 
                 {/* Level Filter select */}
@@ -1455,14 +1503,14 @@ export function ScholarAutoSchedulerPage() {
                         {/* Category badge */}
                         <span className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                           {log.category === 'NHẬP_CV'
-                            ? '📥 Nhập CV'
+                            ? 'Nhập CV'
                             : log.category === 'CÀO_CV'
-                            ? '⚡ Cào CV'
+                            ? 'Cào CV'
                             : log.category === 'PROXY_TOR'
-                            ? '🛡️ Proxy Tor'
+                            ? 'Proxy Tor'
                             : log.category === 'CẤU_HÌNH'
-                            ? '⚙️ Cấu Hình'
-                            : '🖥️ Hệ Thống'}
+                            ? 'Cấu Hình'
+                            : 'Hệ Thống'}
                         </span>
                         {/* Level badge */}
                         <span
@@ -1511,7 +1559,8 @@ export function ScholarAutoSchedulerPage() {
                     onClick={() => handleExportLogs('txt')}
                     className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-3xs"
                   >
-                    📥 Xuất file (TXT/JSON)
+                    <Download className="w-4 h-4 text-slate-600" />
+                    <span>Xuất file (TXT/JSON)</span>
                   </button>
                   <div className="hidden group-hover:flex absolute left-0 bottom-full mb-1 bg-slate-800 text-white rounded-lg p-1 text-[11px] gap-1 z-10 shadow-lg">
                     <button
@@ -1533,7 +1582,8 @@ export function ScholarAutoSchedulerPage() {
                   onClick={handleClearLogs}
                   className="px-3.5 py-2 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-3xs"
                 >
-                  🗑️ Xóa nhật ký
+                  <Trash2 className="w-4 h-4 text-slate-600" />
+                  <span>Xóa nhật ký</span>
                 </button>
               </div>
 
