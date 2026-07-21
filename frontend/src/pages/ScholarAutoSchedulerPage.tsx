@@ -81,6 +81,15 @@ export function ScholarAutoSchedulerPage() {
     cooldown_min_seconds: 45,
     cooldown_max_seconds: 90,
   })
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date())
+
+  const handlePrevMonth = () => {
+    setCurrentCalendarDate(new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() - 1, 1))
+  }
+
+  const handleNextMonth = () => {
+    setCurrentCalendarDate(new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 1, 1))
+  }
   const [bulkText, setBulkText] = useState('')
   const [loadingTor, setLoadingTor] = useState(false)
   const [loadingConfig, setLoadingConfig] = useState(false)
@@ -829,146 +838,323 @@ export function ScholarAutoSchedulerPage() {
             </label>
           </div>
 
-          {/* Frequency Tabs */}
+          {/* Frequency Mode Selector (Single Choice 1 of 3) */}
           <div className="space-y-2">
-            <label className="block text-xs font-semibold text-slate-600">Frequency / Chu kỳ lặp lại</label>
-            <div className="grid grid-cols-3 gap-2 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/60">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700">Chọn 1 trong 3 Mode Chu kỳ lặp lại:</label>
+              <span className="text-[11px] font-bold text-[#005b9a] bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
+                {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && '📅 Mode Hằng Tuần'}
+                {config.frequency_type === 'MONTHLY' && '🗓️ Mode Hằng Tháng'}
+                {config.frequency_type === 'DAILY' && '⚡ Mode Hằng Ngày'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200/70">
+              {/* Mode 1: WEEKLY */}
               <button
                 type="button"
-                onClick={() => setConfig({ ...config, frequency_type: 'WEEKLY' })}
-                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                onClick={() => {
+                  setConfig({ ...config, frequency_type: 'WEEKLY' })
+                  addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chuyển Mode Chu kỳ', 'Đã chuyển sang Mode 1: Hằng Tuần (Chạy 1 ngày cố định trong tuần)', 'ModeSelector')
+                }}
+                className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
                   (config.frequency_type || 'WEEKLY') === 'WEEKLY'
-                    ? 'bg-white text-[#005b9a] shadow-sm border border-slate-200/60'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-[#005b9a] shadow-sm border-[#005b9a] ring-2 ring-blue-100'
+                    : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
                 }`}
               >
-                📅 Hằng Tuần
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">📅</span>
+                  <div className="text-left leading-tight">
+                    <div>Hằng Tuần</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Chạy theo Thứ</div>
+                  </div>
+                </div>
+                <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
+                  (config.frequency_type || 'WEEKLY') === 'WEEKLY' ? 'border-[#005b9a] bg-[#005b9a] text-white font-bold' : 'border-slate-300'
+                }`}>
+                  {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && '✓'}
+                </span>
               </button>
+
+              {/* Mode 2: MONTHLY */}
               <button
                 type="button"
-                onClick={() => setConfig({ ...config, frequency_type: 'MONTHLY' })}
-                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                onClick={() => {
+                  setConfig({ ...config, frequency_type: 'MONTHLY' })
+                  addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chuyển Mode Chu kỳ', 'Đã chuyển sang Mode 2: Hằng Tháng (Chạy 1 ngày cố định trong tháng)', 'ModeSelector')
+                }}
+                className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
                   config.frequency_type === 'MONTHLY'
-                    ? 'bg-white text-[#005b9a] shadow-sm border border-slate-200/60'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-[#005b9a] shadow-sm border-[#005b9a] ring-2 ring-blue-100'
+                    : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
                 }`}
               >
-                🗓️ Hằng Tháng
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">🗓️</span>
+                  <div className="text-left leading-tight">
+                    <div>Hằng Tháng</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Chạy theo Ngày</div>
+                  </div>
+                </div>
+                <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
+                  config.frequency_type === 'MONTHLY' ? 'border-[#005b9a] bg-[#005b9a] text-white font-bold' : 'border-slate-300'
+                }`}>
+                  {config.frequency_type === 'MONTHLY' && '✓'}
+                </span>
               </button>
+
+              {/* Mode 3: DAILY */}
               <button
                 type="button"
-                onClick={() => setConfig({ ...config, frequency_type: 'DAILY' })}
-                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                onClick={() => {
+                  setConfig({ ...config, frequency_type: 'DAILY' })
+                  addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chuyển Mode Chu kỳ', 'Đã chuyển sang Mode 3: Hằng Ngày (Chạy tự động mỗi 24 giờ)', 'ModeSelector')
+                }}
+                className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
                   config.frequency_type === 'DAILY'
-                    ? 'bg-white text-[#005b9a] shadow-sm border border-slate-200/60'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-[#005b9a] shadow-sm border-[#005b9a] ring-2 ring-blue-100'
+                    : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
                 }`}
               >
-                ⚡ Hằng Ngày
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">⚡</span>
+                  <div className="text-left leading-tight">
+                    <div>Hằng Ngày</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Mỗi 24 giờ</div>
+                  </div>
+                </div>
+                <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
+                  config.frequency_type === 'DAILY' ? 'border-[#005b9a] bg-[#005b9a] text-white font-bold' : 'border-slate-300'
+                }`}>
+                  {config.frequency_type === 'DAILY' && '✓'}
+                </span>
               </button>
             </div>
           </div>
 
-          {/* Interactive Day Selector */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-[#005b9a]" />
-                Chọn Ngày Chạy Trong Tuần / Tháng
-              </label>
-              <span className="text-[11px] font-mono text-slate-400">
-                {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && `Thứ: ${WEEKDAYS.find(w => w.value === (config.preferred_weekday ?? 0))?.label}`}
-                {config.frequency_type === 'MONTHLY' && `Ngày: ${config.preferred_day_of_month ?? 1}`}
-                {config.frequency_type === 'DAILY' && 'Tất cả các ngày'}
-              </span>
+          {/* Grid Layout: Calendar & Analog Clock */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-1">
+            {/* Left Column: 📅 Chọn Ngày Cào (Select Date - Calendar Widget) */}
+            <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/70 space-y-3 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-[#005b9a]" />
+                  <span>📅 Chọn Ngày Cào (Select Date)</span>
+                </label>
+                <span className="text-[11px] font-mono font-semibold text-slate-600 bg-white px-2.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                  {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && `Lặp lại: ${WEEKDAYS.find(w => w.value === (config.preferred_weekday ?? 0))?.label}`}
+                  {config.frequency_type === 'MONTHLY' && `Lặp lại: Ngày ${config.preferred_day_of_month ?? 1} hằng tháng`}
+                  {config.frequency_type === 'DAILY' && '⚡ Lặp lại hằng ngày'}
+                </span>
+              </div>
+
+              {/* Mode-specific Calendar Display */}
+              {config.frequency_type === 'DAILY' ? (
+                /* Mode DAILY: Info Banner */
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50/60 p-6 rounded-2xl border border-blue-200/60 text-center space-y-3 my-auto shadow-2xs">
+                  <div className="w-12 h-12 rounded-2xl bg-white text-[#005b9a] font-bold text-xl flex items-center justify-center mx-auto shadow-sm border border-blue-100">
+                    ⚡
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-800">Chế độ Quét Hằng Ngày (Daily Routine)</h4>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed max-w-xs mx-auto">
+                      Hệ thống sẽ tự động kích hoạt cào ngầm CV lặp lại <strong>mỗi 24 giờ</strong> vào khung giờ đã chọn ở bảng bên phải. Bạn không cần chọn ngày lẻ trên lịch.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                /* Mode WEEKLY or MONTHLY: Interactive Calendar Grid */
+                <div className="space-y-3">
+                  {/* Weekday Quick Select Pills for WEEKLY mode */}
+                  {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && (
+                    <div className="space-y-1">
+                      <span className="text-[11px] text-slate-500 font-medium block">Chọn Thứ trong tuần:</span>
+                      <div className="grid grid-cols-7 gap-1">
+                        {WEEKDAYS.map((w) => {
+                          const isSelected = (config.preferred_weekday ?? 0) === w.value
+                          return (
+                            <button
+                              key={w.value}
+                              type="button"
+                              onClick={() => {
+                                setConfig((prev: any) => ({ ...prev, preferred_weekday: w.value }))
+                                addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chọn Thứ cào CV', `Đã chọn ${w.label} hàng tuần`, 'WeekdayPill')
+                              }}
+                              className={`py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer text-center ${
+                                isSelected
+                                  ? 'bg-[#005b9a] text-white shadow-xs'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {w.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Month Navigation & Calendar Grid */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="font-bold text-slate-800 text-xs">
+                        Tháng {currentCalendarDate.getMonth() + 1}, {currentCalendarDate.getFullYear()}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handlePrevMonth}
+                          className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                          title="Tháng trước"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleNextMonth}
+                          className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                          title="Tháng sau"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1 text-center font-semibold text-[11px] text-slate-500 border-b border-slate-100 pb-1">
+                      {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map((dayName) => (
+                        <div key={dayName} className="py-0.5">{dayName}</div>
+                      ))}
+                    </div>
+
+                    {(() => {
+                      const year = currentCalendarDate.getFullYear()
+                      const month = currentCalendarDate.getMonth()
+                      const firstDayIndex = new Date(year, month, 1).getDay()
+                      const totalDays = new Date(year, month + 1, 0).getDate()
+                      const daysArray = []
+
+                      for (let i = 0; i < firstDayIndex; i++) {
+                        daysArray.push(<div key={`empty-${i}`} className="w-7 h-7 mx-auto" />)
+                      }
+
+                      for (let d = 1; d <= totalDays; d++) {
+                        const clickedDate = new Date(year, month, d)
+                        const weekday = (clickedDate.getDay() + 6) % 7
+
+                        const isSelected = config.frequency_type === 'MONTHLY'
+                          ? (config.preferred_day_of_month ?? 1) === d
+                          : (config.preferred_weekday ?? 0) === weekday
+
+                        daysArray.push(
+                          <button
+                            key={`day-${d}`}
+                            type="button"
+                            onClick={() => {
+                              setConfig((prev: any) => ({
+                                ...prev,
+                                preferred_day_of_month: d,
+                                preferred_weekday: weekday,
+                              }))
+                              addSchedulerLog(
+                                'CẤU_HÌNH',
+                                'THÔNG_TIN',
+                                'Chọn ngày cào CV',
+                                `Đã chọn ngày ${d} (${WEEKDAYS.find(w => w.value === weekday)?.label || ''})`,
+                                'CalendarWidget'
+                              )
+                            }}
+                            className={`w-7 h-7 rounded-full text-xs transition-all cursor-pointer mx-auto flex items-center justify-center ${
+                              isSelected
+                                ? 'bg-[#005b9a] text-white font-bold shadow-md ring-2 ring-blue-300 scale-105'
+                                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-100 font-medium'
+                            }`}
+                          >
+                            {d}
+                          </button>
+                        )
+                      }
+
+                      return <div className="grid grid-cols-7 gap-1">{daysArray}</div>
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && (
-              <div className="grid grid-cols-7 gap-1.5">
-                {WEEKDAYS.map((day) => {
-                  const isActive = (config.preferred_weekday ?? 0) === day.value
-                  return (
-                    <button
-                      key={day.value}
-                      type="button"
-                      onClick={() => setConfig({ ...config, preferred_weekday: day.value })}
-                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                        isActive
-                          ? 'bg-[#005b9a] text-white border-[#005b9a] shadow-sm scale-[1.02]'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      {day.label}
-                    </button>
-                  )
-                })}
+            {/* Right Column: 🕒 Chọn Giờ Kích Hoạt (Set Time - Analog Clock Widget) */}
+            <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/70 space-y-3 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-[#005b9a]" />
+                  <span>🕒 Chọn Giờ Kích Hoạt (Set Time)</span>
+                </label>
+                <span className="text-[11px] font-mono text-[#005b9a] font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                  {HOUR_SLOTS.find(h => h.hour === (config.preferred_hour ?? 2))?.label}
+                </span>
               </div>
-            )}
 
-            {config.frequency_type === 'MONTHLY' && (
-              <div className="grid grid-cols-7 gap-1 sm:grid-cols-10 md:grid-cols-11 max-h-36 overflow-y-auto custom-scrollbar p-1 bg-slate-50 rounded-xl border border-slate-100">
-                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => {
-                  const isActive = (config.preferred_day_of_month ?? 1) === d
-                  return (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setConfig({ ...config, preferred_day_of_month: d })}
-                      className={`py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
-                        isActive
-                          ? 'bg-[#005b9a] text-white border-[#005b9a] font-bold shadow-2xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  )
-                })}
+              {/* Visual Analog Clock Face */}
+              <div className="py-2">
+                <div className="w-40 h-40 border-4 border-slate-800 rounded-full bg-white relative shadow-lg mx-auto flex items-center justify-center">
+                  {/* Hour tick marks */}
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div
+                      key={i}
+                      style={{ transform: `rotate(${i * 30}deg) translateY(-64px)` }}
+                      className="absolute w-1 h-2.5 bg-slate-400 rounded-full"
+                    />
+                  ))}
+                  {/* Hour Hand */}
+                  <div
+                    style={{ transform: `rotate(${((config.preferred_hour ?? 2) % 12) * 30 + (config.preferred_minute ?? 0) * 0.5}deg)` }}
+                    className="w-1.5 h-11 bg-slate-900 absolute top-5 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
+                  />
+                  {/* Minute Hand */}
+                  <div
+                    style={{ transform: 'rotate(0deg)' }}
+                    className="w-1 h-14 bg-rose-500 absolute top-3 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
+                  />
+                  {/* Center pivot dot */}
+                  <div className="w-3 h-3 bg-slate-900 rounded-full z-10 border-2 border-white" />
+                </div>
               </div>
-            )}
 
-            {config.frequency_type === 'DAILY' && (
-              <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 text-xs text-[#005b9a] flex items-center gap-2">
-                <Clock className="w-4 h-4 shrink-0" />
-                <span>Tiến trình tự động cào ngầm sẽ được khởi chạy mỗi ngày theo mốc giờ dưới đây.</span>
-              </div>
-            )}
-          </div>
-
-          {/* Interactive Hour Slot Selector */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-[#005b9a]" />
-                Chọn Mốc Giờ Kích Hoạt (24h)
-              </label>
-              <span className="text-[11px] font-mono text-[#005b9a] font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                {HOUR_SLOTS.find(h => h.hour === (config.preferred_hour ?? 2))?.label} ({HOUR_SLOTS.find(h => h.hour === (config.preferred_hour ?? 2))?.period})
-              </span>
-            </div>
-
-            <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-12 gap-1.5">
-              {HOUR_SLOTS.map((slot) => {
-                const isActive = (config.preferred_hour ?? 2) === slot.hour
-                return (
-                  <button
-                    key={slot.hour}
-                    type="button"
-                    onClick={() => setConfig({ ...config, preferred_hour: slot.hour })}
-                    title={`${slot.label} (${slot.period})`}
-                    className={`py-2 px-1 rounded-xl text-[11px] font-mono font-bold transition-all cursor-pointer border flex flex-col items-center justify-center ${
-                      isActive
-                        ? 'bg-gradient-to-b from-[#005b9a] to-indigo-700 text-white border-[#005b9a] shadow-md scale-105 ring-2 ring-indigo-200'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
+              {/* Digital Time Controls under clock face */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={config.preferred_hour ?? 2}
+                    onChange={(e) => {
+                      const hour = parseInt(e.target.value, 10)
+                      setConfig((prev: any) => ({ ...prev, preferred_hour: hour }))
+                      addSchedulerLog(
+                        'CẤU_HÌNH',
+                        'THÔNG_TIN',
+                        'Chọn giờ cào CV',
+                        `Đã chọn mốc giờ ${hour.toString().padStart(2, '0')}:00`,
+                        'ClockWidget'
+                      )
+                    }}
+                    className="border border-slate-200 rounded-xl px-3 py-1.5 font-mono font-bold text-xs bg-white text-slate-800 focus:outline-none focus:border-[#005b9a] cursor-pointer shadow-2xs"
                   >
-                    <span>{slot.label}</span>
-                    <span className={`text-[9px] font-sans font-normal ${isActive ? 'text-cyan-200' : 'text-slate-400'}`}>
-                      {slot.period}
-                    </span>
-                  </button>
-                )
-              })}
+                    {HOUR_SLOTS.map((slot) => (
+                      <option key={slot.hour} value={slot.hour}>
+                        {slot.label} ({slot.period})
+                      </option>
+                    ))}
+                  </select>
+                  <span className="px-2.5 py-1.5 bg-slate-100 border border-slate-200 rounded-xl font-mono text-xs font-bold text-slate-600 shadow-2xs">
+                    :00
+                  </span>
+                </div>
+
+                <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-[#005b9a] text-[11px] font-bold">
+                  <span>
+                    ({(config.preferred_hour ?? 2) < 10 ? `0${config.preferred_hour ?? 2}` : config.preferred_hour ?? 2}:00 - {HOUR_SLOTS.find(h => h.hour === (config.preferred_hour ?? 2))?.period})
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
