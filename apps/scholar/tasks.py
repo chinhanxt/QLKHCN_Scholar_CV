@@ -276,33 +276,44 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
         proxy_mode = config.get('SCHOLAR_PROXY_MODE', 'DIRECT')
         
         if proxy_mode in ('SCRAPERAPI', 'LUMINATI'):
-            max_workers = 15
+            max_workers = 12
             min_delay, max_delay = 0.1, 0.4
         elif proxy_mode in ('FREE_PROXIES', 'SINGLEPROXY'):
-            max_workers = 8
-            min_delay, max_delay = 0.3, 0.8
+            max_workers = 6
+            min_delay, max_delay = 0.4, 1.0
         else: # DIRECT
-            max_workers = 5
-            min_delay, max_delay = 0.5, 1.5
+            max_workers = 3
+            min_delay, max_delay = 0.8, 2.0
             
         def fill_one_pub(idx_and_pub):
             nonlocal processed_count
             idx, pub = idx_and_pub
             pub_title = pub.get('bib', {}).get('title', '')
             
-            # Random delay before starting request to avoid bot detection (same as GUI)
+            # Random delay before starting request to avoid bot rate limiting
             time.sleep(random.uniform(min_delay, max_delay))
             
-            try:
-                logger.info(f"Filling publication {idx+1}/{total_pubs}: {pub_title}")
-                filled = scholarly_instance.fill(pub)
-                pub.update(filled)
-            except Exception as fill_err:
-                logger.warning(f"Failed to fill publication {idx+1}: {fill_err}")
+            success = False
+            last_err = None
+            for attempt in range(3):
+                try:
+                    logger.info(f"Filling publication {idx+1}/{total_pubs} (attempt {attempt+1}): {pub_title}")
+                    filled = scholarly_instance.fill(pub)
+                    pub.update(filled)
+                    success = True
+                    break
+                except Exception as fill_err:
+                    last_err = fill_err
+                    logger.warning(f"Attempt {attempt+1} failed to fill publication {idx+1}: {fill_err}")
+                    if attempt < 2:
+                        time.sleep(1.0 + attempt * 1.5)
+            
+            if not success:
+                logger.warning(f"Failed to fill publication {idx+1} after 3 attempts: {last_err}")
                 with state_lock:
                     failed_publications.append({
                         'title': pub_title,
-                        'error': str(fill_err)
+                        'error': str(last_err)
                     })
                 
             with state_lock:
@@ -496,6 +507,19 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                     if not url_scholar_article and existing_pub.url_scholar_article:
                         url_scholar_article = existing_pub.url_scholar_article
 
+                from urllib.parse import quote_plus
+                if not url_related_articles:
+                    if cites_id:
+                        url_related_articles = f"https://scholar.google.com/scholar?q=related:{cites_id}"
+                    elif title:
+                        url_related_articles = f"https://scholar.google.com/scholar?q=related:{quote_plus(title)}"
+
+                if not url_all_versions:
+                    if cites_id:
+                        url_all_versions = f"https://scholar.google.com/scholar?cluster={cites_id}"
+                    elif title:
+                        url_all_versions = f"https://scholar.google.com/scholar?q={quote_plus(title)}"
+
                 pub_obj, created = Publication.objects.update_or_create(
                     author=author_profile,
                     display_order=idx,
@@ -557,6 +581,167 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
     except Exception as e:
         logger.exception("Database transaction failed during save")
         raise Exception(f"Database save error: {str(e)}") from e
+
+
+# ==============================================================================
+# FAST SMART CHECK & CELERY BEAT AUTO-SCAN TASKS
+# ==============================================================================
+
+@shared_task(bind=True, max_retries=3)
+def scrape_author_cv_smart_task(self, author_id):
+    """
+    Executes a Fast Smart Check (1-request profile inspection) over Tor SOCKS5 proxy.
+    Compares online publication_count and top 3 titles against local DB.
+    If unchanged, completes task in 1 request (status = UP_TO_DATE).
+    If new publications exist, ingests missing articles with human-like delays.
+    If 429/403/CAPTCHA occurs, renews Tor IP via NEWNYM and retries with backoff.
+    """
+    from apps.scholar.models import AuthorProfile, Publication, AutoScanConfig
+    from apps.scholar.scholarly import scholarly, ProxyGenerator
+    from apps.scholar.scholarly.tor_helper import renew_tor_ip
+    from django.utils import timezone
+    import random
+    import time
+    import os
+
+    config = AutoScanConfig.get_solo()
+    try:
+        author = AuthorProfile.objects.get(id=author_id)
+    except AuthorProfile.DoesNotExist:
+        return {"status": "error", "message": f"Author {author_id} not found"}
+
+    # Setup Tor Proxy
+    try:
+        pg = ProxyGenerator()
+        tor_host = os.environ.get("TOR_SOCKS_HOST", "tor")
+        tor_port = int(os.environ.get("TOR_SOCKS_PORT", 9050))
+        pg.Tor(socks_host=tor_host, socks_port=tor_port)
+        scholarly.use_proxy(pg)
+    except Exception as e:
+        logger.warning(f"Failed to setup Tor proxy, falling back: {e}")
+
+    try:
+        # Step 1: Light Fetch (Page 1 Profile, pagesize=100) - 1 Request Only!
+        author_online = scholarly.search_author_id(author.scholar_id, fill=False)
+        online_pubs = author_online.get("publications", [])
+        online_count = len(online_pubs)
+
+        existing_pubs = list(author.publications.order_by("display_order").values_list("title", flat=True))
+        existing_count = len(existing_pubs)
+
+        # Top 3 titles comparison
+        top3_online = [p.get("bib", {}).get("title", "").strip().lower() for p in online_pubs[:3]]
+        top3_db = [t.strip().lower() for t in existing_pubs[:3]]
+
+        # Fast Smart Check condition
+        if online_count == existing_count and top3_online == top3_db:
+            author.last_scraped_at = timezone.now()
+            author.last_scan_status = "UP_TO_DATE"
+            author.publication_count_cached = online_count
+            author.save(update_fields=["last_scraped_at", "last_scan_status", "publication_count_cached"])
+
+            # Cooldown sleep between CVs
+            cooldown = random.uniform(config.cooldown_min_seconds, config.cooldown_max_seconds)
+            time.sleep(cooldown)
+            return {
+                "status": "success",
+                "mode": "smart_check_skipped",
+                "author": author.name,
+                "message": f"Up-to-date. Skipped full fetch in 1 request. (Count: {online_count})"
+            }
+
+        # Step 2: New publications detected -> Fill & Ingest missing publications
+        author.last_scan_status = "IN_PROGRESS"
+        author.save(update_fields=["last_scan_status"])
+
+        # Process new/missing publications
+        new_count = 0
+        existing_titles_set = set(t.strip().lower() for t in existing_pubs)
+
+        for idx, pub_entry in enumerate(online_pubs):
+            pub_title = pub_entry.get("bib", {}).get("title", "").strip()
+            if pub_title.lower() not in existing_titles_set:
+                # Apply human-like delay per page/publication
+                time.sleep(random.uniform(config.delay_min_seconds, config.delay_max_seconds))
+
+                # Create or update publication record
+                pub_date = pub_entry.get("bib", {}).get("pub_year", None)
+                Publication.objects.create(
+                    author=author,
+                    display_order=idx,
+                    title=pub_title,
+                    authors_list=pub_entry.get("bib", {}).get("author", ""),
+                    venue=pub_entry.get("bib", {}).get("venue", ""),
+                    year=str(pub_date) if pub_date else "",
+                    citations=pub_entry.get("num_citations", 0),
+                    url_related_articles=pub_entry.get("url_related_articles"),
+                    url_all_versions=pub_entry.get("url_all_versions"),
+                    versions_count=pub_entry.get("versions_count"),
+                )
+                new_count += 1
+
+        author.last_scraped_at = timezone.now()
+        author.last_scan_status = "UPDATED"
+        author.publication_count_cached = author.publications.count()
+        author.save(update_fields=["last_scraped_at", "last_scan_status", "publication_count_cached"])
+
+        # Cooldown between CVs
+        time.sleep(random.uniform(config.cooldown_min_seconds, config.cooldown_max_seconds))
+
+        return {
+            "status": "success",
+            "mode": "updated",
+            "author": author.name,
+            "new_publications_added": new_count
+        }
+
+    except Exception as exc:
+        logger.error(f"Error scraping author {author.name if 'author' in locals() else author_id}: {exc}")
+        if 'author' in locals():
+            author.last_scan_status = "FAILED_CAPTCHA"
+            author.save(update_fields=["last_scan_status"])
+
+        # Trigger Tor IP rotation via NEWNYM
+        control_host = os.environ.get("TOR_CONTROL_HOST", "tor")
+        control_port = int(os.environ.get("TOR_CONTROL_PORT", 9051))
+        password = os.environ.get("TOR_PASSWORD", "scholar_secret_control_pass")
+        renew_tor_ip(control_host=control_host, control_port=control_port, password=password)
+
+        # Retry with random countdown
+        retry_delay = random.randint(30, 60)
+        raise self.retry(exc=exc, countdown=retry_delay)
+
+
+@shared_task
+def scheduled_auto_scan_cv_task():
+    """
+    Celery Beat task triggered periodically.
+    Selects eligible author CVs needing scanning and dispatches smart check tasks.
+    """
+    from apps.scholar.models import AuthorProfile, AutoScanConfig
+    from django.db import models
+    from django.utils import timezone
+    from datetime import timedelta
+
+    config = AutoScanConfig.get_solo()
+    if not config.is_active:
+        return {"status": "skipped", "reason": "Auto scan configuration is disabled"}
+
+    threshold_time = timezone.now() - timedelta(hours=config.scan_interval_hours)
+
+    # Query authors enabled for auto scan and due for check
+    eligible_authors = AuthorProfile.objects.filter(
+        auto_scan_enabled=True
+    ).filter(
+        models.Q(last_scraped_at__isnull=True) | models.Q(last_scraped_at__lte=threshold_time)
+    )[:config.batch_size_per_hour]
+
+    dispatched = []
+    for author in eligible_authors:
+        scrape_author_cv_smart_task.delay(author.id)
+        dispatched.append(author.name)
+
+    return {"status": "success", "dispatched_count": len(dispatched), "authors": dispatched}
 
 
 # ==============================================================================
