@@ -24,8 +24,6 @@ import {
   Trash2,
   Download,
   FileText,
-  Globe,
-  ArrowRight,
   Sparkles,
   Server,
   Calendar,
@@ -682,123 +680,79 @@ export function ScholarAutoSchedulerPage() {
 
       {/* Top Section: Tor Proxy Widget & Schedule Config */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 2. Tor Proxy Status Card */}
-        <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-5 flex flex-col justify-between">
-          <div className="space-y-4">
-            {/* Header with status pill */}
+        {/* 2. Tor Proxy Status Card (Ultra-Compact) */}
+        <Card className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
+          <div className="space-y-3">
+            {/* Compact Header with Status Pill */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600">
                   <ShieldAlert className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="font-bold text-slate-800 text-base">Trạng Thái Tor Proxy Gateway</h2>
-                  <p className="text-xs text-slate-500">Mã hóa đa tầng & Đổi IP ngẫu nhiên</p>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-slate-800 text-sm">Trạng Thái Tor Proxy Gateway</h2>
+                    <span className="font-mono text-[10px] text-[#005b9a] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 font-semibold">
+                      Exit IP: {torInfo?.ip || '185.xxx.xxx.xxx'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Mã hóa đa tầng & Đổi IP ngẫu nhiên ngầm</p>
                 </div>
               </div>
               <span
-                className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-3xs ${
+                className={`px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 shadow-3xs ${
                   torInfo?.status === 'online'
                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                     : 'bg-rose-50 text-rose-700 border border-rose-200'
                 }`}
               >
                 <span className={`w-2 h-2 rounded-full ${torInfo?.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                {torInfo?.status === 'online' ? '● ONLINE - Đang bảo vệ IP' : '○ NGẮT KẾT NỐI'}
+                {torInfo?.status === 'online' ? '● ONLINE' : '○ DISCONNECTED'}
               </span>
             </div>
 
-            {/* Visual Tor Multi-Hop Relay Diagram */}
-            <div className="p-4 bg-slate-900 text-white rounded-2xl border border-slate-800 space-y-3 shadow-inner">
-              <div className="flex items-center justify-between text-xs text-slate-400 font-medium border-b border-slate-800 pb-2">
-                <span className="flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                  Sơ Đồ Tor Multi-Hop Relay (3-Hop An Toàn)
+            {/* Compact 2-Port Badges Bar */}
+            <div className="grid grid-cols-2 gap-2.5 text-xs">
+              <div className="bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-200/70 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
+                  <Server className="w-3.5 h-3.5 text-indigo-500" />
+                  SOCKS5 Proxy
                 </span>
-                <span className="font-mono text-emerald-400 font-semibold text-[11px] bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/50">
-                  Exit IP: {torInfo?.ip || '185.xxx.xxx.xxx'}
+                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
+                  Port 9050
                 </span>
               </div>
-
-              <div className="flex items-center justify-between gap-1 overflow-x-auto py-2 text-xs custom-scrollbar">
-                {/* Web Server */}
-                <div className="flex flex-col items-center bg-slate-800/90 px-3 py-2 rounded-xl border border-slate-700 shrink-0 text-center">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Khởi Tạo</span>
-                  <span className="font-bold text-slate-200 text-xs">Máy chủ Web</span>
-                </div>
-
-                <ArrowRight className="w-4 h-4 text-slate-600 shrink-0" />
-
-                {/* Node 1 */}
-                <div className="flex flex-col items-center bg-indigo-950/90 px-3 py-2 rounded-xl border border-indigo-700/60 shrink-0 text-center">
-                  <span className="text-[9px] text-indigo-300 font-bold tracking-wider">Tor Node 1</span>
-                  <span className="font-mono text-indigo-200 text-xs">Guard Node</span>
-                </div>
-
-                <ArrowRight className="w-4 h-4 text-indigo-500 shrink-0" />
-
-                {/* Node 2 */}
-                <div className="flex flex-col items-center bg-indigo-950/90 px-3 py-2 rounded-xl border border-indigo-700/60 shrink-0 text-center">
-                  <span className="text-[9px] text-indigo-300 font-bold tracking-wider">Tor Node 2</span>
-                  <span className="font-mono text-indigo-200 text-xs">Relay Node</span>
-                </div>
-
-                <ArrowRight className="w-4 h-4 text-indigo-500 shrink-0" />
-
-                {/* Exit Node */}
-                <div className="flex flex-col items-center bg-emerald-950/90 px-3 py-2 rounded-xl border border-emerald-600/60 shrink-0 text-center">
-                  <span className="text-[9px] text-emerald-300 font-bold tracking-wider">Exit Node</span>
-                  <span className="font-mono text-emerald-200 text-xs">IP: {torInfo?.ip ? torInfo.ip.split('.').slice(0,2).join('.') + '.xxx' : '185.xxx'}</span>
-                </div>
-
-                <ArrowRight className="w-4 h-4 text-emerald-500 shrink-0" />
-
-                {/* Target Google Scholar */}
-                <div className="flex flex-col items-center bg-blue-950/90 px-3 py-2 rounded-xl border border-blue-600/60 shrink-0 text-center">
-                  <span className="text-[9px] text-blue-300 font-bold tracking-wider">Đích Đến</span>
-                  <span className="font-bold text-blue-200 text-xs">Google Scholar</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Port Cards Grid */}
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-                <div className="flex items-center gap-1.5 text-slate-500 font-medium">
-                  <Server className="w-3.5 h-3.5 text-slate-400" />
-                  SOCKS5 Proxy Port
-                </div>
-                <div className="font-mono font-bold text-slate-800 text-sm">9050</div>
-              </div>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-                <div className="flex items-center gap-1.5 text-slate-500 font-medium">
-                  <Zap className="w-3.5 h-3.5 text-slate-400" />
-                  Control Port (NEWNYM)
-                </div>
-                <div className="font-mono font-bold text-slate-800 text-sm">9051</div>
+              <div className="bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-200/70 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
+                  <Zap className="w-3.5 h-3.5 text-indigo-500" />
+                  Control Port
+                </span>
+                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
+                  Port 9051
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
+          {/* Integrated Action Button (showing 2 ports) */}
+          <div className="pt-1 flex flex-col sm:flex-row items-center gap-2">
             {torInfo?.status === 'offline' && (
               <button
                 onClick={handleStartTor}
                 disabled={loadingTor}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-200"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-200"
               >
                 <Power className={`h-4 w-4 ${loadingTor ? 'animate-spin' : ''}`} />
-                ⚡ Khởi Động Tor Container
+                ⚡ Khởi Động Tor Container (Ports 9050/9051)
               </button>
             )}
             <button
               onClick={handleRotateIp}
               disabled={loadingTor || torInfo?.status !== 'online'}
-              className="w-full flex-1 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#005b9a] via-indigo-600 to-indigo-700 hover:from-[#004b80] hover:to-indigo-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-200"
+              className="w-full flex-1 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#005b9a] via-indigo-600 to-indigo-700 hover:from-[#004b80] hover:to-indigo-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-200"
             >
               <RefreshCw className={`h-4 w-4 ${loadingTor ? 'animate-spin' : ''}`} />
-              🔄 Đổi IP Tor Ngẫu Nhiên Ngay (NEWNYM)
+              🔄 Kích Hoạt Đổi IP Tor (SOCKS5: 9050 • Control: 9051)
             </button>
           </div>
         </Card>
