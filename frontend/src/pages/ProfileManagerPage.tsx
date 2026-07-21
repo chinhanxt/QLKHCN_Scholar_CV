@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { scholarApi } from '@/api/endpoints/scholar'
 import type { AuthorProfileDetail, PublicationDetail } from '@/api/endpoints/scholar'
 import { Card } from '@/components/ui/card'
@@ -20,12 +21,14 @@ import {
 } from 'lucide-react'
 
 export function ProfileManagerPage() {
+  const [searchParams] = useSearchParams()
+  const authorIdParam = searchParams.get('id') || searchParams.get('authorId')
   const [authors, setAuthors] = useState<AuthorProfileDetail[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   
   // Selected Profile detail
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(authorIdParam)
   const [selectedProfile, setSelectedProfile] = useState<AuthorProfileDetail | null>(null)
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
 
@@ -59,6 +62,12 @@ export function ProfileManagerPage() {
   useEffect(() => {
     fetchAuthors()
   }, [])
+
+  useEffect(() => {
+    if (authorIdParam) {
+      setSelectedProfileId(authorIdParam)
+    }
+  }, [authorIdParam])
 
   // Load detailed profile when selected
   useEffect(() => {

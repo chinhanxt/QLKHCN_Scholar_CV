@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
@@ -27,7 +28,8 @@ import {
   List,
   Download,
   Trash2,
-  Check
+  Check,
+  ExternalLink
 } from 'lucide-react'
 
 export interface AutoSchedulerLogEntry {
@@ -1385,18 +1387,40 @@ export function ScholarAutoSchedulerPage() {
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-500 shrink-0">
+                        <Link
+                          to={`/scholar/profiles?id=${author.id || author.scholar_id}`}
+                          className="p-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-500 hover:bg-blue-50 hover:border-blue-200 hover:text-[#005b9a] shrink-0 transition-colors"
+                          title="Xem quản lý hồ sơ tác giả"
+                        >
                           <User className="w-4 h-4" />
-                        </div>
+                        </Link>
                         <div>
-                          <div className="font-bold text-slate-800">{author.name}</div>
+                          <Link
+                            to={`/scholar/profiles?id=${author.id || author.scholar_id}`}
+                            className="font-bold text-slate-800 hover:text-[#005b9a] hover:underline transition-colors flex items-center gap-1 group cursor-pointer"
+                            title="Đi tới trang Profile tác giả"
+                          >
+                            <span>{author.name}</span>
+                            <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-[#005b9a] opacity-70 transition-opacity" />
+                          </Link>
                           <div className="text-[11px] text-slate-400 truncate max-w-[240px]">
                             {author.affiliation || '—'}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 font-mono font-semibold text-slate-600">{author.scholar_id}</td>
+                    <td className="py-3.5 px-4">
+                      <a
+                        href={`https://scholar.google.com/citations?user=${author.scholar_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono font-semibold text-slate-600 hover:text-[#005b9a] hover:underline inline-flex items-center gap-1 group"
+                        title="Mở Google Scholar Profile gốc"
+                      >
+                        <span>{author.scholar_id}</span>
+                        <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-[#005b9a] opacity-70 transition-opacity" />
+                      </a>
+                    </td>
                     <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-700">
                       {author.publication_count_cached || author.publications?.length || 0}
                     </td>
