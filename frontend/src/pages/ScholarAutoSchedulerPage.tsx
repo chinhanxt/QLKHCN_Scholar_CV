@@ -596,14 +596,14 @@ export function ScholarAutoSchedulerPage() {
           <button
             onClick={handleBulkImport}
             disabled={loadingImport || !bulkText.trim()}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#005b9a] to-indigo-600 hover:from-[#004b80] hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-indigo-200 hover:scale-[1.01] active:scale-[0.99]"
+            className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm hover:scale-[1.01] active:scale-[0.99]"
           >
             {loadingImport ? (
               <Spinner className="w-4 h-4 text-white" />
             ) : (
-              <Play className="w-4 h-4 text-white fill-white" />
+              <Play className="w-4 h-4 text-cyan-300 fill-cyan-300" />
             )}
-            <span>Nhập CV & Kích Hoạt Quét Ngay</span>
+            <span>Nhập & Quét CV</span>
           </button>
         </div>
       </Card>
@@ -764,23 +764,27 @@ export function ScholarAutoSchedulerPage() {
               <button
                 onClick={handleStartTor}
                 disabled={loadingTor}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-200"
+                className="px-4 py-2.5 rounded-xl bg-[#005b9a] hover:bg-[#004b80] text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
               >
-                <Power className={`h-4 w-4 ${loadingTor ? 'animate-spin' : ''}`} />
-                Khởi Động Tor Container (Ports 9050/9051)
+                {loadingTor ? (
+                  <Spinner className="w-4 h-4 text-white" />
+                ) : (
+                  <Power className="w-4 h-4" />
+                )}
+                <span>Khởi Động Tor</span>
               </button>
             )}
             <button
               onClick={handleRotateIp}
               disabled={loadingTor || torInfo?.status !== 'online'}
-              className="w-full flex-1 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#005b9a] via-indigo-600 to-indigo-700 hover:from-[#004b80] hover:to-indigo-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-200 text-center leading-tight"
+              className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
             >
               {loadingTor ? (
                 <Spinner className="w-4 h-4 text-white" />
               ) : (
                 <RefreshCw className="w-4 h-4 text-white" />
               )}
-              <span>Đổi IP Tor Ngẫu Nhiên (9050 • 9051)</span>
+              <span>Đổi IP Tor</span>
             </button>
           </div>
         </Card>
@@ -847,10 +851,10 @@ export function ScholarAutoSchedulerPage() {
           <div className="pt-1">
             <button
               onClick={() => setIsScheduleModalOpen(true)}
-              className="w-full px-4 py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-[#4F46E5] font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-indigo-200/80 shadow-2xs"
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-100/90 hover:bg-slate-200 text-[#4F46E5] font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-200/80 shadow-3xs"
             >
               <Settings className="w-4 h-4 text-[#4F46E5]" />
-              <span>Cấu Hình Thời Gian Quét</span>
+              <span>Cấu Hình Lịch</span>
             </button>
           </div>
         </Card>
@@ -1292,14 +1296,14 @@ export function ScholarAutoSchedulerPage() {
                   setIsScheduleModalOpen(false)
                 }}
                 disabled={loadingConfig}
-                className="bg-[#4F46E5] text-white hover:bg-indigo-700 disabled:opacity-50 rounded-xl px-6 py-2 text-xs font-bold shadow-md cursor-pointer transition-all flex items-center gap-1.5"
+                className="bg-[#4F46E5] hover:bg-indigo-700 text-white font-bold px-5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50 transition-all"
               >
                 {loadingConfig ? (
                   <Spinner className="w-3.5 h-3.5 text-white" />
                 ) : (
                   <Check className="w-4 h-4 text-white" />
                 )}
-                <span>Lưu Cấu Hình Hẹn Giờ</span>
+                <span>Lưu Cấu Hình</span>
               </button>
             </div>
           </div>
@@ -1323,14 +1327,14 @@ export function ScholarAutoSchedulerPage() {
               <button
                 onClick={() => handleTriggerScan()}
                 disabled={loadingScan}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-md shadow-blue-200 transition-all animate-pulse"
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm transition-all"
               >
                 {loadingScan ? (
                   <Spinner className="w-3.5 h-3.5 text-white" />
                 ) : (
-                  <Play className="w-4 h-4 text-white" />
+                  <Play className="w-3.5 h-3.5 text-white fill-white" />
                 )}
-                <span>Quét Ngay Tác Giả Đã Chọn</span>
+                <span>Quét {selectedAuthorIds.length} Tác Giả</span>
               </button>
             )}
             <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200/80">
