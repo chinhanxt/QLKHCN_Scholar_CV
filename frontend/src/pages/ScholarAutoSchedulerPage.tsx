@@ -5,7 +5,6 @@ import { toast } from 'sonner'
 import { scholarApi } from '@/api/endpoints/scholar'
 import type { AuthorProfileDetail } from '@/api/endpoints/scholar'
 import {
-  Cpu,
   ShieldAlert,
   RefreshCw,
   Upload,
@@ -24,7 +23,6 @@ import {
   Trash2,
   Download,
   FileText,
-  Sparkles,
   Server,
   Calendar,
   ChevronLeft,
@@ -537,51 +535,78 @@ export function ScholarAutoSchedulerPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl border border-indigo-900/40 relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="space-y-1 relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-semibold mb-1">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
-            <span>Scholar Auto-Scheduler Terminal</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-600/30 border border-indigo-400/30 text-cyan-300 shadow-inner">
-              <Cpu className="h-6 w-6" />
+      {/* Row 1 (Top Card): Bulk Import CV Card */}
+      <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600">
+              <Upload className="h-5 w-5" />
             </div>
-            Tự Động Hóa CV Scholar & Tor Control
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-            Quản lý cào dữ liệu CV tác giả tự động ngầm với Tor Multi-Hop Proxy & Fast Smart Check
-          </p>
+            <div>
+              <h2 className="font-bold text-slate-800 text-base">📥 Nhập Danh Sách Hồ Sơ CV Tác Giả</h2>
+              <p className="text-xs text-slate-500">Đưa hàng loạt ID/URL tác giả vào hàng chờ cào CV tự động</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+            <div className="hidden lg:flex items-center gap-2 text-[11px] font-mono">
+              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">
+                ID: <code className="text-[#005b9a] font-bold">q81c5sAAAAAJ</code>
+              </span>
+              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 hidden xl:inline-block">
+                URL: <code className="text-[#005b9a]">https://scholar.google.com/citations?user=...</code>
+              </span>
+            </div>
+
+            <button
+              onClick={() => setIsLogModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 border border-slate-200 cursor-pointer transition-all shadow-3xs"
+            >
+              <FileText className="h-3.5 w-3.5 text-[#005b9a]" />
+              <span>Nhật Ký</span>
+              <span className="bg-[#005b9a] text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                {logs.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                fetchTorStatus()
+                fetchConfig()
+                fetchAuthors()
+              }}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 border border-slate-200 cursor-pointer transition-all shadow-3xs"
+            >
+              <RefreshCw className="h-3.5 w-3.5 text-slate-600" />
+              <span>Làm mới</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 relative z-10 shrink-0">
-          <button
-            onClick={() => setIsLogModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md backdrop-blur-md hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <FileText className="h-4 w-4 text-cyan-300" />
-            <span>📋 Xem Nhật Ký Cào Dữ Liệu</span>
-            <span className="bg-cyan-400/20 text-cyan-200 border border-cyan-400/30 text-[11px] font-mono font-bold px-2 py-0.5 rounded-full">
-              {logs.length}
-            </span>
-          </button>
+        <div className="relative">
+          <textarea
+            rows={4}
+            placeholder="Dán scholar_id (VD: q81c5sAAAAAJ) hoặc URL profile (VD: https://scholar.google.com/citations?user=q81c5sAAAAAJ)..."
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            className="w-full border border-slate-200/80 rounded-2xl p-4 text-xs font-mono focus:outline-none focus:border-[#005b9a] bg-slate-50/50 shadow-inner leading-relaxed"
+          />
+          <div className="absolute right-3 bottom-3 text-[11px] font-mono text-slate-400 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-slate-200/80 shadow-3xs">
+            Đã phát hiện <strong className="text-[#005b9a]">{detectedCount}</strong> ID/URL
+          </div>
+        </div>
 
+        <div className="flex justify-end">
           <button
-            onClick={() => {
-              fetchTorStatus()
-              fetchConfig()
-              fetchAuthors()
-            }}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 border border-indigo-400/30 text-white font-semibold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md hover:scale-[1.02] active:scale-[0.98]"
+            onClick={handleBulkImport}
+            disabled={loadingImport || !bulkText.trim()}
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#005b9a] to-indigo-600 hover:from-[#004b80] hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-indigo-200 hover:scale-[1.01] active:scale-[0.99]"
           >
-            <RefreshCw className="h-4 w-4" />
-            🔄 Làm mới
+            {loadingImport ? <Spinner className="w-4 h-4 text-white" /> : <Play className="h-4 w-4 text-cyan-300 fill-cyan-300" />}
+            🚀 Nhập CV & Kích Hoạt Quét Ngay
           </button>
         </div>
-      </div>
+      </Card>
 
       {/* Live Job Execution Progress & Status Monitor Card */}
       {!isJobBannerDismissed && config.current_job_status && config.current_job_status !== 'IDLE' && (
@@ -679,77 +704,80 @@ export function ScholarAutoSchedulerPage() {
         </Card>
       )}
 
-      {/* Main Page Top Section (2 Compact Cards Side-by-Side, zero empty whitespace) */}
+      {/* 2. Row 2: Tor Proxy Widget & Schedule Config (2 Compact Cards Side-by-Side) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Card 1: Tor Proxy Gateway Card (Content-fitted height) */}
+        {/* Card 1: Tor Proxy Status Card (Content-fitted height) */}
         <Card className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
           <div className="space-y-3">
-            {/* Header: ShieldAlert, "Tor Proxy Gateway", Status pill (● ONLINE), Exit IP badge */}
+            {/* Header: Icon ShieldAlert, Title "Tor Proxy Gateway", Status pill */}
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600">
                   <ShieldAlert className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="font-bold text-slate-800 text-xs sm:text-sm">Tor Proxy Gateway</h2>
-                  <span className="font-mono text-[10px] text-[#005b9a] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 font-semibold inline-block mt-0.5">
-                    Exit IP: {torInfo?.ip || '185.xxx'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-slate-800 text-xs sm:text-sm">Tor Proxy Gateway</h2>
+                    <span className="font-mono text-[10px] text-[#005b9a] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 font-semibold">
+                      Exit IP: {torInfo?.ip || '185.xxx.xxx.xxx'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Mã hóa đa tầng & Đổi IP ngẫu nhiên ngầm</p>
                 </div>
               </div>
               <span
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-3xs ${
+                className={`px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 shadow-3xs ${
                   torInfo?.status === 'online'
                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                     : 'bg-rose-50 text-rose-700 border border-rose-200'
                 }`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${torInfo?.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                {torInfo?.status === 'online' ? '● ONLINE' : 'OFF'}
+                <span className={`w-2 h-2 rounded-full ${torInfo?.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                {torInfo?.status === 'online' ? '● ONLINE' : '○ DISCONNECTED'}
               </span>
             </div>
 
-            {/* Port Badges Row */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-slate-50/80 px-3 py-1.5 rounded-xl border border-slate-200/70 flex items-center justify-between">
-                <span className="flex items-center gap-1 text-slate-500 font-medium text-[11px]">
+            {/* Compact 2-Port Badges Bar */}
+            <div className="grid grid-cols-2 gap-2.5 text-xs">
+              <div className="bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-200/70 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
                   <Server className="w-3.5 h-3.5 text-indigo-500" />
-                  SOCKS5
+                  SOCKS5 Proxy
                 </span>
-                <span className="font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">
-                  9050
+                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
+                  Port 9050
                 </span>
               </div>
-              <div className="bg-slate-50/80 px-3 py-1.5 rounded-xl border border-slate-200/70 flex items-center justify-between">
-                <span className="flex items-center gap-1 text-slate-500 font-medium text-[11px]">
+              <div className="bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-200/70 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
                   <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                  Control
+                  Control Port
                 </span>
-                <span className="font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">
-                  9051
+                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
+                  Port 9051
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Action Button */}
-          <div className="pt-1 flex flex-col items-center gap-2">
+          {/* Integrated Action Button (showing 2 ports) */}
+          <div className="pt-1 flex flex-col sm:flex-row items-center gap-2">
             {torInfo?.status === 'offline' && (
               <button
                 onClick={handleStartTor}
                 disabled={loadingTor}
-                className="w-full px-3 py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-200"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-200"
               >
-                <Power className={`h-3.5 w-3.5 ${loadingTor ? 'animate-spin' : ''}`} />
-                ⚡ Khởi Động Tor (9050/9051)
+                <Power className={`h-4 w-4 ${loadingTor ? 'animate-spin' : ''}`} />
+                ⚡ Khởi Động Tor Container (Ports 9050/9051)
               </button>
             )}
             <button
               onClick={handleRotateIp}
               disabled={loadingTor || torInfo?.status !== 'online'}
-              className="w-full px-3 py-2.5 rounded-2xl bg-gradient-to-r from-[#005b9a] via-indigo-600 to-indigo-700 hover:from-[#004b80] hover:to-indigo-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-indigo-200 text-center leading-tight"
+              className="w-full flex-1 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#005b9a] via-indigo-600 to-indigo-700 hover:from-[#004b80] hover:to-indigo-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-200 text-center leading-tight"
             >
-              <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${loadingTor ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 shrink-0 ${loadingTor ? 'animate-spin' : ''}`} />
               <span>🔄 Đổi IP Tor Ngẫu Nhiên (9050 • 9051)</span>
             </button>
           </div>
@@ -1274,54 +1302,6 @@ export function ScholarAutoSchedulerPage() {
         </div>
       )}
 
-      {/* 4. Middle Section: Nhập Danh Sách Hồ Sơ CV Tác Giả Card */}
-      <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600">
-              <Upload className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="font-bold text-slate-800 text-base">📥 Nhập Danh Sách Hồ Sơ CV Tác Giả</h2>
-              <p className="text-xs text-slate-500">Đưa hàng loạt ID/URL tác giả vào hàng chờ cào CV tự động</p>
-            </div>
-          </div>
-
-          {/* Format Instruction Badges */}
-          <div className="flex items-center gap-2 text-[11px] font-mono">
-            <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">
-              ID: <code className="text-[#005b9a] font-bold">q81c5sAAAAAJ</code>
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 hidden md:inline-block">
-              URL: <code className="text-[#005b9a]">https://scholar.google.com/citations?user=...</code>
-            </span>
-          </div>
-        </div>
-
-        <div className="relative">
-          <textarea
-            rows={4}
-            placeholder="Dán scholar_id (VD: q81c5sAAAAAJ) hoặc URL profile (VD: https://scholar.google.com/citations?user=q81c5sAAAAAJ)..."
-            value={bulkText}
-            onChange={(e) => setBulkText(e.target.value)}
-            className="w-full border border-slate-200/80 rounded-2xl p-4 text-xs font-mono focus:outline-none focus:border-[#005b9a] bg-slate-50/50 shadow-inner leading-relaxed"
-          />
-          <div className="absolute right-3 bottom-3 text-[11px] font-mono text-slate-400 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-slate-200/80 shadow-3xs">
-            Đã phát hiện <strong className="text-[#005b9a]">{detectedCount}</strong> ID/URL
-          </div>
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            onClick={handleBulkImport}
-            disabled={loadingImport || !bulkText.trim()}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#005b9a] to-indigo-600 hover:from-[#004b80] hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-indigo-200 hover:scale-[1.01] active:scale-[0.99]"
-          >
-            {loadingImport ? <Spinner className="w-4 h-4 text-white" /> : <Play className="h-4 w-4 text-cyan-300 fill-cyan-300" />}
-            🚀 Nhập CV & Kích Hoạt Quét Ngay
-          </button>
-        </div>
-      </Card>
 
       {/* 5. Bottom Section: Trạng Thái Tự Động Quét CV Tác Giả Table Card */}
       <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
