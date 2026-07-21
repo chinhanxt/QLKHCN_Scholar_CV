@@ -502,31 +502,31 @@ export function ScholarAutoSchedulerPage() {
       case 'UP_TO_DATE':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-3xs">
-            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> UP_TO_DATE
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> ĐÃ MỚI NHẤT
           </span>
         )
       case 'UPDATED':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-3xs">
-            UPDATED
+            ĐÃ CẬP NHẬT
           </span>
         )
       case 'FAILED_CAPTCHA':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-3xs">
-            <XCircle className="w-3.5 h-3.5 text-rose-600" /> FAILED_CAPTCHA
+            <XCircle className="w-3.5 h-3.5 text-rose-600" /> BỊ CHẶN CAPTCHA
           </span>
         )
       case 'IN_PROGRESS':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 shadow-3xs">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" /> IN_PROGRESS
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" /> ĐANG XỬ LÝ
           </span>
         )
       default:
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200/80 shadow-3xs">
-            <Clock className="w-3.5 h-3.5 text-slate-500" /> PENDING
+            <Clock className="w-3.5 h-3.5 text-slate-500" /> CHỜ QUÉT
           </span>
         )
     }
@@ -1367,7 +1367,7 @@ export function ScholarAutoSchedulerPage() {
                   <th className="py-3.5 px-4">Tác Giả</th>
                   <th className="py-3.5 px-4">Scholar ID</th>
                   <th className="py-3.5 px-4 text-center">Số Bài Báo</th>
-                  <th className="py-3.5 px-4 text-center">Fast Smart Check</th>
+                  <th className="py-3.5 px-4 text-center">Trạng Thái Quét</th>
                   <th className="py-3.5 px-4 text-right">Lần Quét Cuối</th>
                   <th className="py-3.5 px-4 text-center">Hành Động</th>
                 </tr>
