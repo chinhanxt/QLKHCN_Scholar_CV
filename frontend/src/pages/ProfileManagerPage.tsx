@@ -257,14 +257,16 @@ export function ProfileManagerPage() {
                 if (!selectedPub) return null
 
                 return (
-                  <PublicationDetailPanel
-                    publication={selectedPub}
-                    authorName={selectedProfile.name}
-                    onBack={() => {
-                      setSelectedPubId(null)
-                      setIsSidebarCollapsed(false)
-                    }}
-                  />
+                  <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar pr-1">
+                    <PublicationDetailPanel
+                      publication={selectedPub}
+                      authorName={selectedProfile.name}
+                      onBack={() => {
+                        setSelectedPubId(null)
+                        setIsSidebarCollapsed(false)
+                      }}
+                    />
+                  </div>
                 )
               })()
             ) : (

@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
-import { Search, Download, Plus, Trash2 } from 'lucide-react'
+import { Search, Download, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { PublicationDetail } from '@/api/endpoints/scholar'
 
 interface PublicationTableListProps {
@@ -58,6 +58,13 @@ export const PublicationTableList: React.FC<PublicationTableListProps> = ({
   sortBy,
   setSortBy,
 }) => {
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchKeyword, yearFilter, quartileFilter, sortBy])
+
   // Available years for dropdown
   const availableYears = Array.from(
     new Set(publications.map(p => p.year).filter(y => y && y !== 'Không rõ'))
@@ -86,6 +93,12 @@ export const PublicationTableList: React.FC<PublicationTableListProps> = ({
     if (sortBy === 'title_desc') return b.title.localeCompare(a.title)
     return 0
   })
+
+  const totalPages = Math.ceil(sortedPubs.length / itemsPerPage)
+  const paginatedPubs = sortedPubs.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
 
   const isAllSelected = sortedPubs.length > 0 && sortedPubs.every(p => selectedPubIds.includes(p.id))
 
@@ -210,14 +223,14 @@ export const PublicationTableList: React.FC<PublicationTableListProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {sortedPubs.length === 0 ? (
+            {paginatedPubs.length === 0 ? (
               <tr>
                 <td colSpan={4} className="py-12 text-center text-slate-550 italic">
                   Không tìm thấy bài báo nào khớp điều kiện lọc.
                 </td>
               </tr>
             ) : (
-              sortedPubs.map((pub) => (
+              paginatedPubs.map((pub) => (
                 <tr
                   key={pub.id}
                   className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
@@ -280,6 +293,34 @@ export const PublicationTableList: React.FC<PublicationTableListProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-4 text-xs text-[#64748B]">
+          <span>
+            Hiển thị <strong>{paginatedPubs.length}</strong> trên tổng số <strong>{sortedPubs.length}</strong> bài báo
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              className="p-1.5 rounded-lg border border-[#E5E7EB] hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="font-bold">
+              Trang {currentPage} / {totalPages}
+            </span>
+            <button
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              className="p-1.5 rounded-lg border border-[#E5E7EB] hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }
