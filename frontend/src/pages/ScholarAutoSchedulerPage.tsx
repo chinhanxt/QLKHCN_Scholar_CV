@@ -601,7 +601,7 @@ export function ScholarAutoSchedulerPage() {
             {loadingImport ? (
               <Spinner className="w-4 h-4 text-white" />
             ) : (
-              <Play className="w-4 h-4 text-cyan-300 fill-cyan-300" />
+              <Play className="w-4 h-4 text-white fill-white" />
             )}
             <span>Nhập & Quét CV</span>
           </button>
@@ -769,7 +769,7 @@ export function ScholarAutoSchedulerPage() {
                 {loadingTor ? (
                   <Spinner className="w-4 h-4 text-white" />
                 ) : (
-                  <Power className="w-4 h-4" />
+                  <Power className="w-4 h-4 text-white" />
                 )}
                 <span>Khởi Động Tor</span>
               </button>
