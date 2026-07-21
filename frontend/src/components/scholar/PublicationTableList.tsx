@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
-import { Search, Download, Plus, Trash2, ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react'
+import { Search, Download, Plus, Trash2, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
 import type { PublicationDetail } from '@/api/endpoints/scholar'
 
 interface PublicationTableListProps {
