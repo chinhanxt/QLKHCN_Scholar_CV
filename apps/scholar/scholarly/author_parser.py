@@ -94,10 +94,11 @@ class AuthorParser:
         author['interests'] = [i.text.strip() for i in
                           soup.find_all('a', class_='gsc_prf_inta')]
         email = soup.find('div', id="gsc_prf_ivh", class_="gsc_prf_il")
-        if author['source'] == AuthorSource.AUTHOR_PROFILE_PAGE:
-            if email.text != "No verified email":
-                author['email_domain'] = '@'+email.text.split(" ")[3]
-        homepage = email.find('a', class_="gsc_prf_ila")
+        if email and email.text and "No verified email" not in email.text and "Không có email" not in email.text:
+            match = re.search(r'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', email.text)
+            if match:
+                author['email_domain'] = '@' + match.group(1).lstrip('@')
+        homepage = email.find('a', class_="gsc_prf_ila") if email else None
         if homepage:
             author['homepage'] = homepage.get('href')
 

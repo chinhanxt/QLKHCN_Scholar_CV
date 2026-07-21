@@ -43,6 +43,14 @@ export function ScholarScraperPage() {
   })
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
   const [isL2Running, setIsL2Running] = useState(() => localStorage.getItem('scholar_isL2Running') === 'true')
+  const [completedL2Authors, setCompletedL2Authors] = useState<string[]>(() => {
+    const saved = localStorage.getItem('scholar_completedL2Authors')
+    return saved ? JSON.parse(saved) : []
+  })
+  const [dismissedBanners, setDismissedBanners] = useState<string[]>(() => {
+    const saved = localStorage.getItem('scholar_dismissedBanners')
+    return saved ? JSON.parse(saved) : []
+  })
   const [selectedPublication, setSelectedPublication] = useState<any | null>(null)
   
   // Interactive UI State
@@ -97,6 +105,14 @@ export function ScholarScraperPage() {
   useEffect(() => {
     localStorage.setItem('scholar_isL2Running', isL2Running.toString())
   }, [isL2Running])
+
+  useEffect(() => {
+    localStorage.setItem('scholar_completedL2Authors', JSON.stringify(completedL2Authors))
+  }, [completedL2Authors])
+
+  useEffect(() => {
+    localStorage.setItem('scholar_dismissedBanners', JSON.stringify(dismissedBanners))
+  }, [dismissedBanners])
 
   useEffect(() => {
     localStorage.setItem('scholar_authorInput', authorInput)
@@ -168,18 +184,23 @@ export function ScholarScraperPage() {
           clearInterval(pollInterval)
           
           const failedPubs = res.result?.failed_publications || []
+          const scId = res.result?.author?.scholar_id || profile?.scholar_id
           if (isL2Running) {
+            if (scId) {
+              setCompletedL2Authors((prev) => (prev.includes(scId) ? prev : [...prev, scId]))
+            }
             if (failedPubs.length > 0) {
-              toast.warning(`Hoàn thành quét chi tiết nhưng có ${failedPubs.length} bài lỗi!`)
+              toast.warning(`Hoàn thành quét lần 2 nhưng có ${failedPubs.length} bài lỗi! (Đã quét lần 1 & 2 xong)`)
               failedPubs.forEach((fp: any) => {
-                addConsoleLog('scholar', `>>> CẢNH BÁO: Lỗi cào chi tiết bài "${fp.title}": ${fp.error}`)
+                addConsoleLog('scholar', `>>> CẢNH BẢO: Lỗi cào chi tiết bài "${fp.title}": ${fp.error}`)
               })
             } else {
-              toast.success('Đã quét chi tiết thành công toàn bộ bài báo!')
+              toast.success('Đã quét lần 1 và 2 xong!')
             }
+            addConsoleLog('scholar', '>>> HOÀN THÀNH: Đã quét xong lần 1 (Danh sách) và lần 2 (Chi tiết) thành công!')
             setIsL2Running(false)
           } else {
-            toast.success('Đã tải danh sách bài báo thành công!')
+            toast.success('Đã quét lần 1 thành công (Danh sách bài báo)!')
           }
           
           setSelectedPublication(null)
@@ -315,6 +336,7 @@ export function ScholarScraperPage() {
       addConsoleLog('scholar', `[System] Chế độ: Quét chi tiết dựa trên danh sách lần 1 (Số lượng: ${profile.publications.length} bài)`)
       
       setIsL2Running(true)
+      setDismissedBanners((prev) => prev.filter((id) => id !== profile.scholar_id))
       setTaskState('scholar', { taskStatus: 'PENDING', progress: 5 })
       const res = await scholarApi.scrapeAuthor(profile.scholar_id, profile.publications.length, true).then((r) => r.data)
       setTaskState('scholar', { taskId: res.task_id })
@@ -764,6 +786,32 @@ export function ScholarScraperPage() {
 
   const isScraping = taskStatus === 'PENDING' || taskStatus === 'PROGRESS'
 
+  const hasDetailedData = Boolean(
+    profile?.publications?.some(
+      (p) =>
+        (p.cites_per_year && Object.keys(p.cites_per_year).length > 0) ||
+        Boolean(p.cites_id) ||
+        Boolean(p.pub_url) ||
+        Boolean(p.description) ||
+        Boolean(p.volume) ||
+        Boolean(p.pages)
+    )
+  )
+
+  const isAuthorL2Completed = Boolean(
+    profile && (completedL2Authors.includes(profile.scholar_id) || hasDetailedData)
+  )
+
+  const isBannerDismissed = Boolean(
+    profile?.scholar_id && dismissedBanners.includes(profile.scholar_id)
+  )
+
+  const handleDismissBanner = () => {
+    if (profile?.scholar_id) {
+      setDismissedBanners((prev) => (prev.includes(profile.scholar_id) ? prev : [...prev, profile.scholar_id]))
+    }
+  }
+
   // Dynamic DOI generator
   const getDoi = (pub: any) => {
     if (pub.doi) return pub.doi
@@ -773,9 +821,13 @@ export function ScholarScraperPage() {
     return `10.1016/j.${cleanVenue}.${year}.${hash}`
   }
 
+  const handleDeselectAll = () => {
+    setSelectedPubIds([])
+  }
+
   const handleToggleSelectAll = () => {
     if (!profile) return
-    const allIds = profile.publications.map(p => p.id)
+    const allIds = profile.publications.map(p => String(p.id))
     const isAllSelected = allIds.length > 0 && allIds.every(id => selectedPubIds.includes(id))
     if (isAllSelected) {
       setSelectedPubIds([])
@@ -1020,6 +1072,23 @@ export function ScholarScraperPage() {
     }
   }
 
+  const handleBulkDeleteSelected = () => {
+    if (!profile || selectedPubIds.length === 0) return
+    if (window.confirm(`Bạn có chắc muốn chuyển ${selectedPubIds.length} bài báo đã chọn vào thùng rác?`)) {
+      const pubsToDelete = profile.publications.filter(p => selectedPubIds.includes(String(p.id)))
+      setDeletedPublications(prev => [...pubsToDelete, ...prev])
+      const newPubs = profile.publications.filter(p => !selectedPubIds.includes(String(p.id)))
+      const newTotalCites = newPubs.reduce((sum, p) => sum + (p.citations || 0), 0)
+      setProfile({
+        ...profile,
+        publications: newPubs,
+        citedby: newTotalCites
+      })
+      setSelectedPubIds([])
+      toast.success(`Đã chuyển ${pubsToDelete.length} bài báo vào thùng rác!`)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-16 text-[#0F172A] font-sans antialiased custom-scrollbar">
       
@@ -1034,7 +1103,7 @@ export function ScholarScraperPage() {
             </span>
             <span className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Hệ thống đồng bộ Scholar</span>
           </div>
-          <div className="hidden lg:flex items-center gap-1.5 text-xs font-bold">
+          <div className="flex items-center gap-1.5 text-xs font-bold overflow-x-auto custom-scrollbar py-0.5">
             {[
               { id: 1, label: 'Nhập tên' },
               { id: 2, label: 'Chọn Author' },
@@ -1045,7 +1114,7 @@ export function ScholarScraperPage() {
               const isActive = activeStep === step.id || (step.id === 4 && activeStep === 3)
               const isCompleted = activeStep > step.id
               return (
-                <div key={step.id} className="flex items-center">
+                <div key={step.id} className="flex items-center shrink-0">
                   <div className={cn(
                     "flex items-center gap-1.5 px-3 py-1 rounded-full border",
                     isActive 
@@ -1071,80 +1140,77 @@ export function ScholarScraperPage() {
               )
             })}
           </div>
-          <div className="text-xs font-semibold text-[#64748B]">
-            Phiên bản 2.0 (SaaS Dashboard)
-          </div>
         </div>
 
         {/* Dynamic Toolbar for Crawler Actions */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-sm flex flex-col md:flex-row gap-4 items-end">
-          <div className="flex-1 flex flex-col gap-2 w-full">
-            <label className="text-xs font-bold text-[#64748B] uppercase tracking-wider">
-              Tìm kiếm hoặc Dán Link Google Scholar tác giả
-            </label>
+        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-sm flex flex-col gap-3.5">
+          <label className="text-xs font-bold text-[#64748B] uppercase tracking-wider">
+            Tìm kiếm hoặc Dán Link Google Scholar tác giả
+          </label>
+          
+          {/* Main Controls Row: Select + Input + Search Button */}
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full items-stretch sm:items-center">
+            <select 
+              value={searchMode}
+              onChange={(e) => setSearchMode(e.target.value as 'id' | 'search')}
+              className="w-full sm:w-auto shrink-0 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-3.5 py-2.5 text-sm text-[#0F172A] font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] cursor-pointer"
+            >
+              <option value="search">Tìm theo tên</option>
+              <option value="id">Nhập ID / Link</option>
+            </select>
             
-            <div className="flex flex-col sm:flex-row gap-2 w-full">
-              <select 
-                value={searchMode}
-                onChange={(e) => setSearchMode(e.target.value as 'id' | 'search')}
-                className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-3.5 py-2 text-sm text-[#0F172A] font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] cursor-pointer"
-              >
-                <option value="search">Tìm theo tên</option>
-                <option value="id">Nhập ID / Link</option>
-              </select>
-              
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder={searchMode === 'id' ? 'Nhập ID hoặc dán link (Ví dụ: user=vlowI28AAAAJ...)' : 'Nhập tên nhà nghiên cứu cần cào dữ liệu...'}
-                  value={authorInput}
-                  onChange={(e) => setAuthorInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2 pl-10 text-sm text-[#0F172A] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                />
-                <Search className="absolute left-3.5 top-3 h-4 w-4 text-[#64748B]" />
-              </div>
+            <div className="relative flex-1 w-full">
+              <input
+                type="text"
+                placeholder={searchMode === 'id' ? 'Nhập ID hoặc dán link (Ví dụ: user=vlowI28AAAAJ...)' : 'Nhập tên nhà nghiên cứu cần cào dữ liệu...'}
+                value={authorInput}
+                onChange={(e) => setAuthorInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 pl-10 text-sm text-[#0F172A] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+              />
+              <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-[#64748B]" />
             </div>
-            
-            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-              <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Quét lần 1:</span>
-              <div className="flex gap-1.5">
-                {[10, 50, 100, 0].map((val) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setScrapeLimit(val)}
-                    className={cn(
-                      "px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border",
-                      scrapeLimit === val
-                        ? "bg-[#2563EB] border-[#2563EB] text-white shadow-xs"
-                        : "bg-white hover:bg-slate-50 border-[#E5E7EB] text-[#64748B]"
-                    )}
-                  >
-                    {val === 0 ? "Không giới hạn" : `${val} bài`}
-                  </button>
-                ))}
-              </div>
-            </div>
+
+            <button
+              onClick={handleSearch}
+              disabled={isSearching || taskStatus === 'PENDING' || !authorInput.trim()}
+              className="w-full sm:w-auto shrink-0 px-6 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {isSearching ? (
+                <>
+                  <Spinner className="h-4 w-4 text-white animate-spin" />
+                  <span>Đang tìm...</span>
+                </>
+              ) : (
+                <>
+                  <Search className="h-4 w-4" />
+                  <span>Tìm kiếm</span>
+                </>
+              )}
+            </button>
           </div>
 
-          <button
-            onClick={handleSearch}
-            disabled={isSearching || taskStatus === 'PENDING' || !authorInput.trim()}
-            className="w-full md:w-auto px-6 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {isSearching ? (
-              <>
-                <Spinner className="h-4 w-4 text-white animate-spin" />
-                <span>Đang tìm...</span>
-              </>
-            ) : (
-              <>
-                <Search className="h-4 w-4" />
-                <span>Tìm kiếm</span>
-              </>
-            )}
-          </button>
+          {/* Sub Row: Scrape Limit Options */}
+          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+            <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Quét lần 1:</span>
+            <div className="flex gap-1.5 flex-wrap">
+              {[10, 50, 100, 0].map((val) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setScrapeLimit(val)}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border",
+                    scrapeLimit === val
+                      ? "bg-[#2563EB] border-[#2563EB] text-white shadow-xs"
+                      : "bg-white hover:bg-slate-50 border-[#E5E7EB] text-[#64748B]"
+                  )}
+                >
+                  {val === 0 ? "Không giới hạn" : `${val} bài`}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1248,31 +1314,87 @@ export function ScholarScraperPage() {
       {!isLoadingProfile && profile && (
         <div className="flex flex-col gap-6">
           
-          {/* L2 Scrape Prompt Banner */}
-          {profile.publications.some(p => 
-            (p.citations > 0 && (!p.cites_per_year || Object.keys(p.cites_per_year).length === 0)) || 
-            (!p.publisher || !p.description || !p.pub_date)
-          ) && (
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-3xs animate-fade-in">
-              <div className="flex gap-3">
+          {/* L2 Scrape Prompt / Completion Banner */}
+          {!isBannerDismissed && (!isAuthorL2Completed ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-3xs animate-fade-in relative">
+              <div className="flex gap-3 pr-6 sm:pr-0">
                 <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl shrink-0 flex items-center justify-center">
                   <TrendingUp className="h-5 w-5" />
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Cần quét chi tiết (Quét lần 2)</h4>
-                  <p className="text-xs text-amber-700 mt-0.5">Một số bài báo mới chỉ tải danh sách thô. Quét chi tiết để tải đầy đủ Tập, Số, Trang, Nhà xuất bản, Tóm tắt, Ngày xuất bản chi tiết và Lịch sử trích dẫn theo năm.</p>
+                  <p className="text-xs text-amber-700 mt-0.5">Một số bài báo mới chỉ tải danh sách thô (Lần 1). Quét chi tiết để tải đầy đủ Tập, Số, Trang, Nhà xuất bản, Tóm tắt, Ngày xuất bản chi tiết và Lịch sử trích dẫn theo năm.</p>
                 </div>
               </div>
-              <button
-                onClick={triggerDetailedScrape}
-                disabled={isScraping}
-                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs shrink-0 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <Search className="w-3.5 h-3.5" />
-                Quét chi tiết (Lần 2)
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end shrink-0">
+                <button
+                  onClick={triggerDetailedScrape}
+                  disabled={isScraping}
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs shrink-0 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {isScraping && isL2Running ? (
+                    <>
+                      <Spinner className="w-3.5 h-3.5 text-white animate-spin" />
+                      <span>Đang quét chi tiết (Lần 2)...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-3.5 h-3.5" />
+                      <span>Quét chi tiết (Lần 2)</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleDismissBanner}
+                  className="p-1.5 rounded-xl text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer shrink-0"
+                  title="Tắt thông báo"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          )}
+          ) : (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-3xs animate-fade-in relative">
+              <div className="flex gap-3 items-center pr-6 sm:pr-0">
+                <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-xl shrink-0 flex items-center justify-center">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-2">
+                    <span>Đã quét xong Lần 1 và Lần 2</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-200 text-emerald-900 font-extrabold">100% Hoàn tất</span>
+                  </h4>
+                  <p className="text-xs text-emerald-700 mt-0.5">Hệ thống đã thu thập xong toàn bộ danh sách thô (Lần 1) và thông tin chi tiết bài báo kèm lịch sử trích dẫn theo năm (Lần 2).</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+                <span className="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-300 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Đã quét lần 1 & 2 xong
+                </span>
+                <button
+                  onClick={triggerDetailedScrape}
+                  disabled={isScraping}
+                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  title="Quét lại chi tiết Lần 2 nếu cần cập nhật"
+                >
+                  {isScraping && isL2Running ? (
+                    <Spinner className="w-3.5 h-3.5 text-emerald-700 animate-spin" />
+                  ) : (
+                    <Search className="w-3.5 h-3.5" />
+                  )}
+                  <span>Quét lại Lần 2</span>
+                </button>
+                <button
+                  onClick={handleDismissBanner}
+                  className="p-1.5 rounded-xl text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer shrink-0 ml-1"
+                  title="Tắt thông báo"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
 
           {/* Profile Header Card */}
           <Card className="border-[#E5E7EB] rounded-3xl shadow-sm bg-white overflow-hidden p-6 relative">
@@ -1339,8 +1461,11 @@ export function ScholarScraperPage() {
                   onSelectPub={(pub) => setSelectedPublication(pub)}
                   onToggleSelectPub={(pubId, e) => handleToggleSelect(pubId, e as any)}
                   onToggleSelectAll={handleToggleSelectAll}
+                  onDeselectAll={handleDeselectAll}
                   onAddPub={() => setIsAddPubModalOpen(true)}
                   onOpenTrash={() => setIsTrashModalOpen(true)}
+                  onMergePubs={() => setIsMergeModalOpen(true)}
+                  onDeleteSelectedPubs={handleBulkDeleteSelected}
                   onExport={handleExport}
                   searchKeyword={pubSearch}
                   setSearchKeyword={setPubSearch}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
-import { Search, Download, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Download, Plus, Trash2, ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react'
 import type { PublicationDetail } from '@/api/endpoints/scholar'
 
 interface PublicationTableListProps {
@@ -9,8 +9,11 @@ interface PublicationTableListProps {
   onSelectPub: (pub: PublicationDetail) => void
   onToggleSelectPub: (pubId: string, e: React.ChangeEvent<HTMLInputElement>) => void
   onToggleSelectAll: () => void
+  onDeselectAll?: () => void
   onAddPub?: () => void
   onOpenTrash?: () => void
+  onMergePubs?: () => void
+  onDeleteSelectedPubs?: () => void
   onExport?: () => void
   searchKeyword: string
   setSearchKeyword: (val: string) => void
@@ -46,8 +49,11 @@ export const PublicationTableList: React.FC<PublicationTableListProps> = ({
   onSelectPub,
   onToggleSelectPub,
   onToggleSelectAll,
+  onDeselectAll,
   onAddPub,
   onOpenTrash,
+  onMergePubs,
+  onDeleteSelectedPubs,
   onExport,
   searchKeyword,
   setSearchKeyword,
@@ -100,10 +106,48 @@ export const PublicationTableList: React.FC<PublicationTableListProps> = ({
     currentPage * itemsPerPage
   )
 
-  const isAllSelected = sortedPubs.length > 0 && sortedPubs.every(p => selectedPubIds.includes(p.id))
+  const isAllSelected = sortedPubs.length > 0 && sortedPubs.every(p => selectedPubIds.map(String).includes(String(p.id)))
 
   return (
     <Card className="border-[#E5E7EB] rounded-3xl bg-white p-6 shadow-sm">
+      {/* Multi-Select Action Banner (Merge / Delete selected) */}
+      {selectedPubIds.length > 0 && (
+        <div className="mb-4 p-3.5 bg-[#DBEAFE]/40 border border-[#93C5FD] rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-2 text-xs text-[#1E40AF] font-bold">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2563EB] text-white text-[11px]">
+              {selectedPubIds.length}
+            </span>
+            <span>Đã chọn {selectedPubIds.length} bài báo khoa học</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {selectedPubIds.length >= 2 && onMergePubs && (
+              <button
+                onClick={onMergePubs}
+                className="px-3.5 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Gộp bài báo trùng lặp ({selectedPubIds.length})</span>
+              </button>
+            )}
+            {onDeleteSelectedPubs && (
+              <button
+                onClick={onDeleteSelectedPubs}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xóa các bài đã chọn</span>
+              </button>
+            )}
+            <button
+              onClick={onDeselectAll}
+              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 font-semibold text-xs transition-colors cursor-pointer"
+            >
+              Bỏ chọn tất cả
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar options right above the table */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-5 border-b border-slate-100 mb-4">
         <div className="flex-1 flex flex-col sm:flex-row gap-2 flex-wrap">
@@ -175,7 +219,7 @@ export const PublicationTableList: React.FC<PublicationTableListProps> = ({
               <th className="py-3 px-3 w-10">
                 <input
                   type="checkbox"
-                  className="rounded border-slate-300 accent-[#2563EB]"
+                  className="rounded border-slate-300 accent-[#2563EB] cursor-pointer"
                   checked={isAllSelected}
                   onChange={onToggleSelectAll}
                 />
@@ -239,9 +283,9 @@ export const PublicationTableList: React.FC<PublicationTableListProps> = ({
                   <td className="py-4 px-3" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 accent-[#2563EB]"
-                      checked={selectedPubIds.includes(pub.id)}
-                      onChange={(e) => onToggleSelectPub(pub.id, e)}
+                      className="rounded border-slate-300 accent-[#2563EB] cursor-pointer"
+                      checked={selectedPubIds.map(String).includes(String(pub.id))}
+                      onChange={(e) => onToggleSelectPub(String(pub.id), e as any)}
                     />
                   </td>
                   <td className="py-4 px-4">

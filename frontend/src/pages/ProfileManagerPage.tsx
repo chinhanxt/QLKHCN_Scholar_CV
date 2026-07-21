@@ -15,7 +15,8 @@ import {
   Download,
   ChevronRight,
   ChevronLeft,
-  Menu
+  Menu,
+  RefreshCw
 } from 'lucide-react'
 
 export function ProfileManagerPage() {
@@ -34,6 +35,9 @@ export function ProfileManagerPage() {
   const [pubYear, setPubYear] = useState<string>('all')
   const [selectedPubId, setSelectedPubId] = useState<string | null>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+
+  // Selection state
+  const [selectedPubIds, setSelectedPubIds] = useState<string[]>([])
 
   const fetchAuthors = async () => {
     setIsLoading(true)
@@ -58,6 +62,7 @@ export function ProfileManagerPage() {
 
   // Load detailed profile when selected
   useEffect(() => {
+    setSelectedPubIds([])
     if (!selectedProfileId) {
       setSelectedProfile(null)
       setSelectedPubId(null)
@@ -79,6 +84,183 @@ export function ProfileManagerPage() {
     }
     loadDetail()
   }, [selectedProfileId])
+
+  const handleToggleSelectPub = (pubId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation()
+    const strId = String(pubId)
+    setSelectedPubIds(prev =>
+      prev.includes(strId) ? prev.filter(id => id !== strId) : [...prev, strId]
+    )
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedPubIds([])
+  }
+
+  const handleToggleSelectAll = () => {
+    if (!selectedProfile || !selectedProfile.publications) return
+    const allIds = selectedProfile.publications.map(p => String(p.id))
+    const isAllSelected = allIds.length > 0 && allIds.every(id => selectedPubIds.includes(id))
+    if (isAllSelected) {
+      setSelectedPubIds([])
+    } else {
+      setSelectedPubIds(allIds)
+    }
+  }
+
+  // Modals state
+  const [isAddPubModalOpen, setIsAddPubModalOpen] = useState(false)
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false)
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false)
+  const [mergeMainPubId, setMergeMainPubId] = useState<string>('')
+
+  // Trash Bin State
+  const [deletedPublications, setDeletedPublications] = useState<PublicationDetail[]>(() => {
+    const saved = localStorage.getItem('profile_deletedPublications')
+    return saved ? JSON.parse(saved) : []
+  })
+
+  useEffect(() => {
+    localStorage.setItem('profile_deletedPublications', JSON.stringify(deletedPublications))
+  }, [deletedPublications])
+
+  // Publication Form State
+  const [pubForm, setPubForm] = useState({
+    title: '',
+    authors_list: '',
+    venue: '',
+    year: new Date().getFullYear().toString(),
+    citations: 0,
+    sjr_q: 'N/A',
+    if_val: 'N/A',
+    wos: 'N/A'
+  })
+
+  const handleAddPub = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedProfile) return
+
+    const newPub: PublicationDetail = {
+      id: `custom_${Date.now()}`,
+      title: pubForm.title,
+      authors_list: pubForm.authors_list,
+      venue: pubForm.venue,
+      year: pubForm.year,
+      citations: Number(pubForm.citations),
+      display_order: (selectedProfile.publications?.length || 0) + 1,
+      cites_per_year: {},
+      journal: null,
+      sjr_q: pubForm.sjr_q,
+      if_val: pubForm.if_val,
+      wos: pubForm.wos
+    }
+
+    setSelectedProfile({
+      ...selectedProfile,
+      publications: [newPub, ...(selectedProfile.publications || [])],
+      citedby: selectedProfile.citedby + Number(pubForm.citations)
+    })
+
+    setIsAddPubModalOpen(false)
+    setPubForm({
+      title: '',
+      authors_list: '',
+      venue: '',
+      year: new Date().getFullYear().toString(),
+      citations: 0,
+      sjr_q: 'N/A',
+      if_val: 'N/A',
+      wos: 'N/A'
+    })
+    toast.success('Thêm bài báo nghiên cứu thành công!')
+  }
+
+  const handleMergeConfirm = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedProfile || selectedPubIds.length < 2 || !mergeMainPubId) return
+
+    const selectedPubs = selectedProfile.publications.filter(p => selectedPubIds.includes(String(p.id)))
+    const mainPub = selectedPubs.find(p => String(p.id) === mergeMainPubId)
+    if (!mainPub) return
+
+    const mergedCitations = selectedPubs.reduce((sum, p) => sum + (p.citations || 0), 0)
+
+    const mergedCitesPerYear: Record<string, number> = {}
+    selectedPubs.forEach(p => {
+      if (!p.cites_per_year) return
+      Object.entries(p.cites_per_year).forEach(([yr, count]) => {
+        mergedCitesPerYear[yr] = (mergedCitesPerYear[yr] || 0) + (count || 0)
+      })
+    })
+
+    const updatedMainPub: PublicationDetail = {
+      ...mainPub,
+      citations: mergedCitations,
+      cites_per_year: mergedCitesPerYear
+    }
+
+    const updatedPublications = selectedProfile.publications
+      .filter(p => !selectedPubIds.includes(String(p.id)))
+    
+    const mainPubOrigIndex = selectedProfile.publications.findIndex(p => String(p.id) === mergeMainPubId)
+    updatedPublications.splice(mainPubOrigIndex >= 0 ? mainPubOrigIndex : 0, 0, updatedMainPub)
+
+    const newTotalCites = updatedPublications.reduce((sum, p) => sum + (p.citations || 0), 0)
+
+    setSelectedProfile({
+      ...selectedProfile,
+      publications: updatedPublications,
+      citedby: newTotalCites
+    })
+
+    setIsMergeModalOpen(false)
+    setSelectedPubIds([])
+    setMergeMainPubId('')
+    toast.success('Đã gộp thành công các bài báo nghiên cứu đã chọn!')
+  }
+
+  const handleBulkDeleteSelected = () => {
+    if (!selectedProfile || selectedPubIds.length === 0) return
+    if (window.confirm(`Bạn có chắc muốn chuyển ${selectedPubIds.length} bài báo đã chọn vào thùng rác?`)) {
+      const pubsToDelete = selectedProfile.publications.filter(p => selectedPubIds.includes(String(p.id)))
+      setDeletedPublications(prev => [...pubsToDelete, ...prev])
+      const newPubs = selectedProfile.publications.filter(p => !selectedPubIds.includes(String(p.id)))
+      const newTotalCites = newPubs.reduce((sum, p) => sum + (p.citations || 0), 0)
+      setSelectedProfile({
+        ...selectedProfile,
+        publications: newPubs,
+        citedby: newTotalCites
+      })
+      setSelectedPubIds([])
+      toast.success(`Đã chuyển ${pubsToDelete.length} bài báo vào thùng rác!`)
+    }
+  }
+
+  const handleRestorePub = (pub: PublicationDetail) => {
+    if (!selectedProfile) return
+    setSelectedProfile({
+      ...selectedProfile,
+      publications: [pub, ...selectedProfile.publications],
+      citedby: selectedProfile.citedby + (pub.citations || 0)
+    })
+    setDeletedPublications(prev => prev.filter(p => String(p.id) !== String(pub.id)))
+    toast.success(`Đã khôi phục bài báo thành công!`)
+  }
+
+  const handleDeletePermanently = (pubId: string) => {
+    if (window.confirm('Bạn có chắc muốn xóa vĩnh viễn bài báo này?')) {
+      setDeletedPublications(prev => prev.filter(p => String(p.id) !== String(pubId)))
+      toast.success('Đã xóa vĩnh viễn bài báo!')
+    }
+  }
+
+  const handleEmptyTrash = () => {
+    if (deletedPublications.length === 0) return
+    if (window.confirm('Bạn có chắc muốn xóa vĩnh viễn toàn bộ bài báo trong thùng rác?')) {
+      setDeletedPublications([])
+      toast.success('Đã dọn sạch thùng rác!')
+    }
+  }
 
   const handleDelete = async (scholarId: string, name: string) => {
     if (!confirm(`Bạn có chắc chắn muốn xoá hồ sơ tác giả "${name}" không? Toàn bộ bài báo liên quan cũng sẽ bị xoá.`)) {
@@ -282,6 +464,13 @@ export function ProfileManagerPage() {
                       <div className="flex flex-col justify-center min-w-0">
                         <h2 className="text-sm font-bold text-slate-800 line-clamp-1">{selectedProfile.name}</h2>
                         <p className="text-xs text-slate-500 mt-0.5 italic line-clamp-1">{selectedProfile.affiliation || 'Không có cơ quan công tác'}</p>
+                        {selectedProfile.email_domain ? (
+                          <p className="text-xs text-[#005b9a] font-semibold mt-0.5">
+                            Email được xác minh tại <span className="underline">{selectedProfile.email_domain.replace(/^@/, '')}</span>
+                          </p>
+                        ) : (
+                          <p className="text-xs text-slate-400 mt-0.5 italic">Không có email được xác minh</p>
+                        )}
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {selectedProfile.interests?.slice(0, 5).map((interest, i) => (
                             <span key={i} className="text-[9px] font-bold bg-[#e6f0f7] text-[#005b9a] rounded px-2 py-0.5">
@@ -333,13 +522,18 @@ export function ProfileManagerPage() {
                 {/* Shared Publication Table List */}
                 <PublicationTableList
                   publications={selectedProfile.publications}
-                  selectedPubIds={[]}
+                  selectedPubIds={selectedPubIds}
                   onSelectPub={(pub) => {
                     setSelectedPubId(pub.id)
                     setIsSidebarCollapsed(true)
                   }}
-                  onToggleSelectPub={() => {}}
-                  onToggleSelectAll={() => {}}
+                  onToggleSelectPub={handleToggleSelectPub}
+                  onToggleSelectAll={handleToggleSelectAll}
+                  onDeselectAll={handleDeselectAll}
+                  onAddPub={() => setIsAddPubModalOpen(true)}
+                  onOpenTrash={() => setIsTrashModalOpen(true)}
+                  onMergePubs={() => setIsMergeModalOpen(true)}
+                  onDeleteSelectedPubs={handleBulkDeleteSelected}
                   onExport={() => handleExportCSV(selectedProfile)}
                   searchKeyword={pubKeyword}
                   setSearchKeyword={setPubKeyword}
@@ -361,6 +555,282 @@ export function ProfileManagerPage() {
           )}
         </div>
       </div>
+
+      {/* ========================================== */}
+      {/* DIALOG MODAL: ADD NEW PUBLICATION */}
+      {/* ========================================== */}
+      {isAddPubModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-[#F8FAFC]">
+              <h3 className="font-bold text-sm text-[#0F172A] uppercase tracking-wider">Thêm bài báo khoa học mới</h3>
+              <button 
+                onClick={() => setIsAddPubModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-[#64748B] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleAddPub} className="p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto custom-scrollbar">
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Tên bài báo khoa học *</label>
+                <textarea 
+                  value={pubForm.title}
+                  onChange={(e) => setPubForm({ ...pubForm, title: e.target.value })}
+                  required
+                  rows={2}
+                  placeholder="Nhập đầy đủ tên bài báo..."
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Danh sách tác giả * (Cách nhau bằng dấu phẩy)</label>
+                <input 
+                  type="text" 
+                  value={pubForm.authors_list}
+                  onChange={(e) => setPubForm({ ...pubForm, authors_list: e.target.value })}
+                  required
+                  placeholder="Ví dụ: T Duy Thanh, HT Chi Nhân, ..."
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-bold text-[#64748B] block">Nơi xuất bản (Journal / Conference / Venue)</label>
+                <input 
+                  type="text" 
+                  value={pubForm.venue}
+                  onChange={(e) => setPubForm({ ...pubForm, venue: e.target.value })}
+                  placeholder="Ví dụ: IEEE Transactions on Pattern Analysis..."
+                  className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Năm xuất bản</label>
+                  <input 
+                    type="text" 
+                    value={pubForm.year}
+                    onChange={(e) => setPubForm({ ...pubForm, year: e.target.value })}
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Số trích dẫn *</label>
+                  <input 
+                    type="number" 
+                    value={pubForm.citations}
+                    onChange={(e) => setPubForm({ ...pubForm, citations: Number(e.target.value) })}
+                    required
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Phân hạng SJR Quartile</label>
+                  <select 
+                    value={pubForm.sjr_q}
+                    onChange={(e) => setPubForm({ ...pubForm, sjr_q: e.target.value })}
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  >
+                    <option value="N/A">N/A</option>
+                    <option value="Q1">Q1</option>
+                    <option value="Q2">Q2</option>
+                    <option value="Q3">Q3</option>
+                    <option value="Q4">Q4</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#64748B] block">Danh mục Web of Science</label>
+                  <input 
+                    type="text" 
+                    value={pubForm.wos}
+                    onChange={(e) => setPubForm({ ...pubForm, wos: e.target.value })}
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsAddPubModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-[#E5E7EB] hover:bg-slate-50 text-slate-700 font-bold transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold transition-all cursor-pointer"
+                >
+                  Lưu bài báo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* DIALOG MODAL: TRASH BIN */}
+      {/* ========================================== */}
+      {isTrashModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-[#F8FAFC]">
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-rose-600" />
+                <h3 className="font-bold text-sm text-[#0F172A] uppercase tracking-wider">Thùng rác bài viết đã xóa</h3>
+              </div>
+              <button 
+                onClick={() => setIsTrashModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-[#64748B] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 max-h-[55vh] overflow-y-auto custom-scrollbar">
+              {deletedPublications.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 italic text-xs">
+                  Thùng rác đang trống.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 text-xs">
+                  {deletedPublications.map((pub) => (
+                    <div key={pub.id} className="py-3.5 flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-slate-800 line-clamp-2">{pub.title}</div>
+                        <div className="text-[10px] text-slate-400 mt-1 truncate">{pub.authors_list}</div>
+                        <div className="text-[10px] text-slate-500 italic mt-0.5">{pub.venue || 'Tạp chí khác'} • {pub.year}</div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => handleRestorePub(pub)}
+                          className="px-2.5 py-1 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] transition-colors cursor-pointer"
+                          title="Khôi phục bài báo"
+                        >
+                          Khôi phục
+                        </button>
+                        <button
+                          onClick={() => handleDeletePermanently(String(pub.id))}
+                          className="px-2.5 py-1 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[10px] transition-colors cursor-pointer"
+                          title="Xóa vĩnh viễn"
+                        >
+                          Xóa vĩnh viễn
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-[#E5E7EB] bg-[#F8FAFC] flex justify-between items-center">
+              <button
+                disabled={deletedPublications.length === 0}
+                onClick={handleEmptyTrash}
+                className="px-4 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-40 disabled:pointer-events-none text-xs font-bold transition-all cursor-pointer"
+              >
+                Dọn sạch thùng rác
+              </button>
+              <button
+                onClick={() => setIsTrashModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all text-xs cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* DIALOG MODAL: MERGE SELECTED PUBLICATIONS */}
+      {/* ========================================== */}
+      {isMergeModalOpen && selectedProfile && (
+        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-[#F8FAFC]">
+              <h3 className="font-bold text-sm text-[#0F172A] uppercase tracking-wider">Gộp các bài báo đã chọn</h3>
+              <button 
+                onClick={() => {
+                  setIsMergeModalOpen(false)
+                  setMergeMainPubId('')
+                }}
+                className="p-1 rounded-lg hover:bg-slate-100 text-[#64748B] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleMergeConfirm} className="p-6 space-y-4 text-xs">
+              <p className="text-slate-500 mb-2 leading-relaxed">
+                Chọn bài viết nghiên cứu làm <strong>Bản ghi chính</strong>. Tiêu đề và thông tin của bài viết này sẽ được giữ lại, các bài viết còn lại sẽ được gộp trích dẫn vào bản ghi này và bị xóa khỏi danh sách.
+              </p>
+
+              <div className="space-y-3 max-h-[40vh] overflow-y-auto custom-scrollbar p-1">
+                {selectedProfile.publications
+                  .filter(p => selectedPubIds.includes(String(p.id)))
+                  .map(pub => (
+                    <label 
+                      key={pub.id} 
+                      className={cn(
+                        "flex gap-3 items-start p-3 rounded-2xl border cursor-pointer transition-all",
+                        mergeMainPubId === String(pub.id) 
+                          ? "border-[#2563EB] bg-[#DBEAFE]/30" 
+                          : "border-[#E5E7EB] hover:bg-slate-50"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="merge_main_pub"
+                        value={String(pub.id)}
+                        checked={mergeMainPubId === String(pub.id)}
+                        onChange={() => setMergeMainPubId(String(pub.id))}
+                        className="mt-0.5 text-[#2563EB] focus:ring-[#2563EB]"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-slate-800 leading-snug">{pub.title}</div>
+                        <div className="text-[10px] text-slate-500 mt-1 truncate">{pub.authors_list}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{pub.venue} • {pub.year} • Trích dẫn: <strong className="text-slate-700">{pub.citations}</strong></div>
+                      </div>
+                    </label>
+                  ))}
+              </div>
+
+              <div className="pt-2 p-3 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-600">Tổng số trích dẫn sau khi gộp:</span>
+                <strong className="text-base text-[#2563EB]">
+                  {selectedProfile.publications
+                    .filter(p => selectedPubIds.includes(String(p.id)))
+                    .reduce((sum, p) => sum + (p.citations || 0), 0)}{' '}
+                  trích dẫn
+                </strong>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMergeModalOpen(false)
+                    setMergeMainPubId('')
+                  }}
+                  className="px-4 py-2 rounded-xl border border-[#E5E7EB] hover:bg-slate-50 text-slate-700 font-bold transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={!mergeMainPubId}
+                  className="px-5 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  Xác nhận gộp
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

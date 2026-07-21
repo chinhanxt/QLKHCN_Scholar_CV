@@ -18,7 +18,8 @@ import {
   XCircle,
   Loader2,
   List,
-  Power
+  Power,
+  X
 } from 'lucide-react'
 
 export function ScholarAutoSchedulerPage() {
@@ -40,6 +41,13 @@ export function ScholarAutoSchedulerPage() {
   const [loadingAuthors, setLoadingAuthors] = useState(false)
   const [selectedAuthorIds, setSelectedAuthorIds] = useState<number[]>([])
   const [loadingScan, setLoadingScan] = useState(false)
+  const [isJobBannerDismissed, setIsJobBannerDismissed] = useState(false)
+
+  useEffect(() => {
+    if (config.current_job_status === 'RUNNING') {
+      setIsJobBannerDismissed(false)
+    }
+  }, [config.current_job_status])
 
   const fetchTorStatus = async () => {
     try {
@@ -243,7 +251,7 @@ export function ScholarAutoSchedulerPage() {
       </div>
 
       {/* Live Job Execution Progress & Status Monitor Card */}
-      {config.current_job_status && config.current_job_status !== 'IDLE' && (
+      {!isJobBannerDismissed && config.current_job_status && config.current_job_status !== 'IDLE' && (
         <Card
           className={`p-5 rounded-2xl text-white shadow-lg border transition-all duration-300 ${
             config.current_job_status === 'RUNNING'
@@ -300,10 +308,15 @@ export function ScholarAutoSchedulerPage() {
 
               {config.current_job_status !== 'RUNNING' && (
                 <button
-                  onClick={() => scholarApi.updateAutoScanConfig({ current_job_status: 'IDLE' }).then(fetchConfig)}
-                  className="text-xs text-slate-300 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded cursor-pointer transition-colors"
+                  onClick={() => {
+                    setIsJobBannerDismissed(true)
+                    setConfig((prev: any) => ({ ...prev, current_job_status: 'IDLE' }))
+                    scholarApi.updateAutoScanConfig({ current_job_status: 'IDLE' }).then(fetchConfig)
+                  }}
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/20 transition-colors cursor-pointer shrink-0"
+                  title="Tắt thông báo"
                 >
-                  ✕ Đóng
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>

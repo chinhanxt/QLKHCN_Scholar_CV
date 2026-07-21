@@ -775,7 +775,8 @@ class AutoScanConfigView(APIView):
             "is_active", "scan_interval_hours", "frequency_type",
             "preferred_hour", "preferred_minute", "preferred_weekday", "preferred_day_of_month",
             "batch_size_per_hour", "delay_min_seconds", "delay_max_seconds", 
-            "cooldown_min_seconds", "cooldown_max_seconds"
+            "cooldown_min_seconds", "cooldown_max_seconds",
+            "current_job_status", "current_job_progress", "current_job_detail"
         ]
         for field in fields:
             if field in request.data:
