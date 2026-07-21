@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Upload,
   Play,
+  Pause,
   Settings,
   Clock,
   User,
@@ -19,8 +20,22 @@ import {
   Loader2,
   List,
   Power,
-  X
+  X,
+  Search,
+  Trash2,
+  Download,
+  Terminal
 } from 'lucide-react'
+
+export interface AutoSchedulerLogEntry {
+  id: string
+  timestamp: string
+  category: 'IMPORT' | 'SCAN' | 'TOR' | 'CONFIG' | 'SYSTEM'
+  level: 'SUCCESS' | 'INFO' | 'UPDATE' | 'WARN' | 'ERROR'
+  action: string
+  target?: string
+  details: string
+}
 
 export function ScholarAutoSchedulerPage() {
   const [torInfo, setTorInfo] = useState<any>(null)
@@ -42,6 +57,70 @@ export function ScholarAutoSchedulerPage() {
   const [selectedAuthorIds, setSelectedAuthorIds] = useState<number[]>([])
   const [loadingScan, setLoadingScan] = useState(false)
   const [isJobBannerDismissed, setIsJobBannerDismissed] = useState(false)
+
+  // Realtime Log Terminal States
+  const [logs, setLogs] = useState<AutoSchedulerLogEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('auto_scheduler_logs')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi đọc auto_scheduler_logs từ localStorage:', e)
+    }
+    return [
+      {
+        id: 'init-1',
+        timestamp: new Date().toISOString(),
+        category: 'SYSTEM',
+        level: 'INFO',
+        action: 'Hệ thống sẵn sàng',
+        details: 'Khởi tạo bối cảnh Realtime Auto-Scheduler & Monitoring Terminal.'
+      }
+    ]
+  })
+
+  const [logSearch, setLogSearch] = useState('')
+  const [logCategoryFilter, setLogCategoryFilter] = useState<'ALL' | 'IMPORT' | 'SCAN' | 'TOR' | 'CONFIG' | 'SYSTEM'>('ALL')
+  const [logLevelFilter, setLogLevelFilter] = useState<'ALL' | 'SUCCESS' | 'INFO' | 'UPDATE' | 'WARN' | 'ERROR'>('ALL')
+  const [isAutoScroll, setIsAutoScroll] = useState(true)
+  const logContainerRef = useRef<HTMLDivElement>(null)
+
+  const addSchedulerLog = (
+    category: AutoSchedulerLogEntry['category'],
+    level: AutoSchedulerLogEntry['level'],
+    action: string,
+    details: string,
+    target?: string
+  ) => {
+    const newEntry: AutoSchedulerLogEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      category,
+      level,
+      action,
+      target,
+      details,
+    }
+    setLogs((prevLogs) => {
+      const updated = [newEntry, ...prevLogs].slice(0, 300)
+      try {
+        localStorage.setItem('auto_scheduler_logs', JSON.stringify(updated))
+      } catch (e) {
+        console.error('Lỗi lưu log vào localStorage', e)
+      }
+      return updated
+    })
+  }
+
+  useEffect(() => {
+    if (isAutoScroll && logContainerRef.current) {
+      logContainerRef.current.scrollTop = 0
+    }
+  }, [logs, isAutoScroll])
 
   useEffect(() => {
     if (config.current_job_status === 'RUNNING') {
@@ -100,27 +179,32 @@ export function ScholarAutoSchedulerPage() {
 
   const handleRotateIp = async () => {
     setLoadingTor(true)
+    addSchedulerLog('TOR', 'INFO', 'Đổi IP Tor (NEWNYM)', 'Gửi tín hiệu NEWNYM đến Tor Control Port 9051...', 'Port 9051')
     try {
       await scholarApi.rotateTorIp()
       toast.success('Đã gửi tín hiệu NEWNYM. IP Tor đã được đổi ngẫu nhiên!')
+      addSchedulerLog('TOR', 'SUCCESS', 'Đã đổi IP Tor thành công', 'Đã nhận xác nhận từ Tor Control. IP đã được đổi ngẫu nhiên.', 'Port 9051')
       await fetchTorStatus()
     } catch (e) {
       toast.error('Lỗi khi đổi IP Tor.')
+      addSchedulerLog('TOR', 'ERROR', 'Lỗi khi đổi IP Tor', 'Không thể gửi tín hiệu NEWNYM đến Tor Control Port 9051.', 'Port 9051')
     } finally {
       setLoadingTor(false)
     }
   }
 
-
-
   const handleStartTor = async () => {
     setLoadingTor(true)
+    addSchedulerLog('TOR', 'INFO', 'Khởi động Tor Proxy', 'Đang gửi lệnh kích hoạt Tor Proxy Container...', 'Docker Container')
     try {
       const res = await scholarApi.startTorService()
       toast.success(res.data?.message || 'Đã gửi lệnh bật Tor Proxy Container!')
+      addSchedulerLog('TOR', 'SUCCESS', 'Khởi động Tor Proxy thành công', res.data?.message || 'Container Tor Proxy đã khởi động.', 'Docker Container')
       await fetchTorStatus()
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Lỗi khi bật Tor Proxy Container.')
+      const errMsg = e.response?.data?.error || 'Lỗi khi bật Tor Proxy Container.'
+      toast.error(errMsg)
+      addSchedulerLog('TOR', 'ERROR', 'Lỗi bật Tor Container', errMsg, 'Docker Container')
     } finally {
       setLoadingTor(false)
     }
@@ -131,8 +215,16 @@ export function ScholarAutoSchedulerPage() {
     try {
       await scholarApi.updateAutoScanConfig(config)
       toast.success('Đã cập nhật cấu hình lịch cào tự động.')
+      addSchedulerLog(
+        'CONFIG',
+        'SUCCESS',
+        'Lưu cấu hình auto-scan',
+        `Cấu hình mới: Kích hoạt=${config.is_active ? 'Bật' : 'Tắt'}, Chu kỳ=${config.frequency_type || 'WEEKLY'}, Hạn ngạch=${config.batch_size_per_hour || 8} CV/h, Delay=${config.delay_min_seconds}-${config.delay_max_seconds}s`,
+        'AutoScanConfig'
+      )
     } catch (e) {
       toast.error('Lỗi khi lưu cấu hình.')
+      addSchedulerLog('CONFIG', 'ERROR', 'Lỗi lưu cấu hình', 'Không thể lưu thông số cấu hình auto-scan.', 'AutoScanConfig')
     } finally {
       setLoadingConfig(false)
     }
@@ -143,14 +235,31 @@ export function ScholarAutoSchedulerPage() {
       toast.error('Vui lòng dán danh sách Scholar ID hoặc URL!')
       return
     }
+    const snippet = bulkText.trim().slice(0, 60)
+    const lineCount = bulkText.trim().split('\n').filter(Boolean).length
+    addSchedulerLog(
+      'IMPORT',
+      'INFO',
+      'Bulk Import CV',
+      `Bắt đầu import ${lineCount} dòng dữ liệu CV. Mẫu: "${snippet}${bulkText.length > 60 ? '...' : ''}"`,
+      `Count: ${lineCount}`
+    )
     setLoadingImport(true)
     try {
       const res = await scholarApi.bulkImportCVs({ scholar_ids_or_urls: bulkText, trigger_now: true })
       toast.success(res.data?.message || 'Đã nhập danh sách CV thành công!')
+      addSchedulerLog(
+        'IMPORT',
+        'SUCCESS',
+        'Bulk Import CV hoàn tất',
+        res.data?.message || `Đã nhập thành công ${lineCount} hồ sơ CV.`,
+        `Count: ${lineCount}`
+      )
       setBulkText('')
       fetchAuthors()
     } catch (e) {
       toast.error('Lỗi khi nhập danh sách CV.')
+      addSchedulerLog('IMPORT', 'ERROR', 'Lỗi Bulk Import', 'Xảy ra lỗi trong quá trình import danh sách CV tác giả.', `Count: ${lineCount}`)
     } finally {
       setLoadingImport(false)
     }
@@ -179,18 +288,126 @@ export function ScholarAutoSchedulerPage() {
       toast.error('Vui lòng chọn ít nhất 1 tác giả!')
       return
     }
+    addSchedulerLog(
+      'SCAN',
+      'INFO',
+      'Kích hoạt quét CV trực tiếp',
+      `Bắt đầu quét trực tiếp cho ${ids.length} tác giả (IDs: ${ids.join(', ')})`,
+      `IDs: ${ids.slice(0, 4).join(', ')}${ids.length > 4 ? '...' : ''}`
+    )
     setLoadingScan(true)
     try {
       const res = await scholarApi.triggerAuthorsScan(ids)
       toast.success(res.data?.message || `Đã phát lệnh quét ngầm trực tiếp cho ${ids.length} tác giả!`)
+      addSchedulerLog(
+        'SCAN',
+        'SUCCESS',
+        'Phát lệnh quét thành công',
+        res.data?.message || `Đã gửi tác vụ quét cho ${ids.length} tác giả vào Celery queue.`,
+        `Count: ${ids.length}`
+      )
       setSelectedAuthorIds([])
       fetchAuthors()
     } catch (e) {
       toast.error('Lỗi khi phát lệnh quét ngầm.')
+      addSchedulerLog('SCAN', 'ERROR', 'Lỗi phát lệnh quét', 'Không thể khởi chạy tiến trình quét CV cho các tác giả được chọn.', `Count: ${ids.length}`)
     } finally {
       setLoadingScan(false)
     }
   }
+
+  const handleClearLogs = () => {
+    setLogs([])
+    try {
+      localStorage.removeItem('auto_scheduler_logs')
+    } catch (e) {
+      console.error(e)
+    }
+    toast.success('Đã xóa tất cả nhật ký.')
+  }
+
+  const handleExportLogs = (format: 'json' | 'txt') => {
+    if (logs.length === 0) {
+      toast.error('Không có nhật ký nào để xuất!')
+      return
+    }
+    let content = ''
+    let mimeType = 'text/plain'
+    let fileName = `auto_scheduler_logs_${new Date().toISOString().slice(0, 10)}`
+
+    if (format === 'json') {
+      content = JSON.stringify(logs, null, 2)
+      mimeType = 'application/json'
+      fileName += '.json'
+    } else {
+      content = logs
+        .map(
+          (l) =>
+            `[${formatLogTime(l.timestamp)}] [${l.level}] [${l.category}] ${l.action}${l.target ? ` (@${l.target})` : ''}: ${l.details}`
+        )
+        .join('\n')
+      fileName += '.txt'
+    }
+
+    const blob = new Blob([content], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`Đã xuất file nhật ký (${fileName})`)
+  }
+
+  const formatLogTime = (isoOrFormatted: string) => {
+    try {
+      const d = new Date(isoOrFormatted)
+      if (isNaN(d.getTime())) return isoOrFormatted
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      const hh = pad(d.getHours())
+      const mm = pad(d.getMinutes())
+      const ss = pad(d.getSeconds())
+      const DD = pad(d.getDate())
+      const MM = pad(d.getMonth() + 1)
+      const YYYY = d.getFullYear()
+      return `${hh}:${mm}:${ss} ${DD}/${MM}/${YYYY}`
+    } catch {
+      return isoOrFormatted
+    }
+  }
+
+  const getLevelBadgeStyle = (level: AutoSchedulerLogEntry['level']) => {
+    switch (level) {
+      case 'SUCCESS':
+        return 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60'
+      case 'INFO':
+        return 'bg-blue-950/80 text-blue-400 border-blue-800/60'
+      case 'UPDATE':
+        return 'bg-cyan-950/80 text-cyan-400 border-cyan-800/60'
+      case 'WARN':
+        return 'bg-amber-950/80 text-amber-400 border-amber-800/60'
+      case 'ERROR':
+        return 'bg-rose-950/80 text-rose-400 border-rose-800/60'
+      default:
+        return 'bg-slate-800 text-slate-300 border-slate-700'
+    }
+  }
+
+  const filteredLogs = logs.filter((log) => {
+    const matchesSearch =
+      !logSearch.trim() ||
+      log.action.toLowerCase().includes(logSearch.toLowerCase()) ||
+      log.details.toLowerCase().includes(logSearch.toLowerCase()) ||
+      (log.target && log.target.toLowerCase().includes(logSearch.toLowerCase()))
+
+    const matchesCategory =
+      logCategoryFilter === 'ALL' || log.category === logCategoryFilter
+
+    const matchesLevel =
+      logLevelFilter === 'ALL' || log.level === logLevelFilter
+
+    return matchesSearch && matchesCategory && matchesLevel
+  })
 
   const getStatusBadge = (status: string | undefined) => {
     const s = status ? status.toUpperCase() : 'PENDING'
@@ -654,6 +871,168 @@ export function ScholarAutoSchedulerPage() {
           </div>
         )}
       </Card>
+
+      {/* Log Console UI Component */}
+      <Card className="p-6 rounded-xl bg-white border border-slate-200 shadow-sm space-y-4">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Terminal className="h-5 w-5 text-indigo-600" />
+            <h2 className="font-bold text-slate-800 text-base">Nhật Ký Quét Realtime & Kiểm Soát Dữ Liệu</h2>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              LIVE LOGGING
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+              {filteredLogs.length} / {logs.length} nhật ký
+            </span>
+          </div>
+
+          {/* Export & Clear Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsAutoScroll(!isAutoScroll)}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                isAutoScroll
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+              title={isAutoScroll ? 'Tắt cuộn tự động' : 'Bật cuộn tự động'}
+            >
+              {isAutoScroll ? <Pause className="w-3.5 h-3.5 text-indigo-600" /> : <Play className="w-3.5 h-3.5" />}
+              Auto Scroll
+            </button>
+
+            <button
+              onClick={() => handleExportLogs('json')}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Xuất nhật ký dạng JSON"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              Xuất File Log
+            </button>
+
+            <button
+              onClick={handleClearLogs}
+              className="px-3 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-600 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Xóa tất cả nhật ký"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Xóa Log
+            </button>
+          </div>
+        </div>
+
+        {/* Toolbar: Search, Category Filter Tabs & Level Filter Dropdown */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          {/* Category Filter Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-full">
+            {[
+              { id: 'ALL', label: 'Tất cả' },
+              { id: 'SCAN', label: 'Quét CV' },
+              { id: 'IMPORT', label: 'Import' },
+              { id: 'TOR', label: 'Tor Proxy' },
+              { id: 'CONFIG', label: 'Cấu hình' },
+              { id: 'SYSTEM', label: 'Hệ thống' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setLogCategoryFilter(cat.id as any)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                  logCategoryFilter === cat.id
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Search Box & Level Filter Select */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-48">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={logSearch}
+                onChange={(e) => setLogSearch(e.target.value)}
+                placeholder="Tìm nhật ký..."
+                className="w-full pl-8 pr-3 py-1 rounded-lg border border-slate-200 text-xs focus:outline-none focus:border-[#005b9a] bg-white"
+              />
+            </div>
+
+            <select
+              value={logLevelFilter}
+              onChange={(e) => setLogLevelFilter(e.target.value as any)}
+              className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-medium focus:outline-none focus:border-[#005b9a] bg-white cursor-pointer"
+            >
+              <option value="ALL">Tất cả mức độ</option>
+              <option value="SUCCESS">Success</option>
+              <option value="INFO">Info</option>
+              <option value="UPDATE">Update</option>
+              <option value="WARN">Warning</option>
+              <option value="ERROR">Error</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Terminal Log Box */}
+        <div
+          ref={logContainerRef}
+          className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs max-h-96 overflow-y-auto custom-scrollbar shadow-inner space-y-2"
+        >
+          {filteredLogs.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 font-sans text-xs">
+              Không tìm thấy nhật ký phù hợp với bộ lọc hiện tại.
+            </div>
+          ) : (
+            filteredLogs.map((log) => (
+              <div
+                key={log.id}
+                className="flex flex-wrap items-start gap-2 py-1 px-2 rounded hover:bg-slate-900/80 transition-colors border-b border-slate-900/50 last:border-0"
+              >
+                {/* Level Badge */}
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold border shrink-0 ${getLevelBadgeStyle(
+                    log.level
+                  )}`}
+                >
+                  {log.level}
+                </span>
+
+                {/* Category Tag */}
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700 font-mono shrink-0">
+                  {log.category}
+                </span>
+
+                {/* Timestamp */}
+                <span className="text-slate-500 shrink-0 select-none">
+                  [{formatLogTime(log.timestamp)}]
+                </span>
+
+                {/* Action Name */}
+                <span className="font-semibold text-slate-200 shrink-0">
+                  {log.action}
+                </span>
+
+                {/* Target */}
+                {log.target && (
+                  <span className="text-cyan-400/90 text-[11px] bg-cyan-950/40 px-1 rounded border border-cyan-900/40 shrink-0">
+                    @{log.target}
+                  </span>
+                )}
+
+                {/* Details */}
+                <span className="text-slate-400 break-all flex-1">
+                  - {log.details}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
     </div>
   )
 }
+
