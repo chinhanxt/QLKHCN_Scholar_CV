@@ -201,5 +201,14 @@ export const scholarApi = {
 
   getMappedData: (params: { q?: string; wos_index?: string; quartile?: string; mapped_only?: boolean; staging?: boolean }) => 
     apiClient.get<any[]>('/scholar/crawlers/mapped-data/', { params }),
+
+  // Auto-Scan & Tor Controls
+  getTorStatus: () => apiClient.get<any>('/scholar/auto-scan/tor-status/'),
+  rotateTorIp: () => apiClient.post<any>('/scholar/auto-scan/tor-status/'),
+  bulkImportCVs: (data: { scholar_ids_or_urls: string; trigger_now?: boolean }) =>
+    apiClient.post<any>('/scholar/auto-scan/bulk-import/', data),
+  getAutoScanConfig: () => apiClient.get<any>('/scholar/auto-scan/config/'),
+  updateAutoScanConfig: (config: any) => apiClient.patch<any>('/scholar/auto-scan/config/', config),
 }
+
 

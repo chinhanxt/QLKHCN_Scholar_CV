@@ -11,6 +11,7 @@ import { ClarivateCrawlerPage } from '@/pages/ClarivateCrawlerPage'
 import { ScoreIntegratorPage } from '@/pages/ScoreIntegratorPage'
 import { ProfileManagerPage } from '@/pages/ProfileManagerPage'
 import { UnifiedCrawlerPage } from '@/pages/UnifiedCrawlerPage'
+import { ScholarAutoSchedulerPage } from '@/pages/ScholarAutoSchedulerPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { DatabasePage } from '@/pages/DatabasePage'
 import { HelpPage } from '@/pages/HelpPage'
@@ -25,7 +26,9 @@ export const router = createBrowserRouter([
         children: [
           { path: '/', element: <DashboardPage /> },
           { path: '/scholar/unified', element: <UnifiedCrawlerPage /> },
+          { path: '/scholar/auto-scheduler', element: <ScholarAutoSchedulerPage /> },
           { path: '/scholar/scraper', element: <ScholarScraperPage /> },
+
           { path: '/scholar/bioxbio', element: <BioxbioCrawlerPage /> },
           { path: '/scholar/scimago', element: <ScimagoCrawlerPage /> },
           { path: '/scholar/clarivate', element: <ClarivateCrawlerPage /> },

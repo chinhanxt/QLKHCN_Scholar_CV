@@ -18,17 +18,20 @@ import {
   Layers,
   ChevronDown,
   ChevronRight,
-  Download
+  Download,
+  Bot
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
 import { fullName } from '@/lib/utils'
 
 const OTHER_TOOLS = [
+  { to: '/scholar/auto-scheduler', label: 'Tự động hóa CV', icon: Bot },
   { to: '/scholar/scraper', label: 'Scholar Scraper', icon: GraduationCap },
   { to: '/scholar/integrator', label: 'Data chuẩn', icon: GitMerge },
   { to: '/scholar/profiles', label: 'Profile Manager', icon: FolderHeart },
 ]
+
 
 const SYSTEM_NAV = [
   { to: '/users', label: 'Người dùng', icon: Users },
