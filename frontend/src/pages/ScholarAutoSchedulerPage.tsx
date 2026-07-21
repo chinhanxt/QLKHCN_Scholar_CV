@@ -731,7 +731,7 @@ export function ScholarAutoSchedulerPage() {
                 }`}
               >
                 <span className={`w-2 h-2 rounded-full ${torInfo?.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                {torInfo?.status === 'online' ? '● ONLINE' : '○ DISCONNECTED'}
+                <span>{torInfo?.status === 'online' ? 'ĐANG HOẠT ĐỘNG' : 'NGẮT KẾT NỐI'}</span>
               </span>
             </div>
 
