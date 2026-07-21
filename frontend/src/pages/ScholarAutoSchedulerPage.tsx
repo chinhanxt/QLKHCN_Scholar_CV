@@ -87,6 +87,7 @@ export function ScholarAutoSchedulerPage() {
   const [loadingScan, setLoadingScan] = useState(false)
   const [isJobBannerDismissed, setIsJobBannerDismissed] = useState(false)
   const [isLogModalOpen, setIsLogModalOpen] = useState(false)
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
 
   // Realtime Log States
   const [logs, setLogs] = useState<AutoSchedulerLogEntry[]>(() => {
@@ -678,12 +679,12 @@ export function ScholarAutoSchedulerPage() {
         </Card>
       )}
 
-      {/* Top Section: Tor Proxy Widget & Schedule Config (Ratio 1/3 - 2/3) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 2. Tor Proxy Status Card (Ultra-Compact - 1/3 Width) */}
-        <Card className="lg:col-span-1 p-5 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
+      {/* Main Page Top Section (2 Compact Cards Side-by-Side, zero empty whitespace) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Card 1: Tor Proxy Gateway Card (Content-fitted height) */}
+        <Card className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
           <div className="space-y-3">
-            {/* Compact Header with Status Pill */}
+            {/* Header: ShieldAlert, "Tor Proxy Gateway", Status pill (● ONLINE), Exit IP badge */}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600">
@@ -691,8 +692,8 @@ export function ScholarAutoSchedulerPage() {
                 </div>
                 <div>
                   <h2 className="font-bold text-slate-800 text-xs sm:text-sm">Tor Proxy Gateway</h2>
-                  <span className="font-mono text-[10px] text-[#005b9a] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 font-semibold block">
-                    IP: {torInfo?.ip || '185.xxx.xxx.xxx'}
+                  <span className="font-mono text-[10px] text-[#005b9a] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 font-semibold inline-block mt-0.5">
+                    Exit IP: {torInfo?.ip || '185.xxx'}
                   </span>
                 </div>
               </div>
@@ -704,34 +705,34 @@ export function ScholarAutoSchedulerPage() {
                 }`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${torInfo?.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                {torInfo?.status === 'online' ? 'ONLINE' : 'OFF'}
+                {torInfo?.status === 'online' ? '● ONLINE' : 'OFF'}
               </span>
             </div>
 
-            {/* Compact 2-Port Badges Bar */}
-            <div className="grid grid-cols-1 gap-2 text-xs">
+            {/* Port Badges Row */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="bg-slate-50/80 px-3 py-1.5 rounded-xl border border-slate-200/70 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
+                <span className="flex items-center gap-1 text-slate-500 font-medium text-[11px]">
                   <Server className="w-3.5 h-3.5 text-indigo-500" />
-                  SOCKS5 Proxy
+                  SOCKS5
                 </span>
-                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
-                  Port 9050
+                <span className="font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">
+                  9050
                 </span>
               </div>
               <div className="bg-slate-50/80 px-3 py-1.5 rounded-xl border border-slate-200/70 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
+                <span className="flex items-center gap-1 text-slate-500 font-medium text-[11px]">
                   <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                  Control Port
+                  Control
                 </span>
-                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
-                  Port 9051
+                <span className="font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">
+                  9051
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Integrated Action Button (showing 2 ports) */}
+          {/* Action Button */}
           <div className="pt-1 flex flex-col items-center gap-2">
             {torInfo?.status === 'offline' && (
               <button
@@ -749,519 +750,529 @@ export function ScholarAutoSchedulerPage() {
               className="w-full px-3 py-2.5 rounded-2xl bg-gradient-to-r from-[#005b9a] via-indigo-600 to-indigo-700 hover:from-[#004b80] hover:to-indigo-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-indigo-200 text-center leading-tight"
             >
               <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${loadingTor ? 'animate-spin' : ''}`} />
-              <span>Đổi IP Tor (9050 • 9051)</span>
+              <span>🔄 Đổi IP Tor Ngẫu Nhiên (9050 • 9051)</span>
             </button>
           </div>
         </Card>
 
-        {/* 3. Cấu Hình Lịch Auto-Scan Card */}
-        <Card className="lg:col-span-2 p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-blue-50 border border-blue-100 text-[#005b9a]">
-                <Settings className="h-5 w-5" />
+        {/* Card 2: Auto-Scan Schedule Status Card (Content-fitted height) */}
+        <Card className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
+          <div className="space-y-3">
+            {/* Header: Icon Settings, Title "Cấu Hình Lịch Auto-Scan", Active toggle switch */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-blue-50 border border-blue-100 text-[#005b9a]">
+                  <Settings className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-slate-800 text-xs sm:text-sm">Cấu Hình Lịch Auto-Scan</h2>
+                  <p className="text-[11px] text-slate-500">Chu kỳ & mốc giờ quét tự động</p>
+                </div>
               </div>
-              <div>
-                <h2 className="font-bold text-slate-800 text-base">Cấu Hình Lịch Auto-Scan Card</h2>
-                <p className="text-xs text-slate-500">Thiết lập chu kỳ & mốc giờ quét tự động</p>
-              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.is_active ?? true}
+                  onChange={(e) => setConfig({ ...config, is_active: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#005b9a]"></div>
+                <span className="ml-2 text-xs font-bold text-slate-700">Kích hoạt</span>
+              </label>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={config.is_active ?? true}
-                onChange={(e) => setConfig({ ...config, is_active: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#005b9a]"></div>
-              <span className="ml-2.5 text-xs font-bold text-slate-700">Kích hoạt</span>
-            </label>
-          </div>
 
-          {/* Frequency Mode Selector (Single Choice 1 of 3) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-slate-700">Chọn 1 trong 3 Mode Chu kỳ lặp lại:</label>
-              <span className="text-[11px] font-bold text-[#005b9a] bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
-                {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && '📅 Mode Hằng Tuần'}
-                {config.frequency_type === 'MONTHLY' && '🗓️ Mode Hằng Tháng'}
-                {config.frequency_type === 'DAILY' && '⚡ Mode Hằng Ngày'}
+            {/* Schedule Summary Badge */}
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
+              <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 flex-wrap">
+                {(() => {
+                  const modeText =
+                    config.frequency_type === 'MONTHLY'
+                      ? '🗓️ Mode Hằng Tháng'
+                      : config.frequency_type === 'DAILY'
+                      ? '⚡ Mode Hằng Ngày'
+                      : '📅 Mode Hằng Tuần'
+
+                  const dayText =
+                    config.frequency_type === 'MONTHLY'
+                      ? `Ngày ${config.preferred_day_of_month ?? 1}`
+                      : config.frequency_type === 'DAILY'
+                      ? 'Mỗi ngày'
+                      : WEEKDAYS.find((w) => w.value === (config.preferred_weekday ?? 0))?.label || 'Thứ 2'
+
+                  const hour = config.preferred_hour ?? 2
+                  const minute = config.preferred_minute ?? 0
+                  const hourStr = hour < 10 ? `0${hour}` : `${hour}`
+                  const minStr = minute < 10 ? `0${minute}` : `${minute}`
+                  const timePeriod = hour >= 18 || hour < 6 ? '(Đêm)' : '(Ngày)'
+                  const timeText = `${hourStr}:${minStr} ${timePeriod}`
+
+                  const quotaText = `${config.batch_size_per_hour ?? 8} CV/h`
+                  const delayText = `Delay ${config.delay_min_seconds ?? 8}-${config.delay_max_seconds ?? 15}s`
+
+                  return `${modeText} • ${dayText} • ${timeText} • ${quotaText} • ${delayText}`
+                })()}
               </span>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200/70">
-              {/* Mode 1: WEEKLY */}
-              <button
-                type="button"
-                onClick={() => {
-                  setConfig({ ...config, frequency_type: 'WEEKLY' })
-                  addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chuyển Mode Chu kỳ', 'Đã chuyển sang Mode 1: Hằng Tuần (Chạy 1 ngày cố định trong tuần)', 'ModeSelector')
-                }}
-                className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
-                  (config.frequency_type || 'WEEKLY') === 'WEEKLY'
-                    ? 'bg-white text-[#005b9a] shadow-sm border-[#005b9a] ring-2 ring-blue-100'
-                    : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">📅</span>
-                  <div className="text-left leading-tight">
-                    <div>Hằng Tuần</div>
-                    <div className="text-[10px] text-slate-400 font-normal">Chạy theo Thứ</div>
-                  </div>
-                </div>
-                <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
-                  (config.frequency_type || 'WEEKLY') === 'WEEKLY' ? 'border-[#005b9a] bg-[#005b9a] text-white font-bold' : 'border-slate-300'
-                }`}>
-                  {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && '✓'}
-                </span>
-              </button>
-
-              {/* Mode 2: MONTHLY */}
-              <button
-                type="button"
-                onClick={() => {
-                  setConfig({ ...config, frequency_type: 'MONTHLY' })
-                  addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chuyển Mode Chu kỳ', 'Đã chuyển sang Mode 2: Hằng Tháng (Chạy 1 ngày cố định trong tháng)', 'ModeSelector')
-                }}
-                className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
-                  config.frequency_type === 'MONTHLY'
-                    ? 'bg-white text-[#005b9a] shadow-sm border-[#005b9a] ring-2 ring-blue-100'
-                    : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">🗓️</span>
-                  <div className="text-left leading-tight">
-                    <div>Hằng Tháng</div>
-                    <div className="text-[10px] text-slate-400 font-normal">Chạy theo Ngày</div>
-                  </div>
-                </div>
-                <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
-                  config.frequency_type === 'MONTHLY' ? 'border-[#005b9a] bg-[#005b9a] text-white font-bold' : 'border-slate-300'
-                }`}>
-                  {config.frequency_type === 'MONTHLY' && '✓'}
-                </span>
-              </button>
-
-              {/* Mode 3: DAILY */}
-              <button
-                type="button"
-                onClick={() => {
-                  setConfig({ ...config, frequency_type: 'DAILY' })
-                  addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chuyển Mode Chu kỳ', 'Đã chuyển sang Mode 3: Hằng Ngày (Chạy tự động mỗi 24 giờ)', 'ModeSelector')
-                }}
-                className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
-                  config.frequency_type === 'DAILY'
-                    ? 'bg-white text-[#005b9a] shadow-sm border-[#005b9a] ring-2 ring-blue-100'
-                    : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">⚡</span>
-                  <div className="text-left leading-tight">
-                    <div>Hằng Ngày</div>
-                    <div className="text-[10px] text-slate-400 font-normal">Mỗi 24 giờ</div>
-                  </div>
-                </div>
-                <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
-                  config.frequency_type === 'DAILY' ? 'border-[#005b9a] bg-[#005b9a] text-white font-bold' : 'border-slate-300'
-                }`}>
-                  {config.frequency_type === 'DAILY' && '✓'}
-                </span>
-              </button>
-            </div>
           </div>
 
-          {/* Grid Layout: Calendar & Analog Clock */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-1">
-            {/* Left Column: 📅 Chọn Ngày Cào (Select Date - Calendar Widget) */}
-            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-xl shadow-slate-200/50 space-y-4 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-[#005b9a]" />
-                  <span>📅 Chọn Ngày Cào (Select Date)</span>
-                </label>
-                <span className="text-[11px] font-mono font-semibold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200/70">
-                  {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && `Lặp lại: ${WEEKDAYS.find(w => w.value === (config.preferred_weekday ?? 0))?.label}`}
-                  {config.frequency_type === 'MONTHLY' && `Lặp lại: Ngày ${config.preferred_day_of_month ?? 1} hằng tháng`}
-                  {config.frequency_type === 'DAILY' && '⚡ Lặp lại hằng ngày'}
-                </span>
-              </div>
-
-              {/* Mode-specific Calendar Display */}
-              {config.frequency_type === 'DAILY' ? (
-                /* Mode DAILY: Info Banner */
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50/60 p-6 rounded-2xl border border-blue-200/60 text-center space-y-3 my-auto shadow-2xs">
-                  <div className="w-12 h-12 rounded-2xl bg-white text-[#005b9a] font-bold text-xl flex items-center justify-center mx-auto shadow-sm border border-blue-100">
-                    ⚡
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-800">Chế độ Quét Hằng Ngày (Daily Routine)</h4>
-                    <p className="text-xs text-slate-600 mt-1 leading-relaxed max-w-xs mx-auto">
-                      Hệ thống sẽ tự động kích hoạt cào ngầm CV lặp lại <strong>mỗi 24 giờ</strong> vào khung giờ đã chọn ở bảng bên phải. Bạn không cần chọn ngày lẻ trên lịch.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                /* Mode WEEKLY or MONTHLY: Interactive Calendar Grid */
-                <div className="space-y-3">
-                  {/* Weekday Quick Select Pills for WEEKLY mode */}
-                  {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && (
-                    <div className="space-y-1">
-                      <span className="text-[11px] text-slate-500 font-medium block">Chọn Thứ trong tuần:</span>
-                      <div className="grid grid-cols-7 gap-1">
-                        {WEEKDAYS.map((w) => {
-                          const isSelected = (config.preferred_weekday ?? 0) === w.value
-                          return (
-                            <button
-                              key={w.value}
-                              type="button"
-                              onClick={() => {
-                                setConfig((prev: any) => ({ ...prev, preferred_weekday: w.value }))
-                                addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chọn Thứ cào CV', `Đã chọn ${w.label} hàng tuần`, 'WeekdayPill')
-                              }}
-                              className={`py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer text-center ${
-                                isSelected
-                                  ? 'bg-[#00A3E0] text-white shadow-xs'
-                                  : 'bg-slate-100/70 text-slate-600 border border-slate-200/70 hover:bg-slate-100'
-                              }`}
-                            >
-                              {w.label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Month Navigation & Calendar Grid */}
-                  <div className="bg-white p-3 rounded-2xl space-y-2">
-                    {/* Header with Soft Pill Month & Year selects */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={currentCalendarDate.getMonth()}
-                          onChange={(e) =>
-                            setCurrentCalendarDate(
-                              new Date(currentCalendarDate.getFullYear(), parseInt(e.target.value, 10), 1)
-                            )
-                          }
-                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
-                        >
-                          {[
-                            'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
-                            'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
-                          ].map((m, idx) => (
-                            <option key={idx} value={idx}>
-                              {m}
-                            </option>
-                          ))}
-                        </select>
-
-                        <select
-                          value={currentCalendarDate.getFullYear()}
-                          onChange={(e) =>
-                            setCurrentCalendarDate(
-                              new Date(parseInt(e.target.value, 10), currentCalendarDate.getMonth(), 1)
-                            )
-                          }
-                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
-                        >
-                          {Array.from({ length: 7 }, (_, i) => 2024 + i).map((y) => (
-                            <option key={y} value={y}>
-                              {y}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={handlePrevMonth}
-                          className="p-1.5 rounded-full hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
-                          title="Tháng trước"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleNextMonth}
-                          className="p-1.5 rounded-full hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
-                          title="Tháng sau"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Weekday Row */}
-                    <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-slate-400 tracking-wider py-2 border-b border-slate-100 mb-2">
-                      {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((dayName) => (
-                        <div key={dayName}>{dayName}</div>
-                      ))}
-                    </div>
-
-                    {/* Day Grid with Previous Month, Current Month, and Next Month Days */}
-                    {(() => {
-                      const year = currentCalendarDate.getFullYear()
-                      const month = currentCalendarDate.getMonth()
-                      const firstDayIndex = new Date(year, month, 1).getDay()
-                      const totalDays = new Date(year, month + 1, 0).getDate()
-                      const prevMonthLastDate = new Date(year, month, 0).getDate()
-
-                      const daysElements = []
-
-                      // 1. Previous month padding days
-                      for (let i = firstDayIndex - 1; i >= 0; i--) {
-                        const prevDay = prevMonthLastDate - i
-                        daysElements.push(
-                          <div
-                            key={`prev-${prevDay}`}
-                            className="text-slate-300 font-medium text-xs w-8 h-8 flex items-center justify-center mx-auto"
-                          >
-                            {prevDay}
-                          </div>
-                        )
-                      }
-
-                      // 2. Current month days
-                      for (let d = 1; d <= totalDays; d++) {
-                        const clickedDate = new Date(year, month, d)
-                        const weekday = (clickedDate.getDay() + 6) % 7
-
-                        const isSelected = config.frequency_type === 'MONTHLY'
-                          ? (config.preferred_day_of_month ?? 1) === d
-                          : (config.preferred_weekday ?? 0) === weekday
-
-                        daysElements.push(
-                          <button
-                            key={`day-${d}`}
-                            type="button"
-                            onClick={() => {
-                              setConfig((prev: any) => ({
-                                ...prev,
-                                preferred_day_of_month: d,
-                                preferred_weekday: weekday,
-                              }))
-                              addSchedulerLog(
-                                'CẤU_HÌNH',
-                                'THÔNG_TIN',
-                                'Chọn ngày cào CV',
-                                `Đã chọn ngày ${d} (${WEEKDAYS.find(w => w.value === weekday)?.label || ''})`,
-                                'CalendarWidget'
-                              )
-                            }}
-                            className={
-                              isSelected
-                                ? 'bg-[#00A3E0] text-white font-bold rounded-full w-8 h-8 flex items-center justify-center shadow-md shadow-cyan-400/40 scale-105 transition-all mx-auto cursor-pointer'
-                                : 'text-slate-800 font-bold text-xs w-8 h-8 flex items-center justify-center mx-auto rounded-full hover:bg-slate-100 cursor-pointer transition-all'
-                            }
-                          >
-                            {d}
-                          </button>
-                        )
-                      }
-
-                      // 3. Next month padding days
-                      const totalGridCells = Math.ceil((firstDayIndex + totalDays) / 7) * 7
-                      const nextMonthDaysCount = totalGridCells - (firstDayIndex + totalDays)
-                      for (let nextD = 1; nextD <= nextMonthDaysCount; nextD++) {
-                        daysElements.push(
-                          <div
-                            key={`next-${nextD}`}
-                            className="text-slate-300 font-medium text-xs w-8 h-8 flex items-center justify-center mx-auto"
-                          >
-                            {nextD}
-                          </div>
-                        )
-                      }
-
-                      return <div className="grid grid-cols-7 gap-1">{daysElements}</div>
-                    })()}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right Column: 🕒 Chọn Giờ Kích Hoạt (Set Time - Analog Clock Widget) */}
-            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-xl shadow-slate-200/50 space-y-4 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-[#005b9a]" />
-                  <span>🕒 Chọn Giờ Kích Hoạt (Set Time)</span>
-                </label>
-                <span className="text-[11px] font-mono text-[#005b9a] font-bold bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
-                  {((config.preferred_hour ?? 2) < 10 ? `0${config.preferred_hour ?? 2}` : config.preferred_hour ?? 2)}:{(config.preferred_minute ?? 0) < 10 ? `0${config.preferred_minute ?? 0}` : config.preferred_minute ?? 0}
-                </span>
-              </div>
-
-              {/* Visual Soft Analog Clock Face */}
-              <div className="py-2">
-                <div className="w-44 h-44 border-4 border-slate-100 rounded-full bg-slate-50/60 relative shadow-inner mx-auto flex items-center justify-center border-slate-200/60">
-                  {/* 12 tick marks */}
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <div
-                      key={i}
-                      style={{ transform: `rotate(${i * 30}deg) translateY(-70px)` }}
-                      className="absolute w-1 h-2.5 bg-slate-300 rounded-full"
-                    />
-                  ))}
-                  {/* Hour Hand */}
-                  {(() => {
-                    const hour24 = config.preferred_hour ?? 2
-                    const minute = config.preferred_minute ?? 0
-                    const hour12 = hour24 % 12
-                    const hourAngle = hour12 * 30 + minute * 0.5
-                    const minuteAngle = minute * 6
-                    return (
-                      <>
-                        <div
-                          style={{ transform: `rotate(${hourAngle}deg)` }}
-                          className="w-1.5 h-12 bg-slate-700 absolute top-5 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
-                        />
-                        <div
-                          style={{ transform: `rotate(${minuteAngle}deg)` }}
-                          className="w-1 h-16 bg-[#00A3E0] absolute top-3 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
-                        />
-                      </>
-                    )
-                  })()}
-                  {/* Center pivot dot */}
-                  <div className="w-3 h-3 bg-slate-800 rounded-full z-10 border-2 border-white shadow-xs" />
-                </div>
-              </div>
-
-              {/* Digital Time Controls: Soft Pill Selectors */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex items-center gap-2">
-                  {/* Hour Select Pill */}
-                  {(() => {
-                    const hour24 = config.preferred_hour ?? 2
-                    const minute = config.preferred_minute ?? 0
-                    const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12
-                    const ampm = hour24 >= 12 ? 'PM' : 'AM'
-
-                    return (
-                      <>
-                        <select
-                          value={hour12}
-                          onChange={(e) => {
-                            const selectedH12 = parseInt(e.target.value, 10)
-                            let newH24 = selectedH12
-                            if (ampm === 'PM') {
-                              newH24 = selectedH12 === 12 ? 12 : selectedH12 + 12
-                            } else {
-                              newH24 = selectedH12 === 12 ? 0 : selectedH12
-                            }
-                            setConfig((prev: any) => ({ ...prev, preferred_hour: newH24 }))
-                            addSchedulerLog(
-                              'CẤU_HÌNH',
-                              'THÔNG_TIN',
-                              'Chọn giờ cào CV',
-                              `Đã chọn mốc giờ ${newH24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
-                              'ClockWidget'
-                            )
-                          }}
-                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
-                        >
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
-                            <option key={h} value={h}>
-                              {h < 10 ? `0${h}` : h}
-                            </option>
-                          ))}
-                        </select>
-
-                        <span className="text-slate-400 font-bold">:</span>
-
-                        {/* Minute Select Pill */}
-                        <select
-                          value={minute}
-                          onChange={(e) => {
-                            const selectedMin = parseInt(e.target.value, 10)
-                            setConfig((prev: any) => ({ ...prev, preferred_minute: selectedMin }))
-                          }}
-                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
-                        >
-                          {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
-                            <option key={m} value={m}>
-                              {m < 10 ? `0${m}` : m}
-                            </option>
-                          ))}
-                        </select>
-
-                        {/* AM/PM Select Pill */}
-                        <select
-                          value={ampm}
-                          onChange={(e) => {
-                            const newAmPm = e.target.value
-                            let newH24 = hour12
-                            if (newAmPm === 'PM') {
-                              newH24 = hour12 === 12 ? 12 : hour12 + 12
-                            } else {
-                              newH24 = hour12 === 12 ? 0 : hour12
-                            }
-                            setConfig((prev: any) => ({ ...prev, preferred_hour: newH24 }))
-                          }}
-                          className="bg-slate-100/70 hover:bg-slate-100 rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/70 focus:outline-none cursor-pointer"
-                        >
-                          <option value="AM">AM</option>
-                          <option value="PM">PM</option>
-                        </select>
-                      </>
-                    )
-                  })()}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quota & Delay inputs in clean cards */}
-          <div className="grid grid-cols-3 gap-3 text-xs">
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-              <label className="block text-slate-600 font-semibold text-[11px]">CV/Giờ</label>
-              <input
-                type="number"
-                value={config.batch_size_per_hour ?? 8}
-                onChange={(e) => setConfig({ ...config, batch_size_per_hour: parseInt(e.target.value) || 8 })}
-                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white font-mono font-bold text-slate-800"
-              />
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-              <label className="block text-slate-600 font-semibold text-[11px]">Delay Min (s)</label>
-              <input
-                type="number"
-                value={config.delay_min_seconds ?? 8}
-                onChange={(e) => setConfig({ ...config, delay_min_seconds: parseInt(e.target.value) || 8 })}
-                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white font-mono font-bold text-slate-800"
-              />
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-              <label className="block text-slate-600 font-semibold text-[11px]">Delay Max (s)</label>
-              <input
-                type="number"
-                value={config.delay_max_seconds ?? 15}
-                onChange={(e) => setConfig({ ...config, delay_max_seconds: parseInt(e.target.value) || 15 })}
-                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white font-mono font-bold text-slate-800"
-              />
-            </div>
-          </div>
-
+          {/* Button */}
           <div className="pt-1">
             <button
-              onClick={handleSaveConfig}
-              disabled={loadingConfig}
-              className="w-full bg-[#E6F4EA] text-[#137333] hover:bg-[#D2E3FC] hover:text-[#174EA6] disabled:opacity-50 font-bold py-2.5 px-6 rounded-full border border-emerald-200/60 shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 text-xs"
+              onClick={() => setIsScheduleModalOpen(true)}
+              className="w-full px-4 py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-[#4F46E5] font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-indigo-200/80 shadow-2xs"
             >
-              {loadingConfig ? <Spinner className="w-4 h-4 text-emerald-700" /> : <Settings className="w-4 h-4 text-[#137333]" />}
-              Lưu Cấu Hình Hẹn Giờ
+              <Settings className="h-3.5 w-3.5" />
+              <span>⚙️ Cấu Hình Thời Gian Quét</span>
             </button>
           </div>
         </Card>
       </div>
+
+      {/* Floating Schedule Config Modal */}
+      {isScheduleModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 w-full max-w-3xl shadow-2xl overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-[#4F46E5]" />
+                  Cấu Hình Thời Gian Quét Auto-Scan
+                </h3>
+                <p className="text-xs text-slate-500">Thiết lập chu kỳ, mốc giờ & hạn ngạch</p>
+              </div>
+              <button
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
+              {/* 3 Mode Radio Bar */}
+              <div className="grid grid-cols-3 gap-3 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200/70">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfig({ ...config, frequency_type: 'WEEKLY' })
+                    addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chuyển Mode Chu kỳ', 'Đã chuyển sang Mode 1: Hằng Tuần', 'ModeSelector')
+                  }}
+                  className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
+                    (config.frequency_type || 'WEEKLY') === 'WEEKLY'
+                      ? 'bg-white text-[#4F46E5] shadow-sm border-[#4F46E5] ring-2 ring-indigo-100'
+                      : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📅</span>
+                    <div className="text-left leading-tight">
+                      <div>Hằng Tuần</div>
+                      <div className="text-[10px] text-slate-400 font-normal">Chạy theo Thứ</div>
+                    </div>
+                  </div>
+                  <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
+                    (config.frequency_type || 'WEEKLY') === 'WEEKLY' ? 'border-[#4F46E5] bg-[#4F46E5] text-white font-bold' : 'border-slate-300'
+                  }`}>
+                    {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && '✓'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfig({ ...config, frequency_type: 'MONTHLY' })
+                    addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chuyển Mode Chu kỳ', 'Đã chuyển sang Mode 2: Hằng Tháng', 'ModeSelector')
+                  }}
+                  className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
+                    config.frequency_type === 'MONTHLY'
+                      ? 'bg-white text-[#4F46E5] shadow-sm border-[#4F46E5] ring-2 ring-indigo-100'
+                      : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🗓️</span>
+                    <div className="text-left leading-tight">
+                      <div>Hằng Tháng</div>
+                      <div className="text-[10px] text-slate-400 font-normal">Chạy theo Ngày</div>
+                    </div>
+                  </div>
+                  <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
+                    config.frequency_type === 'MONTHLY' ? 'border-[#4F46E5] bg-[#4F46E5] text-white font-bold' : 'border-slate-300'
+                  }`}>
+                    {config.frequency_type === 'MONTHLY' && '✓'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfig({ ...config, frequency_type: 'DAILY' })
+                    addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chuyển Mode Chu kỳ', 'Đã chuyển sang Mode 3: Hằng Ngày', 'ModeSelector')
+                  }}
+                  className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
+                    config.frequency_type === 'DAILY'
+                      ? 'bg-white text-[#4F46E5] shadow-sm border-[#4F46E5] ring-2 ring-indigo-100'
+                      : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">⚡</span>
+                    <div className="text-left leading-tight">
+                      <div>Hằng Ngày</div>
+                      <div className="text-[10px] text-slate-400 font-normal">Mỗi 24 giờ</div>
+                    </div>
+                  </div>
+                  <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
+                    config.frequency_type === 'DAILY' ? 'border-[#4F46E5] bg-[#4F46E5] text-white font-bold' : 'border-slate-300'
+                  }`}>
+                    {config.frequency_type === 'DAILY' && '✓'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Calendar & Analog Clock Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Calendar Widget */}
+                <div className="bg-slate-50/60 rounded-2xl p-4 border border-slate-200/80 space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-[#4F46E5]" />
+                      <span>Chọn Ngày Cào</span>
+                    </label>
+                    <span className="text-[10px] font-mono font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                      {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && `Lặp lại: ${WEEKDAYS.find(w => w.value === (config.preferred_weekday ?? 0))?.label}`}
+                      {config.frequency_type === 'MONTHLY' && `Lặp lại: Ngày ${config.preferred_day_of_month ?? 1} hằng tháng`}
+                      {config.frequency_type === 'DAILY' && '⚡ Lặp lại hằng ngày'}
+                    </span>
+                  </div>
+
+                  {config.frequency_type === 'DAILY' ? (
+                    <div className="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100 text-center space-y-2 my-auto">
+                      <div className="w-10 h-10 rounded-xl bg-white text-[#4F46E5] font-bold text-lg flex items-center justify-center mx-auto shadow-xs border border-indigo-100">
+                        ⚡
+                      </div>
+                      <h4 className="font-bold text-xs text-slate-800">Chế độ Quét Hằng Ngày</h4>
+                      <p className="text-[11px] text-slate-600 leading-relaxed max-w-xs mx-auto">
+                        Tự động cào ngầm lặp lại <strong>mỗi 24 giờ</strong> vào mốc giờ đã chọn.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && (
+                        <div className="grid grid-cols-7 gap-1">
+                          {WEEKDAYS.map((w) => {
+                            const isSelected = (config.preferred_weekday ?? 0) === w.value
+                            return (
+                              <button
+                                key={w.value}
+                                type="button"
+                                onClick={() => {
+                                  setConfig((prev: any) => ({ ...prev, preferred_weekday: w.value }))
+                                  addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chọn Thứ cào CV', `Đã chọn ${w.label} hàng tuần`, 'WeekdayPill')
+                                }}
+                                className={`py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer text-center ${
+                                  isSelected
+                                    ? 'bg-[#4F46E5] text-white shadow-xs'
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                {w.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2">
+                        {/* Month Navigation */}
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-slate-800">
+                            {currentCalendarDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={handlePrevMonth}
+                              className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                              title="Tháng trước"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleNextMonth}
+                              className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                              title="Tháng sau"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Weekday Row */}
+                        <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-slate-400 tracking-wider py-1 border-b border-slate-100 mb-1">
+                          {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((dayName) => (
+                            <div key={dayName}>{dayName}</div>
+                          ))}
+                        </div>
+
+                        {/* Day Grid */}
+                        {(() => {
+                          const year = currentCalendarDate.getFullYear()
+                          const month = currentCalendarDate.getMonth()
+                          const firstDayIndex = new Date(year, month, 1).getDay()
+                          const totalDays = new Date(year, month + 1, 0).getDate()
+                          const prevMonthLastDate = new Date(year, month, 0).getDate()
+
+                          const daysElements = []
+
+                          for (let i = firstDayIndex - 1; i >= 0; i--) {
+                            const prevDay = prevMonthLastDate - i
+                            daysElements.push(
+                              <div
+                                key={`prev-${prevDay}`}
+                                className="text-slate-300 font-medium text-xs w-8 h-8 flex items-center justify-center mx-auto"
+                              >
+                                {prevDay}
+                              </div>
+                            )
+                          }
+
+                          for (let d = 1; d <= totalDays; d++) {
+                            const clickedDate = new Date(year, month, d)
+                            const weekday = (clickedDate.getDay() + 6) % 7
+
+                            const isSelected = config.frequency_type === 'MONTHLY'
+                              ? (config.preferred_day_of_month ?? 1) === d
+                              : (config.preferred_weekday ?? 0) === weekday
+
+                            daysElements.push(
+                              <button
+                                key={`day-${d}`}
+                                type="button"
+                                onClick={() => {
+                                  setConfig((prev: any) => ({
+                                    ...prev,
+                                    preferred_day_of_month: d,
+                                    preferred_weekday: weekday,
+                                  }))
+                                  addSchedulerLog(
+                                    'CẤU_HÌNH',
+                                    'THÔNG_TIN',
+                                    'Chọn ngày cào CV',
+                                    `Đã chọn ngày ${d} (${WEEKDAYS.find(w => w.value === weekday)?.label || ''})`,
+                                    'CalendarWidget'
+                                  )
+                                }}
+                                className={
+                                  isSelected
+                                    ? 'bg-[#4F46E5] text-white rounded-xl shadow-md font-bold w-8 h-8 flex items-center justify-center mx-auto cursor-pointer transition-all'
+                                    : 'text-slate-800 font-bold text-xs w-8 h-8 flex items-center justify-center mx-auto rounded-xl hover:bg-slate-100 cursor-pointer transition-all'
+                                }
+                              >
+                                {d}
+                              </button>
+                            )
+                          }
+
+                          const totalGridCells = Math.ceil((firstDayIndex + totalDays) / 7) * 7
+                          const nextMonthDaysCount = totalGridCells - (firstDayIndex + totalDays)
+                          for (let nextD = 1; nextD <= nextMonthDaysCount; nextD++) {
+                            daysElements.push(
+                              <div
+                                key={`next-${nextD}`}
+                                className="text-slate-300 font-medium text-xs w-8 h-8 flex items-center justify-center mx-auto"
+                              >
+                                {nextD}
+                              </div>
+                            )
+                          }
+
+                          return <div className="grid grid-cols-7 gap-1">{daysElements}</div>
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Analog Clock & Digital Time Picker Widget */}
+                <div className="bg-slate-50/60 rounded-2xl p-4 border border-slate-200/80 space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-[#4F46E5]" />
+                      <span>Chọn Giờ Kích Hoạt</span>
+                    </label>
+                    <span className="text-[10px] font-mono text-[#4F46E5] font-bold bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                      {((config.preferred_hour ?? 2) < 10 ? `0${config.preferred_hour ?? 2}` : config.preferred_hour ?? 2)}:{(config.preferred_minute ?? 0) < 10 ? `0${config.preferred_minute ?? 0}` : config.preferred_minute ?? 0}
+                    </span>
+                  </div>
+
+                  {/* Visual Analog Clock Face */}
+                  <div className="py-1">
+                    <div className="w-36 h-36 border-4 border-slate-200/80 rounded-full bg-white relative shadow-inner mx-auto flex items-center justify-center">
+                      {Array.from({ length: 12 }).map((_, i) => (
+                        <div
+                          key={i}
+                          style={{ transform: `rotate(${i * 30}deg) translateY(-56px)` }}
+                          className="absolute w-1 h-2 bg-slate-300 rounded-full"
+                        />
+                      ))}
+                      {(() => {
+                        const hour24 = config.preferred_hour ?? 2
+                        const minute = config.preferred_minute ?? 0
+                        const hour12 = hour24 % 12
+                        const hourAngle = hour12 * 30 + minute * 0.5
+                        const minuteAngle = minute * 6
+                        return (
+                          <>
+                            <div
+                              style={{ transform: `rotate(${hourAngle}deg)` }}
+                              className="w-1.5 h-10 bg-slate-700 absolute top-4 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
+                            />
+                            <div
+                              style={{ transform: `rotate(${minuteAngle}deg)` }}
+                              className="w-1 h-13 bg-[#4F46E5] absolute top-2 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
+                            />
+                          </>
+                        )
+                      })()}
+                      <div className="w-3 h-3 bg-slate-800 rounded-full z-10 border-2 border-white shadow-xs" />
+                    </div>
+                  </div>
+
+                  {/* Digital Time Picker */}
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    {(() => {
+                      const hour24 = config.preferred_hour ?? 2
+                      const minute = config.preferred_minute ?? 0
+                      const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12
+                      const ampm = hour24 >= 12 ? 'PM' : 'AM'
+
+                      return (
+                        <>
+                          <select
+                            value={hour12}
+                            onChange={(e) => {
+                              const selectedH12 = parseInt(e.target.value, 10)
+                              let newH24 = selectedH12
+                              if (ampm === 'PM') {
+                                newH24 = selectedH12 === 12 ? 12 : selectedH12 + 12
+                              } else {
+                                newH24 = selectedH12 === 12 ? 0 : selectedH12
+                              }
+                              setConfig((prev: any) => ({ ...prev, preferred_hour: newH24 }))
+                            }}
+                            className="bg-white hover:bg-slate-100 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200 focus:outline-none cursor-pointer"
+                          >
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                              <option key={h} value={h}>
+                                {h < 10 ? `0${h}` : h}
+                              </option>
+                            ))}
+                          </select>
+
+                          <span className="text-slate-400 font-bold">:</span>
+
+                          <select
+                            value={minute}
+                            onChange={(e) => {
+                              const selectedMin = parseInt(e.target.value, 10)
+                              setConfig((prev: any) => ({ ...prev, preferred_minute: selectedMin }))
+                            }}
+                            className="bg-white hover:bg-slate-100 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200 focus:outline-none cursor-pointer"
+                          >
+                            {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                              <option key={m} value={m}>
+                                {m < 10 ? `0${m}` : m}
+                              </option>
+                            ))}
+                          </select>
+
+                          <select
+                            value={ampm}
+                            onChange={(e) => {
+                              const newAmPm = e.target.value
+                              let newH24 = hour12
+                              if (newAmPm === 'PM') {
+                                newH24 = hour12 === 12 ? 12 : hour12 + 12
+                              } else {
+                                newH24 = hour12 === 12 ? 0 : hour12
+                              }
+                              setConfig((prev: any) => ({ ...prev, preferred_hour: newH24 }))
+                            }}
+                            className="bg-white hover:bg-slate-100 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200 focus:outline-none cursor-pointer"
+                          >
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                          </select>
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Throttling Inputs Grid */}
+              <div className="grid grid-cols-3 gap-3 text-xs">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                  <label className="block text-slate-600 font-semibold text-[11px]">CV/Giờ</label>
+                  <input
+                    type="number"
+                    value={config.batch_size_per_hour ?? 8}
+                    onChange={(e) => setConfig({ ...config, batch_size_per_hour: parseInt(e.target.value) || 8 })}
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#4F46E5] bg-white font-mono font-bold text-slate-800"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                  <label className="block text-slate-600 font-semibold text-[11px]">Delay Min (s)</label>
+                  <input
+                    type="number"
+                    value={config.delay_min_seconds ?? 8}
+                    onChange={(e) => setConfig({ ...config, delay_min_seconds: parseInt(e.target.value) || 8 })}
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#4F46E5] bg-white font-mono font-bold text-slate-800"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                  <label className="block text-slate-600 font-semibold text-[11px]">Delay Max (s)</label>
+                  <input
+                    type="number"
+                    value={config.delay_max_seconds ?? 15}
+                    onChange={(e) => setConfig({ ...config, delay_max_seconds: parseInt(e.target.value) || 15 })}
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#4F46E5] bg-white font-mono font-bold text-slate-800"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl px-5 py-2 text-xs font-bold cursor-pointer transition-all"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleSaveConfig()
+                  setIsScheduleModalOpen(false)
+                }}
+                disabled={loadingConfig}
+                className="bg-[#4F46E5] text-white hover:bg-indigo-700 disabled:opacity-50 rounded-xl px-6 py-2 text-xs font-bold shadow-md cursor-pointer transition-all flex items-center gap-1.5"
+              >
+                {loadingConfig && <Spinner className="w-3.5 h-3.5 text-white" />}
+                Lưu Cấu Hình
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. Middle Section: Nhập Danh Sách Hồ Sơ CV Tác Giả Card */}
       <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
