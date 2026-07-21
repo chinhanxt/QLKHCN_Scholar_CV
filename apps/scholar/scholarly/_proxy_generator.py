@@ -156,6 +156,17 @@ class ProxyGenerator(object):
             self.logger.warning("Unable to setup the proxy: http=%s https=%s. Reason unknown." , http, https)
         return proxy_works
 
+    def Tor(self, socks_host="tor", socks_port=9050):
+        """Setups SOCKS5 proxy via Tor gateway container."""
+        proxy = f"socks5h://{socks_host}:{socks_port}"
+        proxy_works = self._use_proxy(http=proxy, https=proxy)
+        if proxy_works:
+            self.logger.info("Tor proxy set up successfully")
+            self.proxy_mode = ProxyMode.TOR
+        else:
+            self.logger.warning("Unable to setup Tor proxy at %s", proxy)
+        return proxy_works
+
     def _check_proxy(self, proxies) -> bool:
         """Checks if a proxy is working.
         :param proxies: A dictionary {'http': url1, 'https': url1}
@@ -217,11 +228,11 @@ class ProxyGenerator(object):
         :returns: whether or not the proxy was set up successfully
         :rtype: {bool}
         """
-        if http[:4] != "http":
+        if not http.startswith("http") and not http.startswith("socks"):
             http = "http://" + http
         if https is None:
             https = http
-        elif https[:5] != "https":
+        elif not https.startswith("http") and not https.startswith("socks"):
             https = "https://" + https
 
         proxies = {'http://': http, 'https://': https}

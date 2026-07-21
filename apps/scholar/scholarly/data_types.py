@@ -87,6 +87,7 @@ class ProxyMode(str, Enum):
     SCRAPERAPI = "SCRAPERAPI"
     LUMINATI = "LUMINATI"
     SINGLEPROXY = "SINGLEPROXY"
+    TOR = "TOR"
     # Deprecated:
     TOR_EXTERNAL = "TOR_EXTERNAL"
     TOR_INTERNAL = "TOR_INTERNAL"
