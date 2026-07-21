@@ -23,7 +23,14 @@ import {
   Search,
   Trash2,
   Download,
-  FileText
+  FileText,
+  Globe,
+  ArrowRight,
+  Sparkles,
+  Server,
+  Calendar,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 
 export interface AutoSchedulerLogEntry {
@@ -36,10 +43,37 @@ export interface AutoSchedulerLogEntry {
   details: string
 }
 
+const WEEKDAYS = [
+  { value: 0, label: 'Thứ 2' },
+  { value: 1, label: 'Thứ 3' },
+  { value: 2, label: 'Thứ 4' },
+  { value: 3, label: 'Thứ 5' },
+  { value: 4, label: 'Thứ 6' },
+  { value: 5, label: 'Thứ 7' },
+  { value: 6, label: 'Chủ Nhật' },
+]
+
+const HOUR_SLOTS = Array.from({ length: 24 }, (_, i) => {
+  let period = 'Đêm'
+  if (i >= 6 && i < 12) period = 'Sáng'
+  else if (i >= 12 && i < 14) period = 'Trưa'
+  else if (i >= 14 && i < 18) period = 'Chiều'
+  else if (i >= 18) period = 'Tối'
+  return {
+    hour: i,
+    label: `${i < 10 ? '0' : ''}${i}:00`,
+    period,
+  }
+})
+
 export function ScholarAutoSchedulerPage() {
   const [torInfo, setTorInfo] = useState<any>(null)
   const [config, setConfig] = useState<any>({
     is_active: true,
+    frequency_type: 'WEEKLY',
+    preferred_weekday: 0,
+    preferred_day_of_month: 1,
+    preferred_hour: 2,
     scan_interval_hours: 24,
     batch_size_per_hour: 8,
     delay_min_seconds: 8,
@@ -184,7 +218,7 @@ export function ScholarAutoSchedulerPage() {
   const fetchConfig = async () => {
     try {
       const res = await scholarApi.getAutoScanConfig()
-      setConfig(res.data)
+      setConfig((prev: any) => ({ ...prev, ...res.data }))
     } catch (e) {
       console.error(e)
     }
@@ -471,71 +505,83 @@ export function ScholarAutoSchedulerPage() {
     switch (s) {
       case 'UP_TO_DATE':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
-            <CheckCircle className="w-3.5 h-3.5" /> UP_TO_DATE
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-3xs">
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> UP_TO_DATE
           </span>
         )
       case 'UPDATED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-            <Zap className="w-3.5 h-3.5" /> UPDATED
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-3xs">
+            <Zap className="w-3.5 h-3.5 text-blue-600" /> UPDATED
           </span>
         )
       case 'FAILED_CAPTCHA':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700 border border-rose-200">
-            <XCircle className="w-3.5 h-3.5" /> FAILED_CAPTCHA
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-3xs">
+            <XCircle className="w-3.5 h-3.5 text-rose-600" /> FAILED_CAPTCHA
           </span>
         )
       case 'IN_PROGRESS':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" /> IN_PROGRESS
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 shadow-3xs">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" /> IN_PROGRESS
           </span>
         )
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-            <Clock className="w-3.5 h-3.5" /> PENDING
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200/80 shadow-3xs">
+            <Clock className="w-3.5 h-3.5 text-slate-500" /> PENDING
           </span>
         )
     }
   }
 
+  const detectedCount = bulkText.trim().split('\n').filter(Boolean).length
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Page Title */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Cpu className="h-6 w-6 text-[#005b9a]" />
+      {/* 1. Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl border border-indigo-900/40 relative overflow-hidden">
+        <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="space-y-1 relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-semibold mb-1">
+            <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+            <span>Scholar Auto-Scheduler Terminal</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-600/30 border border-indigo-400/30 text-cyan-300 shadow-inner">
+              <Cpu className="h-6 w-6" />
+            </div>
             Tự Động Hóa CV Scholar & Tor Control
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
             Quản lý cào dữ liệu CV tác giả tự động ngầm với Tor Multi-Hop Proxy & Fast Smart Check
           </p>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-3 relative z-10 shrink-0">
           <button
             onClick={() => setIsLogModalOpen(true)}
-            className="px-3.5 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-3xs"
+            className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md backdrop-blur-md hover:scale-[1.02] active:scale-[0.98]"
           >
-            <FileText className="h-4 w-4 text-[#005b9a]" />
-            <span>Xem Nhật Ký Cào Dữ Liệu</span>
-            <span className="bg-[#e6f0f7] text-[#005b9a] text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+            <FileText className="h-4 w-4 text-cyan-300" />
+            <span>📋 Xem Nhật Ký Cào Dữ Liệu</span>
+            <span className="bg-cyan-400/20 text-cyan-200 border border-cyan-400/30 text-[11px] font-mono font-bold px-2 py-0.5 rounded-full">
               {logs.length}
             </span>
           </button>
+
           <button
             onClick={() => {
               fetchTorStatus()
               fetchConfig()
               fetchAuthors()
             }}
-            className="px-3.5 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-2 cursor-pointer transition-all"
+            className="px-4 py-2.5 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 border border-indigo-400/30 text-white font-semibold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md hover:scale-[1.02] active:scale-[0.98]"
           >
             <RefreshCw className="h-4 w-4" />
-            Làm mới
+            🔄 Làm mới
           </button>
         </div>
       </div>
@@ -637,68 +683,139 @@ export function ScholarAutoSchedulerPage() {
       )}
 
       {/* Top Section: Tor Proxy Widget & Schedule Config */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Tor Proxy Status Widget */}
-        <Card className="p-6 rounded-xl bg-white border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-indigo-600" />
-              <h2 className="font-bold text-slate-800">Trạng Thái Tor Proxy Gateway</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 2. Tor Proxy Status Card */}
+        <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-5 flex flex-col justify-between">
+          <div className="space-y-4">
+            {/* Header with status pill */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-slate-800 text-base">Trạng Thái Tor Proxy Gateway</h2>
+                  <p className="text-xs text-slate-500">Mã hóa đa tầng & Đổi IP ngẫu nhiên</p>
+                </div>
+              </div>
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-3xs ${
+                  torInfo?.status === 'online'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${torInfo?.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                {torInfo?.status === 'online' ? '● ONLINE - Đang bảo vệ IP' : '○ NGẮT KẾT NỐI'}
+              </span>
             </div>
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-bold ${
-                torInfo?.status === 'online'
-                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                  : 'bg-rose-100 text-rose-700 border border-rose-200'
-              }`}
-            >
-              {torInfo?.status === 'online' ? '● ONLINE' : '○ DISCONNECTED'}
-            </span>
+
+            {/* Visual Tor Multi-Hop Relay Diagram */}
+            <div className="p-4 bg-slate-900 text-white rounded-2xl border border-slate-800 space-y-3 shadow-inner">
+              <div className="flex items-center justify-between text-xs text-slate-400 font-medium border-b border-slate-800 pb-2">
+                <span className="flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                  Sơ Đồ Tor Multi-Hop Relay (3-Hop An Toàn)
+                </span>
+                <span className="font-mono text-emerald-400 font-semibold text-[11px] bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-700/50">
+                  Exit IP: {torInfo?.ip || '185.xxx.xxx.xxx'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-1 overflow-x-auto py-2 text-xs custom-scrollbar">
+                {/* Web Server */}
+                <div className="flex flex-col items-center bg-slate-800/90 px-3 py-2 rounded-xl border border-slate-700 shrink-0 text-center">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Khởi Tạo</span>
+                  <span className="font-bold text-slate-200 text-xs">Máy chủ Web</span>
+                </div>
+
+                <ArrowRight className="w-4 h-4 text-slate-600 shrink-0" />
+
+                {/* Node 1 */}
+                <div className="flex flex-col items-center bg-indigo-950/90 px-3 py-2 rounded-xl border border-indigo-700/60 shrink-0 text-center">
+                  <span className="text-[9px] text-indigo-300 font-bold tracking-wider">Tor Node 1</span>
+                  <span className="font-mono text-indigo-200 text-xs">Guard Node</span>
+                </div>
+
+                <ArrowRight className="w-4 h-4 text-indigo-500 shrink-0" />
+
+                {/* Node 2 */}
+                <div className="flex flex-col items-center bg-indigo-950/90 px-3 py-2 rounded-xl border border-indigo-700/60 shrink-0 text-center">
+                  <span className="text-[9px] text-indigo-300 font-bold tracking-wider">Tor Node 2</span>
+                  <span className="font-mono text-indigo-200 text-xs">Relay Node</span>
+                </div>
+
+                <ArrowRight className="w-4 h-4 text-indigo-500 shrink-0" />
+
+                {/* Exit Node */}
+                <div className="flex flex-col items-center bg-emerald-950/90 px-3 py-2 rounded-xl border border-emerald-600/60 shrink-0 text-center">
+                  <span className="text-[9px] text-emerald-300 font-bold tracking-wider">Exit Node</span>
+                  <span className="font-mono text-emerald-200 text-xs">IP: {torInfo?.ip ? torInfo.ip.split('.').slice(0,2).join('.') + '.xxx' : '185.xxx'}</span>
+                </div>
+
+                <ArrowRight className="w-4 h-4 text-emerald-500 shrink-0" />
+
+                {/* Target Google Scholar */}
+                <div className="flex flex-col items-center bg-blue-950/90 px-3 py-2 rounded-xl border border-blue-600/60 shrink-0 text-center">
+                  <span className="text-[9px] text-blue-300 font-bold tracking-wider">Đích Đến</span>
+                  <span className="font-bold text-blue-200 text-xs">Google Scholar</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Port Cards Grid */}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+                  <Server className="w-3.5 h-3.5 text-slate-400" />
+                  SOCKS5 Proxy Port
+                </div>
+                <div className="font-mono font-bold text-slate-800 text-sm">9050</div>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+                  <Zap className="w-3.5 h-3.5 text-slate-400" />
+                  Control Port (NEWNYM)
+                </div>
+                <div className="font-mono font-bold text-slate-800 text-sm">9051</div>
+              </div>
+            </div>
           </div>
 
-          <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5 text-xs text-slate-600">
-            <div className="flex justify-between">
-              <span className="text-slate-400">SOCKS5 Proxy Port:</span>
-              <span className="font-mono font-semibold text-slate-700">9050</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Control Port (NEWNYM):</span>
-              <span className="font-mono font-semibold text-slate-700">9051</span>
-            </div>
-          </div>
-
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Mọi request đến Google Scholar đều được mã hóa chui qua 3 máy chủ Tor ngẫu nhiên toàn cầu (3-hop multi-relay). IP máy chủ gốc hoàn toàn được ẩn giấu.
-          </p>
-
-          <div className="pt-2 flex flex-wrap items-center gap-2">
+          {/* Action Buttons */}
+          <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
             {torInfo?.status === 'offline' && (
               <button
                 onClick={handleStartTor}
                 disabled={loadingTor}
-                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-200"
               >
                 <Power className={`h-4 w-4 ${loadingTor ? 'animate-spin' : ''}`} />
-                Khởi Động Tor Container (Docker)
+                ⚡ Khởi Động Tor Container
               </button>
             )}
             <button
               onClick={handleRotateIp}
               disabled={loadingTor || torInfo?.status !== 'online'}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+              className="w-full flex-1 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#005b9a] via-indigo-600 to-indigo-700 hover:from-[#004b80] hover:to-indigo-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-200"
             >
               <RefreshCw className={`h-4 w-4 ${loadingTor ? 'animate-spin' : ''}`} />
-              Đổi IP Tor Ngay (NEWNYM Signal)
+              🔄 Đổi IP Tor Ngẫu Nhiên Ngay (NEWNYM)
             </button>
           </div>
         </Card>
 
-        {/* Schedule Config Form */}
-        <Card className="p-6 rounded-xl bg-white border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-[#005b9a]" />
-              <h2 className="font-bold text-slate-800">Cấu Hình Lịch Auto-Scan</h2>
+        {/* 3. Cấu Hình Lịch Auto-Scan Card */}
+        <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-blue-50 border border-blue-100 text-[#005b9a]">
+                <Settings className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-bold text-slate-800 text-base">Cấu Hình Lịch Auto-Scan Card</h2>
+                <p className="text-xs text-slate-500">Thiết lập chu kỳ & mốc giờ quét tự động</p>
+              </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -707,106 +824,183 @@ export function ScholarAutoSchedulerPage() {
                 onChange={(e) => setConfig({ ...config, is_active: e.target.checked })}
                 className="sr-only peer"
               />
-              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#005b9a]"></div>
-              <span className="ml-2 text-xs font-semibold text-slate-700">Kích hoạt</span>
+              <div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#005b9a]"></div>
+              <span className="ml-2.5 text-xs font-bold text-slate-700">Kích hoạt</span>
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            {/* Column 1: Frequency Type */}
-            <div>
-              <label className="block text-slate-600 font-medium mb-1">Chu kỳ lặp lại quét CV</label>
-              <select
-                value={config.frequency_type || 'WEEKLY'}
-                onChange={(e) => setConfig({ ...config, frequency_type: e.target.value })}
-                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white cursor-pointer font-medium"
+          {/* Frequency Tabs */}
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-slate-600">Frequency / Chu kỳ lặp lại</label>
+            <div className="grid grid-cols-3 gap-2 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/60">
+              <button
+                type="button"
+                onClick={() => setConfig({ ...config, frequency_type: 'WEEKLY' })}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  (config.frequency_type || 'WEEKLY') === 'WEEKLY'
+                    ? 'bg-white text-[#005b9a] shadow-sm border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
-                <option value="WEEKLY">📅 Hằng tuần (Chạy theo thứ)</option>
-                <option value="MONTHLY">🗓️ Hằng tháng (Chạy theo ngày)</option>
-                <option value="DAILY">⚡ Hằng ngày (Chạy mỗi ngày)</option>
-              </select>
-              <span className="text-[10px] text-slate-400 block mt-0.5">Tự động chọn chu kỳ quét ngầm</span>
+                📅 Hằng Tuần
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfig({ ...config, frequency_type: 'MONTHLY' })}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  config.frequency_type === 'MONTHLY'
+                    ? 'bg-white text-[#005b9a] shadow-sm border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🗓️ Hằng Tháng
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfig({ ...config, frequency_type: 'DAILY' })}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  config.frequency_type === 'DAILY'
+                    ? 'bg-white text-[#005b9a] shadow-sm border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ⚡ Hằng Ngày
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Day Selector */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-[#005b9a]" />
+                Chọn Ngày Chạy Trong Tuần / Tháng
+              </label>
+              <span className="text-[11px] font-mono text-slate-400">
+                {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && `Thứ: ${WEEKDAYS.find(w => w.value === (config.preferred_weekday ?? 0))?.label}`}
+                {config.frequency_type === 'MONTHLY' && `Ngày: ${config.preferred_day_of_month ?? 1}`}
+                {config.frequency_type === 'DAILY' && 'Tất cả các ngày'}
+              </span>
             </div>
 
-            {/* Column 2: Dynamic Single Slot Box */}
-            <div>
-              <label className="block text-slate-600 font-medium mb-1">Mốc thời gian chạy tự động</label>
-              <div className="flex gap-1.5">
-                {config.frequency_type === 'WEEKLY' && (
-                  <select
-                    value={config.preferred_weekday ?? 0}
-                    onChange={(e) => setConfig({ ...config, preferred_weekday: parseInt(e.target.value) })}
-                    className="w-1/2 border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white cursor-pointer font-medium text-xs"
-                  >
-                    <option value={0}>Thứ Hai</option>
-                    <option value={1}>Thứ Ba</option>
-                    <option value={2}>Thứ Tư</option>
-                    <option value={3}>Thứ Năm</option>
-                    <option value={4}>Thứ Sáu</option>
-                    <option value={5}>Thứ Bảy</option>
-                    <option value={6}>Chủ Nhật</option>
-                  </select>
-                )}
-
-                {config.frequency_type === 'MONTHLY' && (
-                  <select
-                    value={config.preferred_day_of_month ?? 1}
-                    onChange={(e) => setConfig({ ...config, preferred_day_of_month: parseInt(e.target.value) })}
-                    className="w-1/2 border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white cursor-pointer font-medium text-xs"
-                  >
-                    {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                      <option key={d} value={d}>
-                        Ngày {d}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <select
-                  value={config.preferred_hour ?? 2}
-                  onChange={(e) => setConfig({ ...config, preferred_hour: parseInt(e.target.value) })}
-                  className={`${
-                    config.frequency_type === 'DAILY' ? 'w-full' : 'w-1/2'
-                  } border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white cursor-pointer font-medium text-xs`}
-                >
-                  {Array.from({ length: 24 }, (_, i) => i).map((h) => (
-                    <option key={h} value={h}>
-                      {h < 10 ? `0${h}` : h}:00 ({h < 12 ? 'Sáng' : h === 12 ? 'Trưa' : 'Chiều/Đêm'})
-                    </option>
-                  ))}
-                </select>
+            {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && (
+              <div className="grid grid-cols-7 gap-1.5">
+                {WEEKDAYS.map((day) => {
+                  const isActive = (config.preferred_weekday ?? 0) === day.value
+                  return (
+                    <button
+                      key={day.value}
+                      type="button"
+                      onClick={() => setConfig({ ...config, preferred_weekday: day.value })}
+                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                        isActive
+                          ? 'bg-[#005b9a] text-white border-[#005b9a] shadow-sm scale-[1.02]'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {day.label}
+                    </button>
+                  )
+                })}
               </div>
-              <span className="text-[10px] text-slate-400 block mt-0.5">Thời điểm chính xác kích hoạt quét ngầm</span>
+            )}
+
+            {config.frequency_type === 'MONTHLY' && (
+              <div className="grid grid-cols-7 gap-1 sm:grid-cols-10 md:grid-cols-11 max-h-36 overflow-y-auto custom-scrollbar p-1 bg-slate-50 rounded-xl border border-slate-100">
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => {
+                  const isActive = (config.preferred_day_of_month ?? 1) === d
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setConfig({ ...config, preferred_day_of_month: d })}
+                      className={`py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                        isActive
+                          ? 'bg-[#005b9a] text-white border-[#005b9a] font-bold shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {config.frequency_type === 'DAILY' && (
+              <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 text-xs text-[#005b9a] flex items-center gap-2">
+                <Clock className="w-4 h-4 shrink-0" />
+                <span>Tiến trình tự động cào ngầm sẽ được khởi chạy mỗi ngày theo mốc giờ dưới đây.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Interactive Hour Slot Selector */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-[#005b9a]" />
+                Chọn Mốc Giờ Kích Hoạt (24h)
+              </label>
+              <span className="text-[11px] font-mono text-[#005b9a] font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                {HOUR_SLOTS.find(h => h.hour === (config.preferred_hour ?? 2))?.label} ({HOUR_SLOTS.find(h => h.hour === (config.preferred_hour ?? 2))?.period})
+              </span>
             </div>
 
-            {/* Batch size */}
-            <div>
-              <label className="block text-slate-600 font-medium mb-1">Hạn ngạch CV/Giờ</label>
+            <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-12 gap-1.5">
+              {HOUR_SLOTS.map((slot) => {
+                const isActive = (config.preferred_hour ?? 2) === slot.hour
+                return (
+                  <button
+                    key={slot.hour}
+                    type="button"
+                    onClick={() => setConfig({ ...config, preferred_hour: slot.hour })}
+                    title={`${slot.label} (${slot.period})`}
+                    className={`py-2 px-1 rounded-xl text-[11px] font-mono font-bold transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                      isActive
+                        ? 'bg-gradient-to-b from-[#005b9a] to-indigo-700 text-white border-[#005b9a] shadow-md scale-105 ring-2 ring-indigo-200'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>{slot.label}</span>
+                    <span className={`text-[9px] font-sans font-normal ${isActive ? 'text-cyan-200' : 'text-slate-400'}`}>
+                      {slot.period}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Quota & Delay inputs in clean cards */}
+          <div className="grid grid-cols-3 gap-3 text-xs">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+              <label className="block text-slate-600 font-semibold text-[11px]">CV/Giờ</label>
               <input
                 type="number"
                 value={config.batch_size_per_hour ?? 8}
                 onChange={(e) => setConfig({ ...config, batch_size_per_hour: parseInt(e.target.value) || 8 })}
-                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#005b9a]"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white font-mono font-bold text-slate-800"
               />
-              <span className="text-[10px] text-slate-400 block mt-0.5">Số lượng CV rải rác cào trong 1 giờ</span>
             </div>
 
-            <div>
-              <label className="block text-slate-600 font-medium mb-1">Delay Min (Giây)</label>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+              <label className="block text-slate-600 font-semibold text-[11px]">Delay Min (s)</label>
               <input
                 type="number"
                 value={config.delay_min_seconds ?? 8}
                 onChange={(e) => setConfig({ ...config, delay_min_seconds: parseInt(e.target.value) || 8 })}
-                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#005b9a]"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white font-mono font-bold text-slate-800"
               />
             </div>
-            <div>
-              <label className="block text-slate-600 font-medium mb-1">Delay Max (Giây)</label>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+              <label className="block text-slate-600 font-semibold text-[11px]">Delay Max (s)</label>
               <input
                 type="number"
                 value={config.delay_max_seconds ?? 15}
                 onChange={(e) => setConfig({ ...config, delay_max_seconds: parseInt(e.target.value) || 15 })}
-                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#005b9a]"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#005b9a] bg-white font-mono font-bold text-slate-800"
               />
             </div>
           </div>
@@ -815,59 +1009,89 @@ export function ScholarAutoSchedulerPage() {
             <button
               onClick={handleSaveConfig}
               disabled={loadingConfig}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs cursor-pointer transition-all shadow-sm"
+              className="w-full px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs cursor-pointer transition-all shadow-md flex items-center justify-center gap-2"
             >
-              {loadingConfig ? 'Đang lưu...' : 'Lưu Cấu Hình Hẹn Giờ'}
+              {loadingConfig ? <Spinner className="w-4 h-4 text-white" /> : <Settings className="w-4 h-4 text-cyan-300" />}
+              Lưu Cấu Hình Hẹn Giờ
             </button>
           </div>
         </Card>
       </div>
 
-      {/* Middle Section: Bulk CV Importer */}
-      <Card className="p-6 rounded-xl bg-white border border-slate-200 shadow-sm space-y-4">
-        <div className="flex items-center gap-2">
-          <Upload className="h-5 w-5 text-[#005b9a]" />
-          <h2 className="font-bold text-slate-800">Bulk Import CV Tác Giả</h2>
+      {/* 4. Middle Section: Nhập Danh Sách Hồ Sơ CV Tác Giả Card */}
+      <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600">
+              <Upload className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-800 text-base">📥 Nhập Danh Sách Hồ Sơ CV Tác Giả</h2>
+              <p className="text-xs text-slate-500">Đưa hàng loạt ID/URL tác giả vào hàng chờ cào CV tự động</p>
+            </div>
+          </div>
+
+          {/* Format Instruction Badges */}
+          <div className="flex items-center gap-2 text-[11px] font-mono">
+            <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">
+              ID: <code className="text-[#005b9a] font-bold">q81c5sAAAAAJ</code>
+            </span>
+            <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 hidden md:inline-block">
+              URL: <code className="text-[#005b9a]">https://scholar.google.com/citations?user=...</code>
+            </span>
+          </div>
         </div>
-        <p className="text-xs text-slate-500">
-          Nhập danh sách Google Scholar ID hoặc URL hồ sơ tác giả (mỗi dòng 1 ID/URL) để đưa vào hàng chờ tự động quét CV ngầm.
-        </p>
-        <textarea
-          rows={3}
-          placeholder="Dán scholar_id (VD: q81c5sAAAAAJ) hoặc URL profile (VD: https://scholar.google.com/citations?user=q81c5sAAAAAJ)..."
-          value={bulkText}
-          onChange={(e) => setBulkText(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-[#005b9a]"
-        />
-        <button
-          onClick={handleBulkImport}
-          disabled={loadingImport || !bulkText.trim()}
-          className="px-5 py-2 rounded-lg bg-[#005b9a] hover:bg-[#004b80] disabled:opacity-50 text-white font-semibold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm"
-        >
-          {loadingImport ? <Spinner className="w-4 h-4 text-white" /> : <Play className="h-4 w-4" />}
-          Nhập CV & Chạy Quét Ngay
-        </button>
+
+        <div className="relative">
+          <textarea
+            rows={4}
+            placeholder="Dán scholar_id (VD: q81c5sAAAAAJ) hoặc URL profile (VD: https://scholar.google.com/citations?user=q81c5sAAAAAJ)..."
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            className="w-full border border-slate-200/80 rounded-2xl p-4 text-xs font-mono focus:outline-none focus:border-[#005b9a] bg-slate-50/50 shadow-inner leading-relaxed"
+          />
+          <div className="absolute right-3 bottom-3 text-[11px] font-mono text-slate-400 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-slate-200/80 shadow-3xs">
+            Đã phát hiện <strong className="text-[#005b9a]">{detectedCount}</strong> ID/URL
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            onClick={handleBulkImport}
+            disabled={loadingImport || !bulkText.trim()}
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#005b9a] to-indigo-600 hover:from-[#004b80] hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-indigo-200 hover:scale-[1.01] active:scale-[0.99]"
+          >
+            {loadingImport ? <Spinner className="w-4 h-4 text-white" /> : <Play className="h-4 w-4 text-cyan-300 fill-cyan-300" />}
+            🚀 Nhập CV & Kích Hoạt Quét Ngay
+          </button>
+        </div>
       </Card>
 
-      {/* Bottom Section: Author CV Status List/Table */}
-      <Card className="p-6 rounded-xl bg-white border border-slate-200 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <List className="h-5 w-5 text-slate-700" />
-            <h2 className="font-bold text-slate-800">Trạng Thái Tự Động Quét CV Tác Giả</h2>
+      {/* 5. Bottom Section: Trạng Thái Tự Động Quét CV Tác Giả Table Card */}
+      <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-slate-100 text-slate-700">
+              <List className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-800 text-base">Trạng Thái Tự Động Quét CV Tác Giả</h2>
+              <p className="text-xs text-slate-500">Danh sách tác giả và trạng thái Fast Smart Check mới nhất</p>
+            </div>
           </div>
+
           <div className="flex items-center gap-3">
             {selectedAuthorIds.length > 0 && (
               <button
                 onClick={() => handleTriggerScan()}
                 disabled={loadingScan}
-                className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm animate-pulse transition-all"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-md shadow-blue-200 transition-all animate-pulse"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loadingScan ? 'animate-spin' : ''}`} />
                 Quét Lại Trực Tiếp ({selectedAuthorIds.length} Đã Chọn)
               </button>
             )}
-            <span className="text-xs text-slate-500 font-medium">
+            <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200/80">
               Tổng cộng: <strong className="text-slate-800">{authors.length}</strong> tác giả
             </span>
           </div>
@@ -878,15 +1102,15 @@ export function ScholarAutoSchedulerPage() {
             <Spinner /> Đang tải danh sách tác giả...
           </div>
         ) : authors.length === 0 ? (
-          <div className="py-8 text-center text-slate-400 text-xs">
+          <div className="py-12 text-center text-slate-400 text-xs">
             Chưa có tác giả nào trong hệ thống. Hãy nhập danh sách CV phía trên.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-bold">
-                  <th className="py-3 px-3 w-8">
+                <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                  <th className="py-3.5 px-4 w-10">
                     <input
                       type="checkbox"
                       className="rounded border-slate-300 accent-[#005b9a] cursor-pointer"
@@ -894,18 +1118,18 @@ export function ScholarAutoSchedulerPage() {
                       onChange={handleToggleSelectAll}
                     />
                   </th>
-                  <th className="py-3 px-4">Tác Giả</th>
-                  <th className="py-3 px-4">Scholar ID</th>
-                  <th className="py-3 px-4 text-center">Số Bài Báo</th>
-                  <th className="py-3 px-4 text-center">Fast Smart Check</th>
-                  <th className="py-3 px-4 text-right">Lần Quét Cuối</th>
-                  <th className="py-3 px-4 text-center">Hành Động</th>
+                  <th className="py-3.5 px-4">Tác Giả</th>
+                  <th className="py-3.5 px-4">Scholar ID</th>
+                  <th className="py-3.5 px-4 text-center">Số Bài Báo</th>
+                  <th className="py-3.5 px-4 text-center">Fast Smart Check</th>
+                  <th className="py-3.5 px-4 text-right">Lần Quét Cuối</th>
+                  <th className="py-3.5 px-4 text-center">Hành Động</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {authors.map((author: any) => (
-                  <tr key={author.id || author.scholar_id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-3 px-3">
+                  <tr key={author.id || author.scholar_id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3.5 px-4">
                       <input
                         type="checkbox"
                         className="rounded border-slate-300 accent-[#005b9a] cursor-pointer"
@@ -913,32 +1137,34 @@ export function ScholarAutoSchedulerPage() {
                         onChange={() => handleToggleSelectRow(author.id)}
                       />
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-slate-400 shrink-0" />
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-500 shrink-0">
+                          <User className="w-4 h-4" />
+                        </div>
                         <div>
-                          <div className="font-semibold text-slate-800">{author.name}</div>
+                          <div className="font-bold text-slate-800">{author.name}</div>
                           <div className="text-[11px] text-slate-400 truncate max-w-[240px]">
                             {author.affiliation || '—'}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{author.scholar_id}</td>
-                    <td className="py-3 px-4 text-center font-bold text-slate-700">
+                    <td className="py-3.5 px-4 font-mono font-semibold text-slate-600">{author.scholar_id}</td>
+                    <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-700">
                       {author.publication_count_cached || author.publications?.length || 0}
                     </td>
-                    <td className="py-3 px-4 text-center">{getStatusBadge(author.last_scan_status)}</td>
-                    <td className="py-3 px-4 text-right text-slate-500 font-mono">
+                    <td className="py-3.5 px-4 text-center">{getStatusBadge(author.last_scan_status)}</td>
+                    <td className="py-3.5 px-4 text-right text-slate-500 font-mono text-[11px]">
                       {author.last_scraped_at
                         ? new Date(author.last_scraped_at).toLocaleString('vi-VN')
                         : 'Chưa từng'}
                     </td>
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-3.5 px-4 text-center">
                       <button
                         onClick={() => handleTriggerScan([author.id])}
                         disabled={loadingScan}
-                        className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] inline-flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-3xs"
                       >
                         <RefreshCw className="w-3 h-3 text-slate-500" />
                         Quét lại
@@ -952,12 +1178,12 @@ export function ScholarAutoSchedulerPage() {
         )}
       </Card>
 
-      {/* Floating Light-themed Log Modal */}
+      {/* 6. Floating Log Modal */}
       {isLogModalOpen && (
-        <div className="fixed inset-0 z-50 bg-[#0F172A]/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-[#E5E7EB] rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-[#E5E7EB] bg-[#F8FAFC] flex justify-between items-center">
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                   <FileText className="w-5 h-5 text-[#005b9a]" />
@@ -1076,7 +1302,7 @@ export function ScholarAutoSchedulerPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-[#E5E7EB] bg-[#F8FAFC] flex justify-between items-center">
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50/80 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <div className="relative group">
                   <button
