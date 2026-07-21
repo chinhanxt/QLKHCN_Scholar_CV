@@ -20,10 +20,22 @@ services:
     depends_on:
       - postgres
       - redis
+      - tor
     env_file:
       - ./.envs/.production/.django
       - ./.envs/.production/.postgres
     command: /start
+
+  tor:
+    image: dperson/torproxy:latest
+    container_name: scholar_tor_proxy_prod
+    restart: always
+    environment:
+      - PASSWORD=scholar_secret_control_pass
+    command: -p "scholar_secret_control_pass"
+    ports:
+      - "9050:9050"   # SOCKS5 Proxy Gateway
+      - "9051:9051"   # Control Port (NEWNYM signal)
 
   postgres:
     build:

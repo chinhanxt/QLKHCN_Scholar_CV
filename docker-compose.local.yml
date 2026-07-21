@@ -14,6 +14,7 @@ services:
       - postgres
       - redis
       - mailpit
+      - tor
     volumes:
       - /app/.venv
       - .:/app:z
@@ -23,6 +24,17 @@ services:
     ports:
       - '8000:8000'
     command: /start
+
+  tor:
+    image: dperson/torproxy:latest
+    container_name: scholar_tor_proxy
+    restart: always
+    environment:
+      - PASSWORD=scholar_secret_control_pass
+    command: -p "scholar_secret_control_pass"
+    ports:
+      - "9050:9050"   # SOCKS5 Proxy Gateway
+      - "9051:9051"   # Control Port (NEWNYM signal)
 
   postgres:
     build:
