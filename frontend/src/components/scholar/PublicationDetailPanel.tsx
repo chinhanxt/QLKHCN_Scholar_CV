@@ -2,6 +2,7 @@ import React from 'react'
 import { Card } from '@/components/ui/card'
 import { ArrowLeft, Edit, Trash2, TrendingUp, GraduationCap } from 'lucide-react'
 import type { PublicationDetail } from '@/api/endpoints/scholar'
+import { getShortenedAuthors } from './PublicationTableList'
 
 interface PublicationDetailPanelProps {
   publication: PublicationDetail
@@ -9,6 +10,11 @@ interface PublicationDetailPanelProps {
   onBack: () => void
   onEdit?: (pub: PublicationDetail, e: React.MouseEvent) => void
   onDelete?: (pubId: string, e: React.MouseEvent) => void
+}
+
+const getCleanSnippetVenue = (venue: string) => {
+  if (!venue) return ''
+  return venue.replace(/\s+\d+(\s*\([^)]+\))?,\s*\d+$/, '').trim()
 }
 
 export const PublicationDetailPanel: React.FC<PublicationDetailPanelProps> = ({
@@ -275,6 +281,13 @@ export const PublicationDetailPanel: React.FC<PublicationDetailPanelProps> = ({
             >
               {publication.title}
             </a>
+
+            {/* Shortened Authors & Venue snippet (Google Scholar green style) */}
+            <div className="text-xs text-slate-650 mt-1.5 font-medium leading-relaxed">
+              <span className="text-slate-700">{getShortenedAuthors(publication.authors_list)}</span>
+              {publication.venue && <span className="text-[#006621]"> - {getCleanSnippetVenue(publication.venue)}</span>}
+              {publication.year && <span className="text-[#006621]">, {publication.year}</span>}
+            </div>
 
             <div className="flex flex-wrap items-center gap-4 mt-2.5 text-[11px] text-[#1a0dab] font-medium">
               <a
