@@ -78,21 +78,37 @@ export function ProfileManagerPage() {
       return
     }
 
+    const localMatch = authors.find(
+      (a) => String(a.scholar_id) === String(selectedProfileId) || String(a.id) === String(selectedProfileId)
+    )
+
+    if (localMatch && localMatch.publications && localMatch.publications.length > 0) {
+      setSelectedProfile(localMatch)
+      setSelectedPubId(null)
+      return
+    }
+
     const loadDetail = async () => {
       setIsLoadingDetail(true)
       try {
-        const res = await scholarApi.getAuthor(selectedProfileId).then((r) => r.data)
+        const targetId = localMatch?.scholar_id || selectedProfileId
+        const res = await scholarApi.getAuthor(targetId).then((r) => r.data)
         setSelectedProfile(res)
         setSelectedPubId(null)
       } catch (err) {
-        toast.error('Không thể lấy chi tiết hồ sơ.')
-        setSelectedProfileId(null)
+        if (localMatch) {
+          setSelectedProfile(localMatch)
+          setSelectedPubId(null)
+        } else {
+          toast.error('Không thể lấy chi tiết hồ sơ.')
+          setSelectedProfileId(null)
+        }
       } finally {
         setIsLoadingDetail(false)
       }
     }
     loadDetail()
-  }, [selectedProfileId])
+  }, [selectedProfileId, authors])
 
   const handleToggleSelectPub = (pubId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation()
@@ -454,7 +470,7 @@ export function ProfileManagerPage() {
               </div>
             ) : (
               filteredAuthors.map((author) => {
-                const isSelected = selectedProfileId === author.scholar_id
+                const isSelected = selectedProfileId === author.scholar_id || String(selectedProfileId) === String(author.id)
                 return (
                   <button
                     key={author.scholar_id}

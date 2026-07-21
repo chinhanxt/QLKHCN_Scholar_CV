@@ -1388,7 +1388,7 @@ export function ScholarAutoSchedulerPage() {
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
                         <Link
-                          to={`/scholar/profiles?id=${author.id || author.scholar_id}`}
+                          to={`/scholar/profiles?id=${author.scholar_id || author.id}`}
                           className="p-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-500 hover:bg-blue-50 hover:border-blue-200 hover:text-[#005b9a] shrink-0 transition-colors"
                           title="Xem quản lý hồ sơ tác giả"
                         >
@@ -1396,7 +1396,7 @@ export function ScholarAutoSchedulerPage() {
                         </Link>
                         <div>
                           <Link
-                            to={`/scholar/profiles?id=${author.id || author.scholar_id}`}
+                            to={`/scholar/profiles?id=${author.scholar_id || author.id}`}
                             className="font-bold text-slate-800 hover:text-[#005b9a] hover:underline transition-colors flex items-center gap-1 group cursor-pointer"
                             title="Đi tới trang Profile tác giả"
                           >
