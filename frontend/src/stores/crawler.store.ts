@@ -1,10 +1,22 @@
 import { create } from 'zustand'
 
+export interface SubTaskState {
+  status: string
+  progress: number
+  message: string
+}
+
 export interface CrawlerTaskState {
   taskId: string | null
   taskStatus: string
   progress: number
   consoleLogs: string[]
+  subTasks?: {
+    clarivate?: SubTaskState
+    scimago?: SubTaskState
+    bioxbio?: SubTaskState
+    mapping?: SubTaskState
+  }
 }
 
 interface CrawlerStoreState {

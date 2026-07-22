@@ -42,8 +42,8 @@ import { useCrawlerStore } from '@/stores/crawler.store'
 export function ScimagoCrawlerPage() {
   const [yearMode, setYearMode] = useState<'all' | 'custom'>('custom')
   const [customYearsText, setCustomYearsText] = useState('2023, 2024')
-  const [maxWorkers, setMaxWorkers] = useState(5)
-  const [delay, setDelay] = useState(1.0)
+  const [maxWorkers, setMaxWorkers] = useState(10)
+  const [delay, setDelay] = useState(0.2)
   
   // Inner tab and data viewer state
   const [activeTab, setActiveTab] = useState<'tool' | 'data'>('data')

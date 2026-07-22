@@ -5,6 +5,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { scholarApi } from '@/api/endpoints/scholar'
 import type { AuthorProfileDetail } from '@/api/endpoints/scholar'
+import { AntiBlockControlModal } from '@/components/scholar/AntiBlockControlModal'
 import {
   Clock,
   User,
@@ -89,6 +90,12 @@ export function ScholarAutoSchedulerPage() {
   const [isJobBannerDismissed, setIsJobBannerDismissed] = useState(false)
   const [isLogModalOpen, setIsLogModalOpen] = useState(false)
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
+  const [isAntiBlockModalOpen, setIsAntiBlockModalOpen] = useState(false)
+  const isScheduleModalOpenRef = useRef(isScheduleModalOpen)
+
+  useEffect(() => {
+    isScheduleModalOpenRef.current = isScheduleModalOpen
+  }, [isScheduleModalOpen])
 
   // Realtime Log States
   const [logs, setLogs] = useState<AutoSchedulerLogEntry[]>(() => {
@@ -216,9 +223,38 @@ export function ScholarAutoSchedulerPage() {
   const fetchConfig = async () => {
     try {
       const res = await scholarApi.getAutoScanConfig()
-      setConfig((prev: any) => ({ ...prev, ...res.data }))
+      setConfig((prev: any) => {
+        if (isScheduleModalOpenRef.current) {
+          return {
+            ...prev,
+            current_job_status: res.data.current_job_status,
+            current_job_progress: res.data.current_job_progress,
+            current_job_detail: res.data.current_job_detail,
+          }
+        }
+        return { ...prev, ...res.data }
+      })
     } catch (e) {
       console.error(e)
+    }
+  }
+
+  const handleToggleActive = async (newActive: boolean) => {
+    const updated = { ...config, is_active: newActive }
+    setConfig(updated)
+    try {
+      await scholarApi.updateAutoScanConfig({ is_active: newActive })
+      toast.success(`Đã ${newActive ? 'bật' : 'tắt'} lịch cào tự động.`)
+      addSchedulerLog(
+        'CẤU_HÌNH',
+        'THÀNH_CÔNG',
+        newActive ? 'Bật lịch auto-scan' : 'Tắt lịch auto-scan',
+        `Trạng thái lịch cào tự động ngầm: ${newActive ? 'Bật' : 'Tắt'}`,
+        'AutoScanConfig'
+      )
+    } catch (e) {
+      toast.error('Lỗi khi cập nhật trạng thái lịch.')
+      setConfig((prev: any) => ({ ...prev, is_active: !newActive }))
     }
   }
 
@@ -788,6 +824,15 @@ export function ScholarAutoSchedulerPage() {
               )}
               <span>Đổi IP Tor</span>
             </button>
+
+            <button
+              onClick={() => setIsAntiBlockModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#005b9a] border border-blue-200/80 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-3xs"
+            >
+              <ShieldAlert className="w-4 h-4 text-[#005b9a]" />
+              <span>Hệ Thống Kháng Chặn (3 Lớp)</span>
+            </button>
+
           </div>
         </Card>
 
@@ -807,7 +852,7 @@ export function ScholarAutoSchedulerPage() {
                 <input
                   type="checkbox"
                   checked={config.is_active ?? true}
-                  onChange={(e) => setConfig({ ...config, is_active: e.target.checked })}
+                  onChange={(e) => handleToggleActive(e.target.checked)}
                   className="sr-only peer"
                 />
                 <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#005b9a]"></div>
@@ -1003,7 +1048,7 @@ export function ScholarAutoSchedulerPage() {
                                 key={w.value}
                                 type="button"
                                 onClick={() => {
-                                  setConfig((prev: any) => ({ ...prev, preferred_weekday: w.value }))
+                                  setConfig((prev: any) => ({ ...prev, frequency_type: 'WEEKLY', preferred_weekday: w.value }))
                                   addSchedulerLog('CẤU_HÌNH', 'THÔNG_TIN', 'Chọn Thứ cào CV', `Đã chọn ${w.label} hàng tuần`, 'WeekdayPill')
                                 }}
                                 className={`py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer text-center ${
@@ -1089,6 +1134,7 @@ export function ScholarAutoSchedulerPage() {
                                 onClick={() => {
                                   setConfig((prev: any) => ({
                                     ...prev,
+                                    frequency_type: 'MONTHLY',
                                     preferred_day_of_month: d,
                                     preferred_weekday: weekday,
                                   }))
@@ -1625,6 +1671,12 @@ export function ScholarAutoSchedulerPage() {
           </div>
         </div>
       )}
+
+      <AntiBlockControlModal
+        isOpen={isAntiBlockModalOpen}
+        onClose={() => setIsAntiBlockModalOpen(false)}
+      />
     </div>
   )
 }
+

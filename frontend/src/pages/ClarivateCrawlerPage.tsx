@@ -20,8 +20,8 @@ const getShortWosIndex = (fullname: string) => {
 
 export function ClarivateCrawlerPage() {
   const [maxPages, setMaxPages] = useState<number | null>(null)
-  const [maxWorkers, setMaxWorkers] = useState(3)
-  const [delay, setDelay] = useState(1.5)
+  const [maxWorkers, setMaxWorkers] = useState(15)
+  const [delay, setDelay] = useState(0.1)
   const [pageMode, setPageMode] = useState<'all' | 'custom'>('all')
   
   // Inner tab and data viewer state

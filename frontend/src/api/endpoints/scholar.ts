@@ -219,4 +219,11 @@ export const scholarApi = {
     apiClient.post<any>('/scholar/auto-scan/trigger-authors/', { author_ids }),
 }
 
+export const antiBlockApi = {
+  getConfig: () => apiClient.get<any>('/scholar/anti-block/config/'),
+  updateConfig: (data: any) => apiClient.patch<any>('/scholar/anti-block/config/', data),
+  rotateTor: () => apiClient.post<any>('/scholar/anti-block/rotate-tor/'),
+}
+
+
 

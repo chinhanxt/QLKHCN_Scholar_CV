@@ -3,22 +3,32 @@ import { scholarApi } from '@/api/endpoints/scholar'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { Layers, Play, Square, Loader2, Zap, Trash2, Copy, Terminal, CheckCircle2, AlertCircle, ChevronUp, ChevronDown, Database, Eye, RefreshCw, History, X, Clock, FileText } from 'lucide-react'
+import { Layers, Play, Square, Loader2, Zap, Trash2, Copy, Terminal, CheckCircle2, AlertCircle, ChevronUp, ChevronDown, Database, Eye, RefreshCw, History, X, Clock, FileText, Calendar, ChevronLeft, ChevronRight, Settings, Check } from 'lucide-react'
 import { useCrawlerStore } from '@/stores/crawler.store'
+
+const WEEKDAYS = [
+  { value: 0, label: 'Thứ 2' },
+  { value: 1, label: 'Thứ 3' },
+  { value: 2, label: 'Thứ 4' },
+  { value: 3, label: 'Thứ 5' },
+  { value: 4, label: 'Thứ 6' },
+  { value: 5, label: 'Thứ 7' },
+  { value: 6, label: 'Chủ Nhật' },
+]
 
 export function UnifiedCrawlerPage() {
   // Config states
   const [scimagoStartUrl, setScimagoStartUrl] = useState<string>('https://www.scimagojr.com/journalrank.php')
-  const [scimagoWorkers, setScimagoWorkers] = useState<number>(5)
-  const [scimagoDelay, setScimagoDelay] = useState<number>(1)
+  const [scimagoWorkers, setScimagoWorkers] = useState<number>(10)
+  const [scimagoDelay, setScimagoDelay] = useState<number>(0.2)
 
   const [clarivateStartUrl, setClarivateStartUrl] = useState<string>('https://mjl.clarivate.com/api/mjl/jprof/public/rank-search')
-  const [clarivateWorkers, setClarivateWorkers] = useState<number>(3)
-  const [clarivateDelay, setClarivateDelay] = useState<number>(1.5)
+  const [clarivateWorkers, setClarivateWorkers] = useState<number>(15)
+  const [clarivateDelay, setClarivateDelay] = useState<number>(0.1)
 
   const [bioxbioStartUrl, setBioxbioStartUrl] = useState<string>('https://www.bioxbio.com/journal/')
-  const [bioxbioWorkers, setBioxbioWorkers] = useState<number>(10)
-  const [bioxbioDelay, setBioxbioDelay] = useState<number>(2)
+  const [bioxbioWorkers, setBioxbioWorkers] = useState<number>(20)
+  const [bioxbioDelay, setBioxbioDelay] = useState<number>(0.3)
 
   const [showConfig, setShowConfig] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -39,12 +49,22 @@ export function UnifiedCrawlerPage() {
   const [mapProgress, setMapProgress] = useState<any>({ status: 'PENDING', progress: 0, message: 'Đang chờ...' })
 
   // Crawler Task State from Zustand Store
-  const { taskId, taskStatus, progress: masterProgress, consoleLogs } = useCrawlerStore((state) => state.unified)
+  const { taskId, taskStatus, progress: masterProgress, consoleLogs, subTasks: storedSubTasks } = useCrawlerStore((state) => state.unified)
   const setTaskState = useCrawlerStore((state) => state.setTaskState)
   const addConsoleLog = useCrawlerStore((state) => state.addConsoleLog)
   const clearLogs = useCrawlerStore((state) => state.clearLogs)
 
   const consoleEndRef = useRef<HTMLDivElement>(null)
+
+  // Hydrate sub-task progress states from store on mount
+  useEffect(() => {
+    if (storedSubTasks) {
+      if (storedSubTasks.clarivate) setClProgress(storedSubTasks.clarivate)
+      if (storedSubTasks.scimago) setScProgress(storedSubTasks.scimago)
+      if (storedSubTasks.bioxbio) setBbProgress(storedSubTasks.bioxbio)
+      if (storedSubTasks.mapping) setMapProgress(storedSubTasks.mapping)
+    }
+  }, [])
 
   // Fetch Database Stats
   const fetchStats = async () => {
@@ -90,12 +110,20 @@ export function UnifiedCrawlerPage() {
     const pollInterval = setInterval(async () => {
       try {
         const res = await scholarApi.getCrawlerTaskStatus(taskId).then((r) => r.data)
+
+        if (res.info) {
+          if (res.info.clarivate) setClProgress(res.info.clarivate)
+          if (res.info.scimago) setScProgress(res.info.scimago)
+          if (res.info.bioxbio) setBbProgress(res.info.bioxbio)
+          if (res.info.mapping) setMapProgress(res.info.mapping)
+        }
         
         if (res.status === 'SUCCESS') {
           setTaskState('unified', { 
             taskId: null,
             taskStatus: 'SUCCESS',
-            progress: 100
+            progress: 100,
+            subTasks: undefined
           })
           setClProgress({ status: 'SUCCESS', progress: 100, message: 'Hoàn tất cào dữ liệu' })
           setScProgress({ status: 'SUCCESS', progress: 100, message: 'Hoàn tất tải và import CSV' })
@@ -109,7 +137,8 @@ export function UnifiedCrawlerPage() {
           setTaskState('unified', { 
             taskId: null,
             taskStatus: 'FAILURE',
-            progress: res.progress || 0
+            progress: res.progress || 0,
+            subTasks: undefined
           })
           setClProgress({ status: 'FAILURE', progress: 0, message: 'Cào dữ liệu thất bại' })
           setScProgress({ status: 'FAILURE', progress: 0, message: 'Tải SCImago thất bại' })
@@ -122,7 +151,13 @@ export function UnifiedCrawlerPage() {
         } else {
           setTaskState('unified', { 
             taskStatus: res.status,
-            progress: res.progress || 0
+            progress: res.progress || 0,
+            subTasks: res.info ? {
+              clarivate: res.info.clarivate,
+              scimago: res.info.scimago,
+              bioxbio: res.info.bioxbio,
+              mapping: res.info.mapping
+            } : undefined
           })
           if (res.status === 'PROGRESS' && res.message) {
             addConsoleLog('unified', res.message)
@@ -289,9 +324,25 @@ export function UnifiedCrawlerPage() {
     }
   }
 
-  const [autoCrawlEnabled, setAutoCrawlEnabled] = useState<boolean>(false)
-  const [autoCrawlHour, setAutoCrawlHour] = useState<number>(2)
-  const [autoCrawlMinute, setAutoCrawlMinute] = useState<number>(0)
+  const [scheduleConfig, setScheduleConfig] = useState({
+    auto_crawl_enabled: false,
+    auto_crawl_frequency: 'WEEKLY',
+    auto_crawl_weekday: 0,
+    auto_crawl_day_of_month: 1,
+    auto_crawl_hour: 2,
+    auto_crawl_minute: 0,
+  })
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date())
+
+  const handlePrevMonth = () => {
+    setCurrentCalendarDate(new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() - 1, 1))
+  }
+
+  const handleNextMonth = () => {
+    setCurrentCalendarDate(new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 1, 1))
+  }
+
   const [savingSchedule, setSavingSchedule] = useState<boolean>(false)
   const [lastRunInfo, setLastRunInfo] = useState<any>(null)
   const [showHistory, setShowHistory] = useState(false)
@@ -341,7 +392,19 @@ export function UnifiedCrawlerPage() {
           taskId: res.task_id,
           taskStatus: res.status,
           progress: res.progress || 2,
+          subTasks: res.info ? {
+            clarivate: res.info.clarivate,
+            scimago: res.info.scimago,
+            bioxbio: res.info.bioxbio,
+            mapping: res.info.mapping
+          } : undefined
         })
+        if (res.info) {
+          if (res.info.clarivate) setClProgress(res.info.clarivate)
+          if (res.info.scimago) setScProgress(res.info.scimago)
+          if (res.info.bioxbio) setBbProgress(res.info.bioxbio)
+          if (res.info.mapping) setMapProgress(res.info.mapping)
+        }
         addConsoleLog('unified', `🔄 Phát hiện tiến trình cào tự động đang chạy ngầm (ID: ${res.task_id}). Đang kết nối giám sát...`)
         if (res.message) {
           addConsoleLog('unified', res.message)
@@ -358,9 +421,14 @@ export function UnifiedCrawlerPage() {
     const loadScheduleSettings = async () => {
       try {
         const res = await scholarApi.getSettings()
-        setAutoCrawlEnabled(res.data.auto_crawl_enabled ?? false)
-        setAutoCrawlHour(res.data.auto_crawl_hour ?? 2)
-        setAutoCrawlMinute(res.data.auto_crawl_minute ?? 0)
+        setScheduleConfig({
+          auto_crawl_enabled: res.data.auto_crawl_enabled ?? false,
+          auto_crawl_frequency: res.data.auto_crawl_frequency ?? 'WEEKLY',
+          auto_crawl_weekday: res.data.auto_crawl_weekday ?? 0,
+          auto_crawl_day_of_month: res.data.auto_crawl_day_of_month ?? 1,
+          auto_crawl_hour: res.data.auto_crawl_hour ?? 2,
+          auto_crawl_minute: res.data.auto_crawl_minute ?? 0,
+        })
       } catch (err) {
         console.error('Lỗi tải cấu hình lập lịch:', err)
       }
@@ -370,21 +438,36 @@ export function UnifiedCrawlerPage() {
     checkActiveTask()
   }, [])
 
-  const handleSaveSchedule = async () => {
+  const handleToggleScheduleActive = async (newActive: boolean) => {
+    setScheduleConfig((prev) => ({ ...prev, auto_crawl_enabled: newActive }))
+    try {
+      const currentSettings = await scholarApi.getSettings().then(r => r.data)
+      await scholarApi.saveSettings({
+        ...currentSettings,
+        auto_crawl_enabled: newActive,
+      })
+      toast.success(`Đã ${newActive ? 'bật' : 'tắt'} lịch cào tự động ngầm.`)
+    } catch (err) {
+      console.error('Lỗi cập nhật lịch cào:', err)
+      toast.error('Không thể lưu trạng thái lịch cào.')
+      setScheduleConfig((prev) => ({ ...prev, auto_crawl_enabled: !newActive }))
+    }
+  }
+
+  const handleSaveModalSchedule = async () => {
     setSavingSchedule(true)
     try {
       const currentSettings = await scholarApi.getSettings().then(r => r.data)
       const updatedSettings = {
         ...currentSettings,
-        auto_crawl_enabled: autoCrawlEnabled,
-        auto_crawl_hour: autoCrawlHour,
-        auto_crawl_minute: autoCrawlMinute,
+        ...scheduleConfig,
       }
       await scholarApi.saveSettings(updatedSettings)
-      toast.success('Đã cập nhật lịch cào tự động thành công!')
+      toast.success('Đã cập nhật cấu hình lịch cào tổng hợp thành công!')
+      setIsScheduleModalOpen(false)
     } catch (err) {
       console.error('Lỗi lưu lịch cào:', err)
-      toast.error('Lưu lịch cào tự động thất bại.')
+      toast.error('Lưu cấu hình lịch cào thất bại.')
     } finally {
       setSavingSchedule(false)
     }
@@ -594,74 +677,64 @@ export function UnifiedCrawlerPage() {
               </div>
             </div>
 
-            {/* Lập lịch cào tự động */}
+            {/* Lập lịch cào tự động 3 Mode */}
             <div className="col-span-1 md:col-span-3 pt-6 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex flex-col gap-1.5 max-w-xl">
                 <h4 className="font-bold text-slate-800 text-xs flex items-center gap-2 uppercase tracking-wider">
-                  <RefreshCw className="w-3.5 h-3.5 text-[#005b9a] animate-spin" style={{ animationDuration: '3s' }} /> Lập lịch cào tự động hàng ngày (Giờ Việt Nam)
+                  <RefreshCw className="w-3.5 h-3.5 text-[#005b9a] animate-spin" style={{ animationDuration: '3s' }} /> Lập lịch cào tự động tổng hợp (Giờ Việt Nam)
                 </h4>
                 <p className="text-xs text-slate-450 leading-relaxed">
-                  Kích hoạt lịch cào tự động ngầm. Hệ thống sẽ chạy bộ cào song song và tự động đồng bộ vào cơ sở dữ liệu chính thức nếu phát hiện có tạp chí mới cào.
+                  Kích hoạt lịch cào tự động ngầm. Hệ thống sẽ chạy bộ cào song song 3 nguồn (Clarivate, SCImago, BioXBio) và tự động đồng bộ vào cơ sở dữ liệu chính thức.
                 </p>
+                <div className="mt-1">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-200/80">
+                    <Calendar className="w-3.5 h-3.5 text-[#005b9a]" />
+                    {(() => {
+                      const modeText =
+                        scheduleConfig.auto_crawl_frequency === 'MONTHLY'
+                          ? 'Mode Hằng Tháng'
+                          : scheduleConfig.auto_crawl_frequency === 'DAILY'
+                          ? 'Mode Hằng Ngày'
+                          : 'Mode Hằng Tuần'
+
+                      const dayText =
+                        scheduleConfig.auto_crawl_frequency === 'MONTHLY'
+                          ? `Ngày ${scheduleConfig.auto_crawl_day_of_month ?? 1}`
+                          : scheduleConfig.auto_crawl_frequency === 'DAILY'
+                          ? 'Mỗi ngày'
+                          : WEEKDAYS.find((w) => w.value === (scheduleConfig.auto_crawl_weekday ?? 0))?.label || 'Thứ 2'
+
+                      const hour = scheduleConfig.auto_crawl_hour ?? 2
+                      const minute = scheduleConfig.auto_crawl_minute ?? 0
+                      const hourStr = hour < 10 ? `0${hour}` : `${hour}`
+                      const minStr = minute < 10 ? `0${minute}` : `${minute}`
+                      const timePeriod = hour >= 18 || hour < 6 ? '(Đêm)' : '(Ngày)'
+
+                      return `${modeText} • ${dayText} • ${hourStr}:${minStr} ${timePeriod}`
+                    })()}
+                  </span>
+                </div>
               </div>
+
               <div className="flex flex-wrap items-center gap-4 bg-slate-50/50 p-4.5 rounded-xl border border-slate-100 w-full md:w-auto">
-                <div className="flex items-center gap-2">
+                <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
-                    id="autoCrawlEnabled"
-                    checked={autoCrawlEnabled}
-                    onChange={(e) => setAutoCrawlEnabled(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#005b9a] focus:ring-[#005b9a]/20 border-slate-350 cursor-pointer"
+                    checked={scheduleConfig.auto_crawl_enabled}
+                    onChange={(e) => handleToggleScheduleActive(e.target.checked)}
+                    className="sr-only peer"
                   />
-                  <label htmlFor="autoCrawlEnabled" className="text-xs font-bold text-slate-600 cursor-pointer select-none">
-                    Kích hoạt cào tự động
-                  </label>
-                </div>
-
-                {autoCrawlEnabled && (
-                  <div className="flex items-center gap-2 animate-in fade-in-50 duration-200">
-                    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 px-1.5">
-                      <select
-                        value={autoCrawlHour}
-                        onChange={(e) => setAutoCrawlHour(parseInt(e.target.value))}
-                        className="border-none bg-transparent py-1 text-xs text-slate-700 focus:outline-none font-bold cursor-pointer"
-                      >
-                        {Array.from({ length: 24 }).map((_, i) => (
-                          <option key={i} value={i}>
-                            {String(i).padStart(2, '0')}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="text-slate-400 font-bold">:</span>
-                      <select
-                        value={autoCrawlMinute}
-                        onChange={(e) => setAutoCrawlMinute(parseInt(e.target.value))}
-                        className="border-none bg-transparent py-1 text-xs text-slate-700 focus:outline-none font-bold cursor-pointer"
-                      >
-                        {Array.from({ length: 60 }).map((_, i) => (
-                          <option key={i} value={i}>
-                            {String(i).padStart(2, '0')}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-semibold italic">Giờ VN</span>
-                  </div>
-                )}
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#005b9a]"></div>
+                  <span className="ml-2 text-xs font-bold text-slate-700">Kích hoạt cào tự động</span>
+                </label>
 
                 <button
                   type="button"
-                  disabled={savingSchedule}
-                  onClick={handleSaveSchedule}
-                  className="px-4 py-1.5 rounded-lg bg-[#005b9a] hover:bg-[#004b7c] text-white text-xs font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5 ml-auto md:ml-0"
+                  onClick={() => setIsScheduleModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-slate-100/90 hover:bg-slate-200 text-[#005b9a] font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-200/80 shadow-3xs"
                 >
-                  {savingSchedule ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang lưu...
-                    </>
-                  ) : (
-                    "Lưu Lịch Hẹn"
-                  )}
+                  <Settings className="w-4 h-4 text-[#005b9a]" />
+                  <span>Cấu Hình Lịch</span>
                 </button>
               </div>
             </div>
@@ -1334,6 +1407,410 @@ export function UnifiedCrawlerPage() {
             <div className="p-3 px-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400 font-bold">
               <span>HỆ THỐNG GHI NHẬT KÝ HOẠT ĐỘNG (MAX 50 LƯỢT GẦN NHẤT)</span>
               <span className="text-[#005b9a]">EDU ECOSYSTEM SCHOLAR MATCHER</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Schedule Config Modal */}
+      {isScheduleModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 w-full max-w-3xl shadow-2xl overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-slate-700" />
+                  <span>Cấu Hình Thời Gian Cào Tổng Hợp Auto-Crawl</span>
+                </h3>
+                <p className="text-xs text-slate-500">Thiết lập chu kỳ (Ngày/Tuần/Tháng) & mốc giờ cào song song tự động</p>
+              </div>
+              <button
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
+              {/* 3 Mode Radio Bar */}
+              <div className="grid grid-cols-3 gap-3 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200/70">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScheduleConfig({ ...scheduleConfig, auto_crawl_frequency: 'WEEKLY' })
+                  }}
+                  className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
+                    (scheduleConfig.auto_crawl_frequency || 'WEEKLY') === 'WEEKLY'
+                      ? 'bg-white text-[#005b9a] shadow-sm border-[#005b9a] ring-2 ring-blue-100'
+                      : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    <div className="text-left leading-tight">
+                      <div>Hằng Tuần</div>
+                      <div className="text-[10px] text-slate-400 font-normal">Chạy theo Thứ</div>
+                    </div>
+                  </div>
+                  <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
+                    (scheduleConfig.auto_crawl_frequency || 'WEEKLY') === 'WEEKLY' ? 'border-[#005b9a] bg-[#005b9a] text-white font-bold' : 'border-slate-300'
+                  }`}>
+                    {(scheduleConfig.auto_crawl_frequency || 'WEEKLY') === 'WEEKLY' && '✓'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScheduleConfig({ ...scheduleConfig, auto_crawl_frequency: 'MONTHLY' })
+                  }}
+                  className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
+                    scheduleConfig.auto_crawl_frequency === 'MONTHLY'
+                      ? 'bg-white text-[#005b9a] shadow-sm border-[#005b9a] ring-2 ring-blue-100'
+                      : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    <div className="text-left leading-tight">
+                      <div>Hằng Tháng</div>
+                      <div className="text-[10px] text-slate-400 font-normal">Chạy theo Ngày</div>
+                    </div>
+                  </div>
+                  <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
+                    scheduleConfig.auto_crawl_frequency === 'MONTHLY' ? 'border-[#005b9a] bg-[#005b9a] text-white font-bold' : 'border-slate-300'
+                  }`}>
+                    {scheduleConfig.auto_crawl_frequency === 'MONTHLY' && '✓'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScheduleConfig({ ...scheduleConfig, auto_crawl_frequency: 'DAILY' })
+                  }}
+                  className={`p-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between border ${
+                    scheduleConfig.auto_crawl_frequency === 'DAILY'
+                      ? 'bg-white text-[#005b9a] shadow-sm border-[#005b9a] ring-2 ring-blue-100'
+                      : 'bg-white/50 text-slate-600 hover:bg-white border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4" />
+                    <div className="text-left leading-tight">
+                      <div>Hằng Ngày</div>
+                      <div className="text-[10px] text-slate-400 font-normal">Mỗi 24 giờ</div>
+                    </div>
+                  </div>
+                  <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] ${
+                    scheduleConfig.auto_crawl_frequency === 'DAILY' ? 'border-[#005b9a] bg-[#005b9a] text-white font-bold' : 'border-slate-300'
+                  }`}>
+                    {scheduleConfig.auto_crawl_frequency === 'DAILY' && '✓'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Calendar & Analog Clock Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Calendar Widget */}
+                <div className="bg-slate-50/60 rounded-2xl p-4 border border-slate-200/80 space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-[#005b9a]" />
+                      <span>Chọn Ngày Cào</span>
+                    </label>
+                    <span className="text-[10px] font-mono font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                      {(scheduleConfig.auto_crawl_frequency || 'WEEKLY') === 'WEEKLY' && `Lặp lại: ${WEEKDAYS.find(w => w.value === (scheduleConfig.auto_crawl_weekday ?? 0))?.label}`}
+                      {scheduleConfig.auto_crawl_frequency === 'MONTHLY' && `Lặp lại: Ngày ${scheduleConfig.auto_crawl_day_of_month ?? 1} hằng tháng`}
+                      {scheduleConfig.auto_crawl_frequency === 'DAILY' && 'Lặp lại hằng ngày'}
+                    </span>
+                  </div>
+
+                  {scheduleConfig.auto_crawl_frequency === 'DAILY' ? (
+                    <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 text-center space-y-2 my-auto">
+                      <div className="w-10 h-10 rounded-xl bg-white text-[#005b9a] font-bold text-lg flex items-center justify-center mx-auto shadow-xs border border-blue-100">
+                        <Zap className="w-5 h-5 text-[#005b9a]" />
+                      </div>
+                      <h4 className="font-bold text-xs text-slate-800">Chế độ Quét Hằng Ngày</h4>
+                      <p className="text-[11px] text-slate-600 leading-relaxed max-w-xs mx-auto">
+                        Tự động cào ngầm lặp lại <strong>mỗi 24 giờ</strong> vào mốc giờ đã chọn.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {(scheduleConfig.auto_crawl_frequency || 'WEEKLY') === 'WEEKLY' && (
+                        <div className="grid grid-cols-7 gap-1">
+                          {WEEKDAYS.map((w) => {
+                            const isSelected = (scheduleConfig.auto_crawl_weekday ?? 0) === w.value
+                            return (
+                              <button
+                                key={w.value}
+                                type="button"
+                                onClick={() => {
+                                  setScheduleConfig((prev: any) => ({ ...prev, auto_crawl_frequency: 'WEEKLY', auto_crawl_weekday: w.value }))
+                                }}
+                                className={`py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer text-center ${
+                                  isSelected
+                                    ? 'bg-[#005b9a] text-white shadow-xs'
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                {w.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2">
+                        {/* Month Navigation */}
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-slate-800">
+                            {currentCalendarDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={handlePrevMonth}
+                              className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                              title="Tháng trước"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleNextMonth}
+                              className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                              title="Tháng sau"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Weekday Row */}
+                        <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-slate-400 tracking-wider py-1 border-b border-slate-100 mb-1">
+                          {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((dayName) => (
+                            <div key={dayName}>{dayName}</div>
+                          ))}
+                        </div>
+
+                        {/* Day Grid */}
+                        {(() => {
+                          const year = currentCalendarDate.getFullYear()
+                          const month = currentCalendarDate.getMonth()
+                          const firstDayIndex = new Date(year, month, 1).getDay()
+                          const totalDays = new Date(year, month + 1, 0).getDate()
+                          const prevMonthLastDate = new Date(year, month, 0).getDate()
+
+                          const daysElements = []
+
+                          for (let i = firstDayIndex - 1; i >= 0; i--) {
+                            const prevDay = prevMonthLastDate - i
+                            daysElements.push(
+                              <div
+                                key={`prev-${prevDay}`}
+                                className="text-slate-300 font-medium text-xs w-8 h-8 flex items-center justify-center mx-auto"
+                              >
+                                {prevDay}
+                              </div>
+                            )
+                          }
+
+                          for (let d = 1; d <= totalDays; d++) {
+                            const clickedDate = new Date(year, month, d)
+                            const weekday = (clickedDate.getDay() + 6) % 7
+
+                            const isSelected = scheduleConfig.auto_crawl_frequency === 'MONTHLY'
+                              ? (scheduleConfig.auto_crawl_day_of_month ?? 1) === d
+                              : (scheduleConfig.auto_crawl_weekday ?? 0) === weekday
+
+                            daysElements.push(
+                              <button
+                                key={`day-${d}`}
+                                type="button"
+                                onClick={() => {
+                                  setScheduleConfig((prev: any) => ({
+                                    ...prev,
+                                    auto_crawl_frequency: 'MONTHLY',
+                                    auto_crawl_day_of_month: d,
+                                    auto_crawl_weekday: weekday,
+                                  }))
+                                }}
+                                className={
+                                  isSelected
+                                    ? 'bg-[#005b9a] text-white rounded-xl shadow-md font-bold w-8 h-8 flex items-center justify-center mx-auto cursor-pointer transition-all'
+                                    : 'text-slate-800 font-bold text-xs w-8 h-8 flex items-center justify-center mx-auto rounded-xl hover:bg-slate-100 cursor-pointer transition-all'
+                                }
+                              >
+                                {d}
+                              </button>
+                            )
+                          }
+
+                          const totalGridCells = Math.ceil((firstDayIndex + totalDays) / 7) * 7
+                          const nextMonthDaysCount = totalGridCells - (firstDayIndex + totalDays)
+                          for (let nextD = 1; nextD <= nextMonthDaysCount; nextD++) {
+                            daysElements.push(
+                              <div
+                                key={`next-${nextD}`}
+                                className="text-slate-300 font-medium text-xs w-8 h-8 flex items-center justify-center mx-auto"
+                              >
+                                {nextD}
+                              </div>
+                            )
+                          }
+
+                          return <div className="grid grid-cols-7 gap-1">{daysElements}</div>
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Analog Clock & Digital Time Picker Widget */}
+                <div className="bg-slate-50/60 rounded-2xl p-4 border border-slate-200/80 space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-[#005b9a]" />
+                      <span>Chọn Giờ Kích Hoạt</span>
+                    </label>
+                    <span className="text-[10px] font-mono text-[#005b9a] font-bold bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                      {((scheduleConfig.auto_crawl_hour ?? 2) < 10 ? `0${scheduleConfig.auto_crawl_hour ?? 2}` : scheduleConfig.auto_crawl_hour ?? 2)}:{(scheduleConfig.auto_crawl_minute ?? 0) < 10 ? `0${scheduleConfig.auto_crawl_minute ?? 0}` : scheduleConfig.auto_crawl_minute ?? 0}
+                    </span>
+                  </div>
+
+                  {/* Visual Analog Clock Face */}
+                  <div className="py-1">
+                    <div className="w-36 h-36 border-4 border-slate-200/80 rounded-full bg-white relative shadow-inner mx-auto flex items-center justify-center">
+                      {Array.from({ length: 12 }).map((_, i) => (
+                        <div
+                          key={i}
+                          style={{ transform: `rotate(${i * 30}deg) translateY(-56px)` }}
+                          className="absolute w-1 h-2 bg-slate-300 rounded-full"
+                        />
+                      ))}
+                      {(() => {
+                        const hour24 = scheduleConfig.auto_crawl_hour ?? 2
+                        const minute = scheduleConfig.auto_crawl_minute ?? 0
+                        const hour12 = hour24 % 12
+                        const hourAngle = hour12 * 30 + minute * 0.5
+                        const minuteAngle = minute * 6
+                        return (
+                          <>
+                            <div
+                              style={{ transform: `rotate(${hourAngle}deg)` }}
+                              className="w-1.5 h-10 bg-slate-700 absolute top-4 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
+                            />
+                            <div
+                              style={{ transform: `rotate(${minuteAngle}deg)` }}
+                              className="w-1 h-13 bg-[#005b9a] absolute top-2 left-1/2 -translate-x-1/2 origin-bottom rounded-full transition-transform duration-300 shadow-xs"
+                            />
+                          </>
+                        )
+                      })()}
+                      <div className="w-3 h-3 bg-slate-800 rounded-full z-10 border-2 border-white shadow-xs" />
+                    </div>
+                  </div>
+
+                  {/* Digital Time Picker */}
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    {(() => {
+                      const hour24 = scheduleConfig.auto_crawl_hour ?? 2
+                      const minute = scheduleConfig.auto_crawl_minute ?? 0
+                      const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12
+                      const ampm = hour24 >= 12 ? 'PM' : 'AM'
+
+                      return (
+                        <>
+                          <select
+                            value={hour12}
+                            onChange={(e) => {
+                              const selectedH12 = parseInt(e.target.value, 10)
+                              let newH24 = selectedH12
+                              if (ampm === 'PM') {
+                                newH24 = selectedH12 === 12 ? 12 : selectedH12 + 12
+                              } else {
+                                newH24 = selectedH12 === 12 ? 0 : selectedH12
+                              }
+                              setScheduleConfig((prev: any) => ({ ...prev, auto_crawl_hour: newH24 }))
+                            }}
+                            className="bg-white hover:bg-slate-100 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200 focus:outline-none cursor-pointer"
+                          >
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                              <option key={h} value={h}>
+                                {h < 10 ? `0${h}` : h}
+                              </option>
+                            ))}
+                          </select>
+
+                          <span className="text-slate-400 font-bold">:</span>
+
+                          <select
+                            value={minute}
+                            onChange={(e) => {
+                              const selectedMin = parseInt(e.target.value, 10)
+                              setScheduleConfig((prev: any) => ({ ...prev, auto_crawl_minute: selectedMin }))
+                            }}
+                            className="bg-white hover:bg-slate-100 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200 focus:outline-none cursor-pointer"
+                          >
+                            {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                              <option key={m} value={m}>
+                                {m < 10 ? `0${m}` : m}
+                              </option>
+                            ))}
+                          </select>
+
+                          <select
+                            value={ampm}
+                            onChange={(e) => {
+                              const newAmPm = e.target.value
+                              let newH24 = hour12
+                              if (newAmPm === 'PM') {
+                                newH24 = hour12 === 12 ? 12 : hour12 + 12
+                              } else {
+                                newH24 = hour12 === 12 ? 0 : hour12
+                              }
+                              setScheduleConfig((prev: any) => ({ ...prev, auto_crawl_hour: newH24 }))
+                            }}
+                            className="bg-white hover:bg-slate-100 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200 focus:outline-none cursor-pointer"
+                          >
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                          </select>
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl px-5 py-2 text-xs font-bold cursor-pointer transition-all"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveModalSchedule}
+                disabled={savingSchedule}
+                className="bg-[#005b9a] hover:bg-[#004b7c] text-white font-bold px-5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50 transition-all"
+              >
+                {savingSchedule ? (
+                  <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 text-white" />
+                )}
+                <span>Lưu Cấu Hình</span>
+              </button>
             </div>
           </div>
         </div>
