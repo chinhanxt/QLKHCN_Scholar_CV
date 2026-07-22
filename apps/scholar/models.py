@@ -359,3 +359,67 @@ class CrawlHistory(BaseModel):
 
     def __str__(self):
         return f"{self.task_id} - {self.status}"
+
+
+# ==============================================================================
+# 5. USER SCHOLAR PROFILE & PUBLICATIONS
+# ==============================================================================
+
+class ProfileStatus(models.TextChoices):
+    DRAFT = "DRAFT", _("Chưa gửi hồ sơ")
+    PENDING = "PENDING", _("Đang chờ duyệt")
+    APPROVED = "APPROVED", _("Đã phê duyệt")
+    REJECTED = "REJECTED", _("Từ chối")
+
+
+class ScholarProfile(BaseModel):
+    user = models.OneToOneField(
+        "users.User",
+        on_delete=models.CASCADE,
+        related_name="scholar_profile",
+        verbose_name=_("User"),
+    )
+    scholar_url = models.URLField(_("Scholar URL"), max_length=500, blank=True, null=True)
+    scholar_id = models.CharField(_("Scholar ID"), max_length=100, blank=True, null=True)
+    status = models.CharField(
+        _("Status"),
+        max_length=20,
+        choices=ProfileStatus.choices,
+        default=ProfileStatus.DRAFT,
+        db_index=True,
+    )
+    submitted_at = models.DateTimeField(_("Submitted At"), blank=True, null=True)
+    approved_at = models.DateTimeField(_("Approved At"), blank=True, null=True)
+    total_citations = models.IntegerField(_("Total Citations"), default=0)
+    h_index = models.IntegerField(_("H-Index"), default=0)
+    i10_index = models.IntegerField(_("i10-Index"), default=0)
+
+    class Meta:
+        db_table = "scholar_profiles"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.email} - {self.status}"
+
+
+class ScholarPublication(BaseModel):
+    profile = models.ForeignKey(
+        ScholarProfile,
+        on_delete=models.CASCADE,
+        related_name="publications",
+        verbose_name=_("Scholar Profile"),
+    )
+    title = models.CharField(_("Publication Title"), max_length=500)
+    authors = models.TextField(_("Authors"), blank=True, default="")
+    journal = models.CharField(_("Journal / Conference"), max_length=500, blank=True, default="")
+    pub_year = models.IntegerField(_("Publication Year"), blank=True, null=True)
+    citations = models.IntegerField(_("Citations Count"), default=0)
+    url = models.URLField(_("Publication Link"), max_length=500, blank=True, default="")
+
+    class Meta:
+        db_table = "scholar_user_publications"
+        ordering = ["-pub_year", "-citations"]
+
+    def __str__(self):
+        return self.title
+

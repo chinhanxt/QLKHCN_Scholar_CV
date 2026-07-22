@@ -115,3 +115,30 @@ def test_is_profile_owner_permission():
     assert permission.has_object_permission(request_admin, None, profile_obj) is True
     assert permission.has_object_permission(request_admin, None, owner_user) is True
 
+
+@pytest.mark.django_db
+def test_scholar_profile_and_publication_creation():
+    from apps.scholar.models import ScholarProfile, ScholarPublication
+
+    user = User.objects.create_user(email="scholar_user@example.com", username="scholar1", password="password123")
+    profile = ScholarProfile.objects.create(
+        user=user,
+        scholar_url="https://scholar.google.com/citations?user=AHHDABDaaaaJ",
+        scholar_id="AHHDABDaaaaJ",
+        status="PENDING",
+    )
+    assert profile.status == "PENDING"
+    assert profile.scholar_id == "AHHDABDaaaaJ"
+
+    pub = ScholarPublication.objects.create(
+        profile=profile,
+        title="Deep Learning in AI Research",
+        authors="Nguyen Van A, Tran Van B",
+        journal="IEEE Transactions",
+        pub_year=2024,
+        citations=42,
+    )
+    assert pub.profile == profile
+    assert pub.citations == 42
+
+
