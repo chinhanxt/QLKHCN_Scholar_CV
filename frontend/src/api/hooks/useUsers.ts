@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { usersApi, type UsersParams } from '@/api/endpoints/users'
-import type { UpdateUserPayload, UUID } from '@/types'
+import type { CreateUserPayload, UpdateUserPayload, ResetUserPasswordPayload, UUID } from '@/types'
 
 const USERS_KEY = ['users'] as const
 
@@ -25,6 +25,16 @@ export function useUser(id: UUID, enabled = true) {
   })
 }
 
+export function useCreateUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateUserPayload) => usersApi.create(payload).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: usersKeys.all() })
+    },
+  })
+}
+
 export function useUpdateUser() {
   const qc = useQueryClient()
   return useMutation({
@@ -35,3 +45,21 @@ export function useUpdateUser() {
     },
   })
 }
+
+export function useDeleteUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: UUID) => usersApi.delete(id).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: usersKeys.all() })
+    },
+  })
+}
+
+export function useResetUserPassword() {
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: UUID; payload: ResetUserPasswordPayload }) =>
+      usersApi.resetPassword(id, payload).then((r) => r.data),
+  })
+}
+
