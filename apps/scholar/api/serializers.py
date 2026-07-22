@@ -72,7 +72,7 @@ class PublicationSerializer(serializers.ModelSerializer):
         ]
 
 
-class AuthorProfileSerializer(serializers.ModelSerializer):
+class AuthorProfileDetailSerializer(serializers.ModelSerializer):
     publications = PublicationSerializer(many=True, read_only=True)
 
     class Meta:
@@ -84,8 +84,12 @@ class AuthorProfileSerializer(serializers.ModelSerializer):
             "affiliation",
             "email_domain",
             "citedby",
+            "citedby5y",
             "hindex",
+            "hindex5y",
             "i10index",
+            "i10index5y",
+            "cites_per_year",
             "interests",
             "publications",
             "auto_scan_enabled",
@@ -95,6 +99,10 @@ class AuthorProfileSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+AuthorProfileSerializer = AuthorProfileDetailSerializer
+
 
 
 class ScrapeAuthorRequestSerializer(serializers.Serializer):
