@@ -157,3 +157,4 @@ frontend/dist/
 *.sw?
 .gemini/
 backup/
+backup_db_*.json
