@@ -254,6 +254,7 @@ class ScholarProfileSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source="user.email", read_only=True)
     publications = ScholarPublicationSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    author_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = ScholarProfile
@@ -270,7 +271,15 @@ class ScholarProfileSerializer(serializers.ModelSerializer):
             "h_index",
             "i10_index",
             "publications",
+            "author_detail",
         ]
+
+    def get_author_detail(self, obj):
+        if obj.scholar_id:
+            author = AuthorProfile.objects.filter(scholar_id=obj.scholar_id).prefetch_related("publications").first()
+            if author:
+                return AuthorProfileDetailSerializer(author).data
+        return None
 
 
 class ProfileSubmitSerializer(serializers.Serializer):

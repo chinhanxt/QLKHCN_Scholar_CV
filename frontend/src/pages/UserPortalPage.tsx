@@ -1,26 +1,27 @@
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import {
-  ExternalLink,
+  GraduationCap,
   Clock,
   CheckCircle2,
   AlertCircle,
-  FileText,
+  ExternalLink,
   KeyRound,
-  Award,
-  TrendingUp,
 } from 'lucide-react'
 import { useMyProfile, useSubmitScholarProfile } from '@/api/hooks/useUserPortal'
+import type { PublicationDetail } from '@/api/endpoints/scholar'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table'
 import { Spinner } from '@/components/ui/spinner'
+import { PublicationTableList } from '@/components/scholar/PublicationTableList'
+import { PublicationDetailPanel } from '@/components/scholar/PublicationDetailPanel'
 
 const submitSchema = z.object({
   scholar_url: z
@@ -45,6 +46,14 @@ export function UserPortalPage() {
   const { data: profile, isLoading } = useMyProfile()
   const submitProfile = useSubmitScholarProfile()
 
+  // Interactive UI State for Profile Tab
+  const [selectedPublication, setSelectedPublication] = useState<PublicationDetail | null>(null)
+  const [pubSearch, setPubSearch] = useState('')
+  const [yearFilter, setYearFilter] = useState('All')
+  const [quartileFilter, setQuartileFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('citations_desc')
+  const [selectedPubIds, setSelectedPubIds] = useState<string[]>([])
+
   const {
     register,
     handleSubmit,
@@ -64,6 +73,158 @@ export function UserPortalPage() {
     })
   }
 
+  // Publication items mapping from author_detail or profile
+  const authorDetail = profile?.author_detail
+  const publicationsList: PublicationDetail[] =
+    authorDetail?.publications && authorDetail.publications.length > 0
+      ? (authorDetail.publications as unknown as PublicationDetail[])
+      : (profile?.publications || []).map((p, idx) => ({
+          id: String(p.id),
+          title: p.title,
+          authors_list: p.authors,
+          venue: p.journal,
+          year: p.pub_year ? String(p.pub_year) : '',
+          citations: p.citations || 0,
+          pub_url: p.url,
+          sjr_q: 'N/A',
+          if_val: 'N/A',
+          wos: 'N/A',
+          display_order: idx + 1,
+          cites_per_year: {},
+          journal: null,
+        }))
+
+  // Multi-selection handlers
+  const handleToggleSelect = (pubId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation()
+    setSelectedPubIds((prev) =>
+      prev.includes(pubId) ? prev.filter((id) => id !== pubId) : [...prev, pubId]
+    )
+  }
+
+  const handleToggleSelectAll = () => {
+    if (selectedPubIds.length === publicationsList.length) {
+      setSelectedPubIds([])
+    } else {
+      setSelectedPubIds(publicationsList.map((p) => p.id))
+    }
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedPubIds([])
+  }
+
+  // Export Excel handler
+  const handleExport = async () => {
+    if (!publicationsList || publicationsList.length === 0) {
+      toast.error('Không có dữ liệu bài báo để xuất báo cáo!')
+      return
+    }
+
+    try {
+      const isSelectiveExport = selectedPubIds.length > 0
+      const pubsToExport = isSelectiveExport
+        ? publicationsList.filter((p) => selectedPubIds.includes(p.id))
+        : publicationsList
+
+      toast.info(
+        isSelectiveExport
+          ? `Đang xuất ${pubsToExport.length} bài báo đã chọn...`
+          : 'Đang tạo file Excel (.xlsx) chuyên nghiệp...'
+      )
+      const ExcelJSModule = await import('exceljs')
+      const Workbook =
+        ExcelJSModule.Workbook ||
+        (ExcelJSModule as any).default?.Workbook ||
+        (ExcelJSModule as any).default
+      const workbook = new Workbook()
+
+      const sheet1 = workbook.addWorksheet('Tổng quan')
+      sheet1.views = [{ showGridLines: true }]
+      sheet1.columns = [
+        { key: 'A', width: 35 },
+        { key: 'B', width: 45 },
+        { key: 'C', width: 15 },
+        { key: 'D', width: 15 },
+      ]
+
+      sheet1.mergeCells('A1:D2')
+      const banner = sheet1.getCell('A1')
+      banner.value = isSelectiveExport
+        ? `BÁO CÁO HỒ SƠ TÁC GIẢ - XUẤT LỰA CHỌN (${pubsToExport.length} BÀI)`
+        : 'BÁO CÁO HỒ SƠ TÁC GIẢ KHOA HỌC (GOOGLE SCHOLAR)'
+      banner.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } }
+      banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } }
+      banner.alignment = { vertical: 'middle', horizontal: 'center' }
+
+      sheet1.getCell('A4').value = 'I. THÔNG TIN CHUNG TÁC GIẢ'
+      sheet1.getCell('A4').font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF2563EB' } }
+      sheet1.mergeCells('A4:D4')
+
+      const authorName = authorDetail?.name || profile?.user_email || 'Hồ sơ Tác giả'
+      const infoFields = [
+        ['Họ và tên tác giả', authorName],
+        ['Cơ quan công tác', authorDetail?.affiliation || 'Mục liên kết không xác định'],
+        ['Tổng số trích dẫn', authorDetail?.citedby || profile?.total_citations || 0],
+        ['Chỉ số H-index', authorDetail?.hindex || profile?.h_index || 0],
+        ['Chỉ số i10-index', authorDetail?.i10index || profile?.i10_index || 0],
+      ]
+
+      infoFields.forEach((row, idx) => {
+        const rIdx = 5 + idx
+        sheet1.getCell(`A${rIdx}`).value = row[0]
+        sheet1.getCell(`A${rIdx}`).font = { bold: true }
+        sheet1.getCell(`B${rIdx}`).value = row[1]
+      })
+
+      sheet1.getCell('A12').value = 'II. DANH SÁCH BÀI BÁO KHOA HỌC'
+      sheet1.getCell('A12').font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF2563EB' } }
+
+      const headers = ['STT', 'Tên bài báo', 'Tác giả', 'Năm', 'Trích dẫn', 'Tạp chí / Nơi XB']
+      headers.forEach((h, i) => {
+        const col = String.fromCharCode(65 + i)
+        const cell = sheet1.getCell(`${col}14`)
+        cell.value = h
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } }
+      })
+
+      pubsToExport.forEach((pub, i) => {
+        const rIdx = 15 + i
+        sheet1.getCell(`A${rIdx}`).value = i + 1
+        sheet1.getCell(`B${rIdx}`).value = pub.title
+        sheet1.getCell(`C${rIdx}`).value = pub.authors_list
+        sheet1.getCell(`D${rIdx}`).value = pub.year || '-'
+        sheet1.getCell(`E${rIdx}`).value = pub.citations || 0
+        sheet1.getCell(`F${rIdx}`).value = pub.venue || '-'
+      })
+
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      const url = window.URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `GoogleScholar_Profile_${authorName.replace(/\s+/g, '_')}.xlsx`
+      anchor.click()
+      window.URL.revokeObjectURL(url)
+      toast.success('Đã xuất báo cáo Excel thành công!')
+    } catch (err) {
+      toast.error('Lỗi khi xuất file Excel!')
+    }
+  }
+
+  // Citation bar chart calculation
+  const citesMap = authorDetail?.cites_per_year || {}
+  const currentYear = new Date().getFullYear()
+  const recentYears = Array.from({ length: 8 }, (_, i) => currentYear - 7 + i)
+  const recentCitationValues = recentYears.map((yr) => ({
+    year: yr,
+    count: citesMap[String(yr)] || citesMap[yr] || 0,
+  }))
+  const maxRecentCites = Math.max(...recentCitationValues.map((v) => v.count), 1)
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12 text-slate-500 text-sm">
@@ -78,82 +239,217 @@ export function UserPortalPage() {
       {activeTab === 'profile' && (
         <div className="space-y-6">
           {profile?.status === 'APPROVED' ? (
-            <>
-              {/* Stat Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card className="p-4 rounded-2xl border border-slate-200 bg-white flex items-center justify-between shadow-2xs">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Tổng trích dẫn</p>
-                    <p className="text-2xl font-extrabold text-slate-900">{profile.total_citations}</p>
+            <div className="flex flex-col gap-6">
+              {/* Profile Header Banner */}
+              <Card className="border-[#E5E7EB] rounded-3xl shadow-sm bg-white overflow-hidden p-6 relative">
+                <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-6">
+                  {/* Circular avatar containing GraduationCap icon */}
+                  <div className="relative shrink-0">
+                    <div className="h-28 w-28 rounded-full border-4 border-[#DBEAFE] bg-slate-100 flex items-center justify-center text-slate-400 overflow-hidden shadow-sm">
+                      <GraduationCap className="h-14 w-14 text-slate-500" />
+                    </div>
                   </div>
-                  <TrendingUp className="h-8 w-8 text-blue-600 opacity-80" />
-                </Card>
-                <Card className="p-4 rounded-2xl border border-slate-200 bg-white flex items-center justify-between shadow-2xs">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Chỉ số h-index</p>
-                    <p className="text-2xl font-extrabold text-indigo-700">{profile.h_index}</p>
-                  </div>
-                  <Award className="h-8 w-8 text-indigo-600 opacity-80" />
-                </Card>
-                <Card className="p-4 rounded-2xl border border-slate-200 bg-white flex items-center justify-between shadow-2xs">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Chỉ số i10-index</p>
-                    <p className="text-2xl font-extrabold text-emerald-700">{profile.i10_index}</p>
-                  </div>
-                  <Award className="h-8 w-8 text-emerald-600 opacity-80" />
-                </Card>
-              </div>
 
-              {/* Publications Table */}
-              <Card className="rounded-2xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-blue-600" />
-                    Danh sách Bài báo & Công trình khoa học ({profile.publications?.length || 0})
-                  </h3>
+                  {/* Author Details Info */}
+                  <div className="flex-1 flex flex-col justify-center min-w-0">
+                    <div className="flex items-center justify-center sm:justify-start gap-2.5 flex-wrap">
+                      <h1 className="text-2xl font-bold text-[#0F172A] truncate">
+                        {authorDetail?.name || profile.user_email || 'Hồ sơ Tác giả'}
+                      </h1>
+                    </div>
+
+                    <p className="text-sm font-semibold text-slate-700 mt-1.5">
+                      {authorDetail?.affiliation && authorDetail.affiliation !== 'Unknown affiliation'
+                        ? authorDetail.affiliation
+                        : 'Mục liên kết không xác định'}
+                    </p>
+
+                    <p className="text-xs text-slate-500 mt-1">
+                      {authorDetail?.email_domain
+                        ? `Email được xác minh tại ${authorDetail.email_domain.replace(/^@/, '')}`
+                        : profile.user_email
+                        ? `Email được xác minh tại ${profile.user_email.split('@')[1]}`
+                        : 'Không có email được xác minh'}
+                    </p>
+
+                    <div className="flex flex-wrap justify-center sm:justify-start gap-1.5 mt-3">
+                      {authorDetail?.interests &&
+                        authorDetail.interests.map((int, idx) => (
+                          <span
+                            key={idx}
+                            className="text-[10px] font-bold bg-[#F8FAFC] text-slate-650 border border-[#E5E7EB] rounded-lg px-2.5 py-0.5"
+                          >
+                            {int}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
                 </div>
-                <Table>
-                  <THead>
-                    <TR className="bg-slate-50">
-                      <TH className="py-3 px-4 font-semibold text-slate-700">Tên bài báo</TH>
-                      <TH className="py-3 px-4 font-semibold text-slate-700">Tác giả</TH>
-                      <TH className="py-3 px-4 font-semibold text-slate-700">Năm</TH>
-                      <TH className="py-3 px-4 font-semibold text-slate-700 text-right">Trích dẫn</TH>
-                    </TR>
-                  </THead>
-                  <TBody>
-                    {profile.publications?.map((pub) => (
-                      <TR key={pub.id} className="hover:bg-slate-50/60">
-                        <TD className="py-3 px-4 font-medium text-slate-900 text-sm">
-                          {pub.url ? (
-                            <a
-                              href={pub.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="hover:underline text-blue-700 flex items-center gap-1"
-                            >
-                              {pub.title} <ExternalLink className="h-3 w-3 shrink-0" />
-                            </a>
-                          ) : (
-                            pub.title
-                          )}
-                        </TD>
-                        <TD className="py-3 px-4 text-xs text-slate-600">{pub.authors}</TD>
-                        <TD className="py-3 px-4 text-xs font-semibold text-slate-700">{pub.pub_year || '-'}</TD>
-                        <TD className="py-3 px-4 text-xs font-bold text-blue-700 text-right">{pub.citations}</TD>
-                      </TR>
-                    ))}
-                    {(!profile.publications || profile.publications.length === 0) && (
-                      <TR>
-                        <TD colSpan={4} className="py-8 text-center text-slate-500 text-sm">
-                          Chưa có công trình khoa học nào được ghi nhận.
-                        </TD>
-                      </TR>
-                    )}
-                  </TBody>
-                </Table>
               </Card>
-            </>
+
+              {/* Main Content Layout (Split 70/30) */}
+              <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 items-start">
+                {/* LEFT (70% in list view, 100% in detail view) */}
+                <div
+                  className={
+                    selectedPublication
+                      ? 'lg:col-span-10 flex flex-col gap-6'
+                      : 'lg:col-span-7 flex flex-col gap-6'
+                  }
+                >
+                  {selectedPublication ? (
+                    <PublicationDetailPanel
+                      publication={selectedPublication}
+                      authorName={authorDetail?.name || profile.user_email || ''}
+                      onBack={() => setSelectedPublication(null)}
+                    />
+                  ) : (
+                    <PublicationTableList
+                      publications={publicationsList}
+                      selectedPubIds={selectedPubIds}
+                      onSelectPub={(pub) => setSelectedPublication(pub)}
+                      onToggleSelectPub={handleToggleSelect}
+                      onToggleSelectAll={handleToggleSelectAll}
+                      onDeselectAll={handleDeselectAll}
+                      onExport={handleExport}
+                      searchKeyword={pubSearch}
+                      setSearchKeyword={setPubSearch}
+                      yearFilter={yearFilter}
+                      setYearFilter={setYearFilter}
+                      quartileFilter={quartileFilter}
+                      setQuartileFilter={setQuartileFilter}
+                      sortBy={sortBy}
+                      setSortBy={setSortBy}
+                    />
+                  )}
+                </div>
+
+                {/* RIGHT (30% Sidebar Widget: Cited by Table + Citation Trend Chart) */}
+                {!selectedPublication && (
+                  <div className="lg:col-span-3 flex flex-col gap-6 w-full">
+                    <Card className="border-[#E5E7EB] rounded-3xl bg-white p-5 shadow-sm">
+                      <div className="flex justify-between items-center mb-3">
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Trích dẫn bởi
+                        </h3>
+                      </div>
+
+                      {/* Metrics Comparison Table */}
+                      <table className="w-full text-left text-[11px] border-collapse mb-5">
+                        <thead>
+                          <tr className="text-slate-400 font-bold border-b border-slate-100">
+                            <th className="py-1"></th>
+                            <th className="py-1 text-right w-16">Tất cả</th>
+                            <th className="py-1 text-right w-20">Từ 2021</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                          <tr>
+                            <td className="py-2 font-semibold">Số trích dẫn</td>
+                            <td className="py-2 text-right font-bold text-slate-800">
+                              {authorDetail?.citedby || profile.total_citations}
+                            </td>
+                            <td className="py-2 text-right font-bold text-slate-800">
+                              {authorDetail?.citedby5y ?? 0}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 font-semibold">Chỉ số h-index</td>
+                            <td className="py-2 text-right font-bold text-slate-800">
+                              {authorDetail?.hindex || profile.h_index}
+                            </td>
+                            <td className="py-2 text-right font-bold text-slate-800">
+                              {authorDetail?.hindex5y ?? 0}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 font-semibold">Chỉ số i10-index</td>
+                            <td className="py-2 text-right font-bold text-slate-800">
+                              {authorDetail?.i10index || profile.i10_index}
+                            </td>
+                            <td className="py-2 text-right font-bold text-slate-800">
+                              {authorDetail?.i10index5y ?? 0}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Annual Citation Trend Bar Chart */}
+                      {recentCitationValues.length === 0 ? (
+                        <div className="flex h-36 items-center justify-center text-xs text-[#64748B] italic">
+                          Chưa có lịch sử trích dẫn theo năm.
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="relative bg-slate-50/50 border border-slate-100 rounded-2xl p-3 flex justify-center items-center">
+                            <svg viewBox="0 0 240 140" className="w-full h-auto overflow-visible">
+                              {/* Horizontal Grid Lines */}
+                              <line x1="10" y1="20" x2="210" y2="20" stroke="#E2E8F0" strokeWidth="0.8" />
+                              <line x1="10" y1="70" x2="210" y2="70" stroke="#E2E8F0" strokeWidth="0.8" />
+                              <line x1="10" y1="120" x2="210" y2="120" stroke="#94A3B8" strokeWidth="1" />
+
+                              {/* Ticks */}
+                              <text x="215" y="24" className="text-[9px] font-semibold fill-slate-500">
+                                {maxRecentCites}
+                              </text>
+                              <text x="215" y="74" className="text-[9px] font-semibold fill-slate-500">
+                                {Math.round(maxRecentCites / 2)}
+                              </text>
+                              <text x="215" y="124" className="text-[9px] font-semibold fill-slate-500">
+                                0
+                              </text>
+
+                              {/* Bars */}
+                              {recentCitationValues.map((v, i) => {
+                                const barWidth = 14
+                                const spacing =
+                                  recentCitationValues.length > 1
+                                    ? (190 - barWidth) / (recentCitationValues.length - 1)
+                                    : 0
+                                const x = 15 + i * spacing
+                                const barHeight =
+                                  maxRecentCites > 0 ? (v.count / maxRecentCites) * 100 : 0
+                                const y = 120 - barHeight
+                                return (
+                                  <g key={v.year} className="group cursor-pointer">
+                                    <rect
+                                      x={x}
+                                      y={y}
+                                      width={barWidth}
+                                      height={barHeight}
+                                      fill="#777777"
+                                      className="hover:fill-[#2563EB] transition-colors"
+                                    />
+                                    {v.count > 0 && (
+                                      <text
+                                        x={x + barWidth / 2}
+                                        y={y - 4}
+                                        textAnchor="middle"
+                                        className="text-[8px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        {v.count}
+                                      </text>
+                                    )}
+                                    <text
+                                      x={x + barWidth / 2}
+                                      y="134"
+                                      textAnchor="middle"
+                                      className="text-[8px] font-bold fill-slate-400"
+                                    >
+                                      {v.year}
+                                    </text>
+                                  </g>
+                                )
+                              })}
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             <Card className="p-8 text-center rounded-2xl border border-slate-200 bg-white space-y-4 max-w-xl mx-auto shadow-2xs">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 mx-auto">

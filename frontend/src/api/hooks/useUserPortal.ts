@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
+import type { AuthorProfileDetail } from '@/api/endpoints/scholar'
 
 export interface ScholarPublication {
   id: string
@@ -24,6 +25,7 @@ export interface ScholarProfile {
   h_index: number
   i10_index: number
   publications: ScholarPublication[]
+  author_detail?: AuthorProfileDetail | null
 }
 
 export function useMyProfile() {
