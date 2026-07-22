@@ -1,3 +1,4 @@
+import re
 from rest_framework import serializers
 from apps.scholar.models import (
     AuthorProfile, Publication, Journal,
@@ -238,12 +239,18 @@ class AntiBlockConfigSerializer(serializers.ModelSerializer):
 
 
 class ScholarPublicationSerializer(serializers.ModelSerializer):
+    """
+    Serializer cho bài báo thuộc Google Scholar Profile.
+    """
     class Meta:
         model = ScholarPublication
         fields = ["id", "title", "authors", "journal", "pub_year", "citations", "url"]
 
 
 class ScholarProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer hiển thị thông tin hồ sơ Google Scholar của người dùng.
+    """
     publications = ScholarPublicationSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
 
@@ -265,9 +272,15 @@ class ScholarProfileSerializer(serializers.ModelSerializer):
 
 
 class ProfileSubmitSerializer(serializers.Serializer):
+    """
+    Serializer xử lý dữ liệu gửi liên kết hồ sơ Google Scholar.
+    """
     scholar_url = serializers.URLField(required=True)
 
-    def validate_scholar_url(self, value):
-        if "scholar.google" not in value.lower():
+    def validate_scholar_url(self, value: str) -> str:
+        value_clean = value.strip()
+        if "scholar.google" not in value_clean.lower():
             raise serializers.ValidationError("Đường dẫn phải là liên kết hợp lệ từ Google Scholar.")
-        return value.strip()
+        if not re.search(r"[?&]user=([a-zA-Z0-9_-]+)", value_clean):
+            raise serializers.ValidationError("Đường dẫn Google Scholar phải chứa tham số user=ID hợp lệ.")
+        return value_clean

@@ -7,6 +7,8 @@ from rest_framework.viewsets import ViewSet, ModelViewSet
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from typing import Any, Optional
+from rest_framework.request import Request
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from apps.core.permissions import IsAdminUser
@@ -901,20 +903,32 @@ class RotateTorView(APIView):
 
 
 class UserScholarProfileViewSet(ViewSet):
+    """
+    ViewSet dành cho người dùng cá nhân xem và gửi thông tin hồ sơ Google Scholar.
+    """
     permission_classes = [IsAuthenticated]
 
-    def _get_or_create_profile(self, user):
+    def _get_or_create_profile(self, user: Any) -> ScholarProfile:
+        """
+        Lấy hoặc tạo mới ScholarProfile tương ứng với tài khoản người dùng.
+        """
         profile, _ = ScholarProfile.objects.get_or_create(user=user)
         return profile
 
     @action(detail=False, methods=["get"], url_path="profile")
-    def my_profile(self, request):
+    def my_profile(self, request: Request) -> Response:
+        """
+        Lấy thông tin hồ sơ Google Scholar của người dùng hiện tại.
+        """
         profile = self._get_or_create_profile(request.user)
         serializer = ScholarProfileSerializer(profile)
         return Response(serializer.data)
 
     @action(detail=False, methods=["post"], url_path="profile/submit")
-    def submit_profile(self, request):
+    def submit_profile(self, request: Request) -> Response:
+        """
+        Gửi liên kết hồ sơ Google Scholar để chờ duyệt.
+        """
         profile = self._get_or_create_profile(request.user)
         serializer = ProfileSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -933,12 +947,18 @@ class UserScholarProfileViewSet(ViewSet):
 
 
 class AdminScholarApprovalViewSet(ModelViewSet):
+    """
+    ViewSet dành cho Admin quản lý và phê duyệt các hồ sơ Google Scholar.
+    """
     permission_classes = [IsAdminUser]
     queryset = ScholarProfile.objects.all()
     serializer_class = ScholarProfileSerializer
 
     @action(detail=True, methods=["post"], url_path="approve")
-    def approve_profile(self, request, pk=None):
+    def approve_profile(self, request: Request, pk: Optional[Any] = None) -> Response:
+        """
+        Phê duyệt hồ sơ Google Scholar của người dùng.
+        """
         profile = self.get_object()
         profile.status = ProfileStatus.APPROVED
         profile.approved_at = timezone.now()

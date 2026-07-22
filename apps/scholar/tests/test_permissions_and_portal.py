@@ -171,3 +171,96 @@ def test_user_portal_profile_submission_and_get():
     assert res_submit.data["status"] == "PENDING"
     assert res_submit.data["scholar_id"] == "AHHDABDaaaaJ"
 
+
+@pytest.mark.django_db
+def test_admin_profile_approval():
+    admin_user = User.objects.create_superuser(
+        email="admin_approve@example.com",
+        username="admin_appr",
+        password="password123",  # noqa: S106
+    )
+    user = User.objects.create_user(
+        email="user_approve@example.com",
+        username="user_appr",
+        password="password123",  # noqa: S106
+    )
+    profile = ScholarProfile.objects.create(
+        user=user,
+        scholar_url="https://scholar.google.com/citations?user=VALID_ID_123",
+        scholar_id="VALID_ID_123",
+        status="PENDING",
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=admin_user)
+
+    res = client.post(f"/api/scholar/admin/profiles/{profile.id}/approve/")
+    assert res.status_code == 200
+    assert res.data["status"] == "APPROVED"
+    assert res.data["approved_at"] is not None
+
+    profile.refresh_from_db()
+    assert profile.status == "APPROVED"
+    assert profile.approved_at is not None
+
+
+@pytest.mark.django_db
+def test_non_admin_access_admin_endpoint_forbidden():
+    normal_user = User.objects.create_user(
+        email="normal_user@example.com",
+        username="normal_usr",
+        password="password123",  # noqa: S106
+    )
+    target_user = User.objects.create_user(
+        email="target_user@example.com",
+        username="target_usr",
+        password="password123",  # noqa: S106
+    )
+    profile = ScholarProfile.objects.create(
+        user=target_user,
+        scholar_url="https://scholar.google.com/citations?user=VALID_ID_123",
+        scholar_id="VALID_ID_123",
+        status="PENDING",
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=normal_user)
+
+    # GET admin profiles list forbidden
+    res_list = client.get("/api/scholar/admin/profiles/")
+    assert res_list.status_code == 403
+
+    # POST approve forbidden
+    res_approve = client.post(f"/api/scholar/admin/profiles/{profile.id}/approve/")
+    assert res_approve.status_code == 403
+
+
+@pytest.mark.django_db
+def test_user_portal_profile_submission_url_validation_failures():
+    user = User.objects.create_user(
+        email="invalid_url_user@example.com",
+        username="inv_user",
+        password="password123",  # noqa: S106
+    )
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    # 1. Invalid domain (not scholar.google)
+    res_domain = client.post(
+        "/api/scholar/me/profile/submit/",
+        {"scholar_url": "https://google.com/citations?user=AHHDABDaaaaJ"},
+        format="json",
+    )
+    assert res_domain.status_code == 400
+    assert "Google Scholar" in str(res_domain.data["scholar_url"][0])
+
+    # 2. Missing user= ID parameter
+    res_missing_user = client.post(
+        "/api/scholar/me/profile/submit/",
+        {"scholar_url": "https://scholar.google.com/citations?id=12345"},
+        format="json",
+    )
+    assert res_missing_user.status_code == 400
+    assert "user=ID" in str(res_missing_user.data["scholar_url"][0])
+
+
