@@ -1446,8 +1446,8 @@ export function ScholarScraperPage() {
           {/* Main Content Layout (Split 70/30) */}
           <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 items-start">
             
-            {/* LEFT (70% - Columns 7/10) */}
-            <div className="lg:col-span-7 flex flex-col gap-6">
+            {/* LEFT (70% in list view, 100% in detail view) */}
+            <div className={selectedPublication ? "lg:col-span-10 flex flex-col gap-6" : "lg:col-span-7 flex flex-col gap-6"}>
               
               {/* Detailed View Panel or Table List */}
               {selectedPublication ? (
@@ -1484,8 +1484,9 @@ export function ScholarScraperPage() {
 
             </div>
 
-            {/* RIGHT (30% - Columns 3/10 - Sidebar Widgets mirroring Scholar) */}
-            <div className="lg:col-span-3 flex flex-col gap-6 w-full">
+            {/* RIGHT (30% - Columns 3/10 - Sidebar Widgets mirroring Scholar, hidden in detail view) */}
+            {!selectedPublication && (
+              <div className="lg:col-span-3 flex flex-col gap-6 w-full">
               
               {/* Cited by Card */}
               <Card className="border-[#E5E7EB] rounded-3xl bg-white p-5 shadow-sm">
@@ -1590,7 +1591,8 @@ export function ScholarScraperPage() {
                 )}
               </Card>
 
-            </div>
+              </div>
+            )}
 
           </div>
 
