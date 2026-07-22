@@ -25,11 +25,14 @@ def extract_sitekey(html_text: str) -> str:
     match = re.search(r'data-sitekey=["\']([^"\']+)["\']', html_text)
     if match:
         return match.group(1)
-    return "6LfwuzsUAAAAABc123"
+    return ""
 
 
 def solve_google_captcha(page_url: str, sitekey: str) -> str | None:
     """Solve Google CAPTCHA using the configured third-party solver service (e.g. 2Captcha)."""
+    if not sitekey:
+        return None
+
     config = AntiBlockConfig.get_solo()
     if not config.enable_captcha_solver or not config.captcha_api_key.strip():
         logger.warning(_("CAPTCHA Solver disabled or missing API key."))
@@ -44,7 +47,7 @@ def solve_google_captcha(page_url: str, sitekey: str) -> str | None:
     if provider == "2captcha":
         try:
             req_url = (
-                f"http://2captcha.com/in.php?key={api_key}"
+                f"https://2captcha.com/in.php?key={api_key}"
                 f"&method=userrecaptcha&googlekey={sitekey}&pageurl={page_url}&json=1"
             )
             r = requests.get(req_url, timeout=10).json()
@@ -53,7 +56,7 @@ def solve_google_captcha(page_url: str, sitekey: str) -> str | None:
                 return None
 
             request_id = r.get("request")
-            res_url = f"http://2captcha.com/res.php?key={api_key}&action=get&id={request_id}&json=1"
+            res_url = f"https://2captcha.com/res.php?key={api_key}&action=get&id={request_id}&json=1"
 
             for attempt in range(12):
                 time.sleep(5)
