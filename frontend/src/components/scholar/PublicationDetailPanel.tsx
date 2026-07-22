@@ -224,11 +224,16 @@ export const PublicationDetailPanel: React.FC<PublicationDetailPanelProps> = ({
                 <text x="425" y="124" className="text-[10px] font-semibold fill-slate-500">0</text>
 
                 {values.map((v, i) => {
-                  const barWidth = 14
+                  const barWidth = values.length > 15 ? 10 : 14
                   const spacing = values.length > 1 ? (400 - barWidth) / (values.length - 1) : 0
                   const x = 12 + i * spacing
                   const barHeight = maxVal > 0 ? (v.count / maxVal) * 100 : 0
                   const y = 120 - barHeight
+                  const showLabel =
+                    values.length <= 10 ||
+                    i % (values.length > 18 ? 3 : 2) === 0 ||
+                    i === values.length - 1
+
                   return (
                     <g key={v.year} className="group cursor-pointer">
                       <rect
@@ -238,25 +243,29 @@ export const PublicationDetailPanel: React.FC<PublicationDetailPanelProps> = ({
                         height={barHeight}
                         fill="#777777"
                         className="hover:fill-[#2563EB] transition-colors"
-                      />
+                      >
+                        <title>{`${v.year}: ${v.count} trích dẫn`}</title>
+                      </rect>
                       {v.count > 0 && (
                         <text
                           x={x + barWidth / 2}
                           y={y - 4}
                           textAnchor="middle"
-                          className="text-[8px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="text-[8px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
                         >
                           {v.count}
                         </text>
                       )}
-                      <text
-                        x={x + barWidth / 2}
-                        y="134"
-                        textAnchor="middle"
-                        className="text-[9px] font-bold fill-slate-500"
-                      >
-                        {v.year}
-                      </text>
+                      {showLabel && (
+                        <text
+                          x={x + barWidth / 2}
+                          y="134"
+                          textAnchor="middle"
+                          className="text-[8px] font-bold fill-slate-500"
+                        >
+                          {v.year}
+                        </text>
+                      )}
                     </g>
                   )
                 })}
