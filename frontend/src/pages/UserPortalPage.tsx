@@ -11,6 +11,9 @@ import {
   AlertCircle,
   ExternalLink,
   KeyRound,
+  Plus,
+  Trash2,
+  FileText,
 } from 'lucide-react'
 import { useMyProfile, useSubmitScholarProfile } from '@/api/hooks/useUserPortal'
 import type { PublicationDetail } from '@/api/endpoints/scholar'
@@ -20,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import { Dialog } from '@/components/ui/dialog'
 import { PublicationTableList } from '@/components/scholar/PublicationTableList'
 import { PublicationDetailPanel } from '@/components/scholar/PublicationDetailPanel'
 
@@ -54,6 +58,34 @@ export function UserPortalPage() {
   const [sortBy, setSortBy] = useState('citations_desc')
   const [selectedPubIds, setSelectedPubIds] = useState<string[]>([])
 
+  // Trash & Custom Publications State
+  const [customPublications, setCustomPublications] = useState<PublicationDetail[]>([])
+  const [deletedPublications, setDeletedPublications] = useState<PublicationDetail[]>([])
+
+  // Modal Dialog States
+  const [isAddPubModalOpen, setIsAddPubModalOpen] = useState(false)
+  const [isEditPubModalOpen, setIsEditPubModalOpen] = useState(false)
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false)
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false)
+  const [editingPub, setEditingPub] = useState<PublicationDetail | null>(null)
+
+  // Forms
+  const [addPubForm, setAddPubForm] = useState({
+    title: '',
+    authors: '',
+    venue: '',
+    year: new Date().getFullYear().toString(),
+    citations: '0',
+  })
+
+  const [editPubForm, setEditPubForm] = useState({
+    title: '',
+    authors: '',
+    venue: '',
+    year: '',
+    citations: '0',
+  })
+
   const {
     register,
     handleSubmit,
@@ -73,9 +105,9 @@ export function UserPortalPage() {
     })
   }
 
-  // Publication items mapping from author_detail or profile
+  // Combine publications list
   const authorDetail = profile?.author_detail
-  const publicationsList: PublicationDetail[] =
+  const rawPubs: PublicationDetail[] =
     authorDetail?.publications && authorDetail.publications.length > 0
       ? (authorDetail.publications as unknown as PublicationDetail[])
       : (profile?.publications || []).map((p, idx) => ({
@@ -93,6 +125,11 @@ export function UserPortalPage() {
           cites_per_year: {},
           journal: null,
         }))
+
+  const deletedIds = deletedPublications.map((p) => p.id)
+  const publicationsList: PublicationDetail[] = [...rawPubs, ...customPublications].filter(
+    (p) => !deletedIds.includes(p.id)
+  )
 
   // Multi-selection handlers
   const handleToggleSelect = (pubId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,6 +149,138 @@ export function UserPortalPage() {
 
   const handleDeselectAll = () => {
     setSelectedPubIds([])
+  }
+
+  // Action handlers
+  const handleAddPublicationSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!addPubForm.title.trim()) {
+      toast.error('Vui lòng nhập tên bài báo!')
+      return
+    }
+
+    const newPub: PublicationDetail = {
+      id: `custom_${Date.now()}`,
+      title: addPubForm.title.trim(),
+      authors_list: addPubForm.authors.trim(),
+      venue: addPubForm.venue.trim(),
+      year: addPubForm.year.trim(),
+      citations: parseInt(addPubForm.citations, 10) || 0,
+      pub_url: '',
+      sjr_q: 'N/A',
+      if_val: 'N/A',
+      wos: 'N/A',
+      display_order: publicationsList.length + 1,
+      cites_per_year: {},
+      journal: null,
+    }
+
+    setCustomPublications((prev) => [newPub, ...prev])
+    setIsAddPubModalOpen(false)
+    setAddPubForm({
+      title: '',
+      authors: '',
+      venue: '',
+      year: new Date().getFullYear().toString(),
+      citations: '0',
+    })
+    toast.success('Đã thêm bài báo mới thành công!')
+  }
+
+  const openEditPubModal = (pub: PublicationDetail) => {
+    setEditingPub(pub)
+    setEditPubForm({
+      title: pub.title || '',
+      authors: pub.authors_list || '',
+      venue: pub.venue || '',
+      year: pub.year || '',
+      citations: String(pub.citations || 0),
+    })
+    setIsEditPubModalOpen(true)
+  }
+
+  const handleEditPubSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingPub) return
+
+    const updated: PublicationDetail = {
+      ...editingPub,
+      title: editPubForm.title.trim(),
+      authors_list: editPubForm.authors.trim(),
+      venue: editPubForm.venue.trim(),
+      year: editPubForm.year.trim(),
+      citations: parseInt(editPubForm.citations, 10) || 0,
+    }
+
+    setCustomPublications((prev) =>
+      prev.some((p) => p.id === editingPub.id)
+        ? prev.map((p) => (p.id === editingPub.id ? updated : p))
+        : [updated, ...prev]
+    )
+
+    if (selectedPublication?.id === editingPub.id) {
+      setSelectedPublication(updated)
+    }
+
+    setIsEditPubModalOpen(false)
+    setEditingPub(null)
+    toast.success('Đã cập nhật bài báo thành công!')
+  }
+
+  const handleDeletePub = (pubId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    const target = publicationsList.find((p) => p.id === pubId)
+    if (target) {
+      setDeletedPublications((prev) => [target, ...prev])
+      setSelectedPubIds((prev) => prev.filter((id) => id !== pubId))
+      if (selectedPublication?.id === pubId) {
+        setSelectedPublication(null)
+      }
+      toast.success('Đã chuyển bài báo vào thùng rác!')
+    }
+  }
+
+  const handleBulkDeleteSelected = () => {
+    if (selectedPubIds.length === 0) return
+    const targets = publicationsList.filter((p) => selectedPubIds.includes(p.id))
+    setDeletedPublications((prev) => [...targets, ...prev])
+    setSelectedPubIds([])
+    toast.success(`Đã chuyển ${targets.length} bài báo vào thùng rác!`)
+  }
+
+  const handleRestoreFromTrash = (pubId: string) => {
+    setDeletedPublications((prev) => prev.filter((p) => p.id !== pubId))
+    toast.success('Đã khôi phục bài báo thành công!')
+  }
+
+  const handleMergePubsSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (selectedPubIds.length < 2) {
+      toast.error('Vui lòng chọn từ 2 bài báo trở lên để gộp!')
+      return
+    }
+
+    const mainPub = publicationsList.find((p) => p.id === selectedPubIds[0])
+    if (!mainPub) return
+
+    const otherPubs = publicationsList.filter((p) => selectedPubIds.includes(p.id) && p.id !== mainPub.id)
+    const extraCitations = otherPubs.reduce((sum, p) => sum + (p.citations || 0), 0)
+
+    const merged: PublicationDetail = {
+      ...mainPub,
+      citations: (mainPub.citations || 0) + extraCitations,
+    }
+
+    setCustomPublications((prev) =>
+      prev.some((p) => p.id === mainPub.id)
+        ? prev.map((p) => (p.id === mainPub.id ? merged : p))
+        : [merged, ...prev]
+    )
+
+    setDeletedPublications((prev) => [...otherPubs, ...prev])
+    setSelectedPubIds([])
+    setIsMergeModalOpen(false)
+    toast.success(`Đã gộp thành công ${selectedPubIds.length} bài báo!`)
   }
 
   // Export Excel handler
@@ -215,8 +384,18 @@ export function UserPortalPage() {
     }
   }
 
-  // Citation bar chart calculation
-  const citesMap = authorDetail?.cites_per_year || {}
+  // Citation bar chart calculation (Fallback to aggregated publication citations if cites_per_year is empty)
+  const rawCitesMap = authorDetail?.cites_per_year || {}
+  const citesMap: Record<string, number> = { ...rawCitesMap }
+  if (Object.keys(citesMap).length === 0) {
+    publicationsList.forEach((pub) => {
+      const yr = pub.year?.trim()
+      if (yr && /^\d{4}$/.test(yr)) {
+        citesMap[yr] = (citesMap[yr] || 0) + (pub.citations || 0)
+      }
+    })
+  }
+
   const currentYear = new Date().getFullYear()
   const recentYears = Array.from({ length: 8 }, (_, i) => currentYear - 7 + i)
   const recentCitationValues = recentYears.map((yr) => ({
@@ -224,6 +403,23 @@ export function UserPortalPage() {
     count: citesMap[String(yr)] || citesMap[yr] || 0,
   }))
   const maxRecentCites = Math.max(...recentCitationValues.map((v) => v.count), 1)
+
+  // 5-Year Metrics (From 2021) Calculation Fallback
+  const start5y = 2021
+  const pubs5y = publicationsList.filter((p) => p.year && parseInt(p.year, 10) >= start5y)
+  const citedby5yCalculated = pubs5y.reduce((sum, p) => sum + (p.citations || 0), 0)
+  const citedby5y = authorDetail?.citedby5y ? authorDetail.citedby5y : citedby5yCalculated
+
+  const cites5yArr = pubs5y.map((p) => p.citations || 0).sort((a, b) => b - a)
+  let h5y = 0
+  for (let i = 0; i < cites5yArr.length; i++) {
+    if (cites5yArr[i] >= i + 1) h5y = i + 1
+    else break
+  }
+  const hindex5y = authorDetail?.hindex5y ? authorDetail.hindex5y : h5y
+  const i10index5y = authorDetail?.i10index5y
+    ? authorDetail.i10index5y
+    : pubs5y.filter((p) => (p.citations || 0) >= 10).length
 
   if (isLoading) {
     return (
@@ -302,6 +498,8 @@ export function UserPortalPage() {
                       publication={selectedPublication}
                       authorName={authorDetail?.name || profile.user_email || ''}
                       onBack={() => setSelectedPublication(null)}
+                      onEdit={(pub) => openEditPubModal(pub)}
+                      onDelete={(pubId) => handleDeletePub(pubId)}
                     />
                   ) : (
                     <PublicationTableList
@@ -311,6 +509,10 @@ export function UserPortalPage() {
                       onToggleSelectPub={handleToggleSelect}
                       onToggleSelectAll={handleToggleSelectAll}
                       onDeselectAll={handleDeselectAll}
+                      onAddPub={() => setIsAddPubModalOpen(true)}
+                      onOpenTrash={() => setIsTrashModalOpen(true)}
+                      onMergePubs={() => setIsMergeModalOpen(true)}
+                      onDeleteSelectedPubs={handleBulkDeleteSelected}
                       onExport={handleExport}
                       searchKeyword={pubSearch}
                       setSearchKeyword={setPubSearch}
@@ -349,27 +551,21 @@ export function UserPortalPage() {
                             <td className="py-2 text-right font-bold text-slate-800">
                               {authorDetail?.citedby || profile.total_citations}
                             </td>
-                            <td className="py-2 text-right font-bold text-slate-800">
-                              {authorDetail?.citedby5y ?? 0}
-                            </td>
+                            <td className="py-2 text-right font-bold text-slate-800">{citedby5y}</td>
                           </tr>
                           <tr>
                             <td className="py-2 font-semibold">Chỉ số h-index</td>
                             <td className="py-2 text-right font-bold text-slate-800">
                               {authorDetail?.hindex || profile.h_index}
                             </td>
-                            <td className="py-2 text-right font-bold text-slate-800">
-                              {authorDetail?.hindex5y ?? 0}
-                            </td>
+                            <td className="py-2 text-right font-bold text-slate-800">{hindex5y}</td>
                           </tr>
                           <tr>
                             <td className="py-2 font-semibold">Chỉ số i10-index</td>
                             <td className="py-2 text-right font-bold text-slate-800">
                               {authorDetail?.i10index || profile.i10_index}
                             </td>
-                            <td className="py-2 text-right font-bold text-slate-800">
-                              {authorDetail?.i10index5y ?? 0}
-                            </td>
+                            <td className="py-2 text-right font-bold text-slate-800">{i10index5y}</td>
                           </tr>
                         </tbody>
                       </table>
@@ -546,6 +742,203 @@ export function UserPortalPage() {
           <p className="text-xs text-slate-500">Quản lý mật khẩu và thông tin tài khoản cá nhân.</p>
         </Card>
       )}
+
+      {/* Modals & Dialogs */}
+      {/* 1. Add Publication Dialog */}
+      <Dialog
+        open={isAddPubModalOpen}
+        onClose={() => setIsAddPubModalOpen(false)}
+        title={
+          <span className="flex items-center gap-2 text-slate-900 font-bold">
+            <Plus className="h-5 w-5 text-blue-600" /> Thêm bài báo mới
+          </span>
+        }
+        className="max-w-lg"
+      >
+        <form onSubmit={handleAddPublicationSubmit} className="space-y-3">
+          <div>
+            <Label className="text-xs font-semibold">Tên bài báo khoa học *</Label>
+            <Input
+              value={addPubForm.title}
+              onChange={(e) => setAddPubForm({ ...addPubForm, title: e.target.value })}
+              placeholder="Nhập tên bài báo công bố..."
+              className="h-10 text-xs mt-1"
+              required
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold">Tác giả</Label>
+            <Input
+              value={addPubForm.authors}
+              onChange={(e) => setAddPubForm({ ...addPubForm, authors: e.target.value })}
+              placeholder="vd: Nguyen Van A, Tran Van B"
+              className="h-10 text-xs mt-1"
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold">Tạp chí / Nơi xuất bản</Label>
+            <Input
+              value={addPubForm.venue}
+              onChange={(e) => setAddPubForm({ ...addPubForm, venue: e.target.value })}
+              placeholder="vd: Nature, IEEE Transactions..."
+              className="h-10 text-xs mt-1"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Năm xuất bản</Label>
+              <Input
+                value={addPubForm.year}
+                onChange={(e) => setAddPubForm({ ...addPubForm, year: e.target.value })}
+                placeholder="2024"
+                className="h-10 text-xs mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Số lượt trích dẫn</Label>
+              <Input
+                type="number"
+                value={addPubForm.citations}
+                onChange={(e) => setAddPubForm({ ...addPubForm, citations: e.target.value })}
+                className="h-10 text-xs mt-1"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setIsAddPubModalOpen(false)} className="text-xs h-9">
+              Hủy
+            </Button>
+            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9">
+              Thêm bài báo
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* 2. Edit Publication Dialog */}
+      <Dialog
+        open={isEditPubModalOpen}
+        onClose={() => setIsEditPubModalOpen(false)}
+        title={<span className="font-bold text-slate-900">Chỉnh sửa thông tin bài báo</span>}
+        className="max-w-lg"
+      >
+        <form onSubmit={handleEditPubSubmit} className="space-y-3">
+          <div>
+            <Label className="text-xs font-semibold">Tên bài báo</Label>
+            <Input
+              value={editPubForm.title}
+              onChange={(e) => setEditPubForm({ ...editPubForm, title: e.target.value })}
+              className="h-10 text-xs mt-1"
+              required
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold">Tác giả</Label>
+            <Input
+              value={editPubForm.authors}
+              onChange={(e) => setEditPubForm({ ...editPubForm, authors: e.target.value })}
+              className="h-10 text-xs mt-1"
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold">Tạp chí / Nơi xuất bản</Label>
+            <Input
+              value={editPubForm.venue}
+              onChange={(e) => setEditPubForm({ ...editPubForm, venue: e.target.value })}
+              className="h-10 text-xs mt-1"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Năm</Label>
+              <Input
+                value={editPubForm.year}
+                onChange={(e) => setEditPubForm({ ...editPubForm, year: e.target.value })}
+                className="h-10 text-xs mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Trích dẫn</Label>
+              <Input
+                type="number"
+                value={editPubForm.citations}
+                onChange={(e) => setEditPubForm({ ...editPubForm, citations: e.target.value })}
+                className="h-10 text-xs mt-1"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setIsEditPubModalOpen(false)} className="text-xs h-9">
+              Hủy
+            </Button>
+            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9">
+              Lưu thay đổi
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* 3. Trash Bin Dialog */}
+      <Dialog
+        open={isTrashModalOpen}
+        onClose={() => setIsTrashModalOpen(false)}
+        title={
+          <span className="flex items-center gap-2 text-slate-900 font-bold">
+            <Trash2 className="h-5 w-5 text-red-600" /> Thùng rác bài báo ({deletedPublications.length})
+          </span>
+        }
+        className="max-w-2xl"
+      >
+        <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+          {deletedPublications.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 text-xs">Thùng rác trống.</div>
+          ) : (
+            deletedPublications.map((pub) => (
+              <div key={pub.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-slate-900 truncate">{pub.title}</p>
+                  <p className="text-[11px] text-slate-500 truncate">{pub.authors_list}</p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => handleRestoreFromTrash(pub.id)}
+                  className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shrink-0"
+                >
+                  Khôi phục
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+      </Dialog>
+
+      {/* 4. Merge Publications Dialog */}
+      <Dialog
+        open={isMergeModalOpen}
+        onClose={() => setIsMergeModalOpen(false)}
+        title={
+          <span className="flex items-center gap-2 text-slate-900 font-bold">
+            <FileText className="h-5 w-5 text-blue-600" /> Gộp {selectedPubIds.length} bài báo đã chọn
+          </span>
+        }
+        className="max-w-lg"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Các bài báo trùng lặp sẽ được hợp nhất số lượt trích dẫn vào bài báo chính. Các bài báo còn lại sẽ được chuyển vào thùng rác.
+          </p>
+          <form onSubmit={handleMergePubsSubmit} className="space-y-4">
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" onClick={() => setIsMergeModalOpen(false)} className="text-xs h-9">
+                Hủy
+              </Button>
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9">
+                Xác nhận gộp
+              </Button>
+            </div>
+          </form>
+        </div>
+      </Dialog>
     </div>
   )
 }

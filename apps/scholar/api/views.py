@@ -964,30 +964,40 @@ class AdminScholarApprovalViewSet(ModelViewSet):
         profile.status = ProfileStatus.APPROVED
         profile.approved_at = timezone.now()
 
-        if profile.scholar_id:
-            author = AuthorProfile.objects.filter(scholar_id=profile.scholar_id).first()
-            if author:
-                profile.total_citations = author.citedby
-                profile.h_index = author.hindex
-                profile.i10_index = author.i10index
+        scholar_id = (profile.scholar_id or "").strip()
+        author = None
+        if scholar_id:
+            author = AuthorProfile.objects.filter(scholar_id__iexact=scholar_id).first()
+            if not author:
+                author = AuthorProfile.objects.filter(scholar_id__icontains=scholar_id).first()
 
-                for pub in author.publications.all():
-                    try:
-                        year_val = int(pub.year) if pub.year and pub.year.isdigit() else None
-                    except ValueError:
-                        year_val = None
+        if not author and profile.user:
+            author = AuthorProfile.objects.filter(name__icontains=profile.user.username).first()
 
-                    ScholarPublication.objects.get_or_create(
-                        profile=profile,
-                        title=pub.title,
-                        defaults={
-                            "authors": pub.authors_list or "",
-                            "journal": pub.venue or "",
-                            "pub_year": year_val,
-                            "citations": pub.citations,
-                            "url": "",
-                        },
-                    )
+        if author:
+            if not profile.scholar_id:
+                profile.scholar_id = author.scholar_id
+            profile.total_citations = author.citedby
+            profile.h_index = author.hindex
+            profile.i10_index = author.i10index
+
+            for pub in author.publications.all():
+                try:
+                    year_val = int(pub.year) if pub.year and str(pub.year).isdigit() else None
+                except ValueError:
+                    year_val = None
+
+                ScholarPublication.objects.get_or_create(
+                    profile=profile,
+                    title=pub.title,
+                    defaults={
+                        "authors": pub.authors_list or "",
+                        "journal": pub.venue or "",
+                        "pub_year": year_val,
+                        "citations": pub.citations or 0,
+                        "url": pub.pub_url or "",
+                    },
+                )
 
         profile.save()
         return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)

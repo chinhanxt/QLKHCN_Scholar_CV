@@ -275,10 +275,26 @@ class ScholarProfileSerializer(serializers.ModelSerializer):
         ]
 
     def get_author_detail(self, obj):
-        if obj.scholar_id:
-            author = AuthorProfile.objects.filter(scholar_id=obj.scholar_id).prefetch_related("publications").first()
+        scholar_id = (obj.scholar_id or "").strip()
+        if scholar_id:
+            author = AuthorProfile.objects.filter(scholar_id__iexact=scholar_id).prefetch_related("publications").first()
+            if not author:
+                author = AuthorProfile.objects.filter(scholar_id__icontains=scholar_id).prefetch_related("publications").first()
+            if not author:
+                for a in AuthorProfile.objects.all().prefetch_related("publications"):
+                    if scholar_id in a.scholar_id or a.scholar_id in scholar_id:
+                        author = a
+                        break
             if author:
                 return AuthorProfileDetailSerializer(author).data
+
+        if obj.user:
+            username = (obj.user.username or "").strip()
+            if username:
+                author = AuthorProfile.objects.filter(name__icontains=username).prefetch_related("publications").first()
+                if author:
+                    return AuthorProfileDetailSerializer(author).data
+
         return None
 
 
