@@ -3,8 +3,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from rest_framework.test import APIRequestFactory
 
-from apps.core.permissions import IsAdminUser
-from apps.core.permissions import IsProfileOwner
+from apps.core.permissions import IsAdminUser, IsProfileOwner
+from apps.scholar.models import ScholarProfile, ScholarPublication
 
 User = get_user_model()
 
@@ -22,7 +22,9 @@ def test_is_admin_user_permission():
 
     anon_user = AnonymousUser()
     normal_user = User.objects.create_user(
-        email="user@example.com", username="user1", password="password123",  # noqa: S106
+        email="user@example.com",
+        username="user1",
+        password="password123",  # noqa: S106
     )
     staff_user = User.objects.create_user(
         email="staff@example.com",
@@ -31,7 +33,9 @@ def test_is_admin_user_permission():
         is_staff=True,
     )
     admin_user = User.objects.create_superuser(
-        email="admin@example.com", username="admin1", password="password123",  # noqa: S106
+        email="admin@example.com",
+        username="admin1",
+        password="password123",  # noqa: S106
     )
 
     # Request by unauthenticated user
@@ -62,10 +66,14 @@ def test_is_profile_owner_permission():
 
     anon_user = AnonymousUser()
     owner_user = User.objects.create_user(
-        email="owner@example.com", username="owner1", password="password123",  # noqa: S106
+        email="owner@example.com",
+        username="owner1",
+        password="password123",  # noqa: S106
     )
     other_user = User.objects.create_user(
-        email="other@example.com", username="other1", password="password123",  # noqa: S106
+        email="other@example.com",
+        username="other1",
+        password="password123",  # noqa: S106
     )
     staff_user = User.objects.create_user(
         email="staff@example.com",
@@ -74,7 +82,9 @@ def test_is_profile_owner_permission():
         is_staff=True,
     )
     admin_user = User.objects.create_superuser(
-        email="admin@example.com", username="admin1", password="password123",  # noqa: S106
+        email="admin@example.com",
+        username="admin1",
+        password="password123",  # noqa: S106
     )
 
     profile_obj = DummyProfile(user=owner_user)
@@ -118,12 +128,16 @@ def test_is_profile_owner_permission():
 
 @pytest.mark.django_db
 def test_scholar_profile_and_publication_creation():
-    from apps.scholar.models import ScholarProfile, ScholarPublication
-
-    user = User.objects.create_user(email="scholar_user@example.com", username="scholar1", password="password123")
+    user = User.objects.create_user(
+        email="scholar_user@example.com",
+        username="scholar1",
+        password="password123",  # noqa: S106
+    )
     profile = ScholarProfile.objects.create(
         user=user,
-        scholar_url="https://scholar.google.com/citations?user=AHHDABDaaaaJ",
+        scholar_url=(
+            "https://scholar.google.com/citations?user=AHHDABDaaaaJ"
+        ),
         scholar_id="AHHDABDaaaaJ",
         status="PENDING",
     )
@@ -140,5 +154,6 @@ def test_scholar_profile_and_publication_creation():
     )
     assert pub.profile == profile
     assert pub.citations == 42
+
 
 

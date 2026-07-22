@@ -36,9 +36,12 @@ class ClarivateCrawlerProgress(BaseModel):
 
 # --- SCIMAGO (SJR) ---
 class ScimagoJournal(BaseModel):
-    source_id = models.BigIntegerField(_("Source ID"), unique=True) # SCImago system ID
+    # SCImago system ID
+    source_id = models.BigIntegerField(_("Source ID"), unique=True)
     title = models.CharField(_("SCImago Title"), max_length=1000)
-    title_normalized = models.CharField(_("Normalized Title"), max_length=1000, db_index=True)
+    title_normalized = models.CharField(
+        _("Normalized Title"), max_length=1000, db_index=True
+    )
     journal_type = models.CharField(_("Journal Type"), max_length=100, blank=True, null=True)
     publisher = models.TextField(_("Publisher"), blank=True, null=True)
     country = models.CharField(_("Country"), max_length=250, blank=True, null=True)
@@ -52,7 +55,9 @@ class ScimagoJournal(BaseModel):
 
 
 class ScimagoISSN(BaseModel):
-    journal = models.ForeignKey(ScimagoJournal, on_delete=models.CASCADE, related_name="raw_issns")
+    journal = models.ForeignKey(
+        ScimagoJournal, on_delete=models.CASCADE, related_name="raw_issns"
+    )
     issn = models.CharField(_("ISSN"), max_length=50, unique=True, db_index=True)
 
     class Meta:
@@ -60,10 +65,14 @@ class ScimagoISSN(BaseModel):
 
 
 class ScimagoRanking(BaseModel):
-    journal = models.ForeignKey(ScimagoJournal, on_delete=models.CASCADE, related_name="raw_rankings")
+    journal = models.ForeignKey(
+        ScimagoJournal, on_delete=models.CASCADE, related_name="raw_rankings"
+    )
     year = models.IntegerField(_("Year"))
     sjr_score = models.FloatField(_("SJR Score"), blank=True, null=True)
-    sjr_quartile = models.CharField(_("SJR Quartile"), max_length=10, blank=True, null=True)
+    sjr_quartile = models.CharField(
+        _("SJR Quartile"), max_length=10, blank=True, null=True
+    )
     h_index = models.IntegerField(_("H-Index"), blank=True, null=True)
 
     class Meta:
@@ -76,7 +85,9 @@ class ScimagoRanking(BaseModel):
 class BioxbioJournal(BaseModel):
     source_id = models.IntegerField(_("Source ID"), unique=True, blank=True, null=True)
     title = models.CharField(_("BioxBio Title"), max_length=1000)
-    title_normalized = models.CharField(_("Normalized Title"), max_length=1000, unique=True, db_index=True)
+    title_normalized = models.CharField(
+        _("Normalized Title"), max_length=1000, unique=True, db_index=True
+    )
 
     class Meta:
         db_table = "scholar_raw_bioxbio_journals"
@@ -87,7 +98,9 @@ class BioxbioJournal(BaseModel):
 
 
 class BioxbioISSN(BaseModel):
-    journal = models.ForeignKey(BioxbioJournal, on_delete=models.CASCADE, related_name="raw_issns")
+    journal = models.ForeignKey(
+        BioxbioJournal, on_delete=models.CASCADE, related_name="raw_issns"
+    )
     issn = models.CharField(_("ISSN"), max_length=50, unique=True, db_index=True)
 
     class Meta:
@@ -95,7 +108,9 @@ class BioxbioISSN(BaseModel):
 
 
 class BioxbioRanking(BaseModel):
-    journal = models.ForeignKey(BioxbioJournal, on_delete=models.CASCADE, related_name="raw_rankings")
+    journal = models.ForeignKey(
+        BioxbioJournal, on_delete=models.CASCADE, related_name="raw_rankings"
+    )
     year = models.IntegerField(_("Year"))
     impact_factor = models.FloatField(_("Impact Factor"), blank=True, null=True)
     total_articles = models.IntegerField(_("Total Articles"), blank=True, null=True)
@@ -125,32 +140,59 @@ class Journal(BaseModel):
     Unified Journal model combining Clarivate (Web of Science Core),
     SCImago (SJR, Quartile), and BioxBio (Impact Factor).
     """
-    clarivate_title = models.CharField(_("Clarivate Title"), max_length=1000, blank=True, null=True)
-    title_normalized = models.CharField(_("Normalized Title"), max_length=1000, db_index=True)
+    clarivate_title = models.CharField(
+        _("Clarivate Title"), max_length=1000, blank=True, null=True
+    )
+    title_normalized = models.CharField(
+        _("Normalized Title"), max_length=1000, db_index=True
+    )
     is_staging = models.BooleanField(_("Is Staging"), default=False, db_index=True)
     issn = models.CharField(_("ISSN"), max_length=50, blank=True, null=True)
     eissn = models.CharField(_("eISSN"), max_length=50, blank=True, null=True)
     publisher = models.TextField(_("Publisher"), blank=True, null=True)
     country = models.CharField(_("Country"), max_length=250, blank=True, null=True)
-    
+
     # Web of Science Details
-    wos_core_collection = models.TextField(_("WoS Core Collection"), blank=True, null=True)
-    additional_wos_indexes = models.TextField(_("Additional WoS Indexes"), blank=True, null=True)
+    wos_core_collection = models.TextField(
+        _("WoS Core Collection"), blank=True, null=True
+    )
+    additional_wos_indexes = models.TextField(
+        _("Additional WoS Indexes"), blank=True, null=True
+    )
 
     # Integrated Latest Metrics
     latest_if = models.FloatField(_("Latest Impact Factor"), blank=True, null=True)
     latest_if_year = models.IntegerField(_("Latest IF Year"), blank=True, null=True)
     latest_sjr = models.FloatField(_("Latest SJR Score"), blank=True, null=True)
     latest_sjr_year = models.IntegerField(_("Latest SJR Year"), blank=True, null=True)
-    latest_quartile = models.CharField(_("Latest Quartile"), max_length=10, blank=True, null=True) # Q1, Q2, Q3, Q4
+    # Q1, Q2, Q3, Q4
+    latest_quartile = models.CharField(
+        _("Latest Quartile"), max_length=10, blank=True, null=True
+    )
     latest_h_index = models.IntegerField(_("Latest H-Index"), blank=True, null=True)
 
     # Integrated mapping references
-    bioxbio_match = models.CharField(_("BioxBio Match Method"), max_length=20, blank=True, null=True)
-    bioxbio_journal = models.ForeignKey(BioxbioJournal, on_delete=models.SET_NULL, null=True, blank=True, related_name="mapped_journals")
+    bioxbio_match = models.CharField(
+        _("BioxBio Match Method"), max_length=20, blank=True, null=True
+    )
+    bioxbio_journal = models.ForeignKey(
+        BioxbioJournal,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mapped_journals",
+    )
 
-    scimago_match = models.CharField(_("SCImago Match Method"), max_length=20, blank=True, null=True)
-    scimago_journal = models.ForeignKey(ScimagoJournal, on_delete=models.SET_NULL, null=True, blank=True, related_name="mapped_journals")
+    scimago_match = models.CharField(
+        _("SCImago Match Method"), max_length=20, blank=True, null=True
+    )
+    scimago_journal = models.ForeignKey(
+        ScimagoJournal,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mapped_journals",
+    )
 
     class Meta:
         db_table = "scholar_journals"
@@ -163,7 +205,12 @@ class Journal(BaseModel):
 
 
 class JournalISSN(BaseModel):
-    journal = models.ForeignKey(Journal, on_delete=models.CASCADE, related_name="issns", verbose_name=_("Journal"))
+    journal = models.ForeignKey(
+        Journal,
+        on_delete=models.CASCADE,
+        related_name="issns",
+        verbose_name=_("Journal"),
+    )
     issn = models.CharField(_("ISSN"), max_length=50, unique=True, db_index=True)
 
     class Meta:
@@ -173,7 +220,12 @@ class JournalISSN(BaseModel):
 
 
 class JournalRanking(BaseModel):
-    journal = models.ForeignKey(Journal, on_delete=models.CASCADE, related_name="rankings", verbose_name=_("Journal"))
+    journal = models.ForeignKey(
+        Journal,
+        on_delete=models.CASCADE,
+        related_name="rankings",
+        verbose_name=_("Journal"),
+    )
     year = models.IntegerField(_("Year"))
     impact_factor = models.FloatField(_("Impact Factor"), blank=True, null=True)
     sjr_score = models.FloatField(_("SJR Score"), blank=True, null=True)
@@ -193,23 +245,46 @@ class JournalRanking(BaseModel):
 # ==============================================================================
 
 class AuthorProfile(BaseModel):
-    scholar_id = models.CharField(_("Scholar ID"), max_length=50, unique=True, db_index=True)
+    scholar_id = models.CharField(
+        _("Scholar ID"), max_length=50, unique=True, db_index=True
+    )
     name = models.CharField(_("Full Name"), max_length=250)
-    affiliation = models.CharField(_("Affiliation"), max_length=500, blank=True, null=True)
-    email_domain = models.CharField(_("Email Domain"), max_length=250, blank=True, null=True)
+    affiliation = models.CharField(
+        _("Affiliation"), max_length=500, blank=True, null=True
+    )
+    email_domain = models.CharField(
+        _("Email Domain"), max_length=250, blank=True, null=True
+    )
     citedby = models.IntegerField(_("Total Citations"), default=0)
-    citedby5y = models.IntegerField(_("5-Year Citations"), default=0, help_text=_("Trích dẫn 5 năm gần nhất"))
+    citedby5y = models.IntegerField(
+        _("5-Year Citations"), default=0, help_text=_("Trích dẫn 5 năm gần nhất")
+    )
     hindex = models.IntegerField(_("H-Index"), default=0)
-    hindex5y = models.IntegerField(_("5-Year H-Index"), default=0, help_text=_("h-index 5 năm gần nhất"))
+    hindex5y = models.IntegerField(
+        _("5-Year H-Index"), default=0, help_text=_("h-index 5 năm gần nhất")
+    )
     i10index = models.IntegerField(_("i10-Index"), default=0)
-    i10index5y = models.IntegerField(_("5-Year i10-Index"), default=0, help_text=_("i10-index 5 năm gần nhất"))
-    cites_per_year = models.JSONField(_("Citations Per Year History"), default=dict, blank=True, help_text=_("Lịch sử trích dẫn theo từng năm của Tác giả"))
+    i10index5y = models.IntegerField(
+        _("5-Year i10-Index"), default=0, help_text=_("i10-index 5 năm gần nhất")
+    )
+    cites_per_year = models.JSONField(
+        _("Citations Per Year History"),
+        default=dict,
+        blank=True,
+        help_text=_("Lịch sử trích dẫn theo từng năm của Tác giả"),
+    )
     interests = models.JSONField(_("Interests"), default=list, blank=True)
-    
+
     auto_scan_enabled = models.BooleanField(_("Auto Scan Enabled"), default=True)
-    last_scraped_at = models.DateTimeField(_("Last Scraped At"), null=True, blank=True)
-    last_scan_status = models.CharField(_("Last Scan Status"), max_length=50, default="PENDING")
-    publication_count_cached = models.IntegerField(_("Publication Count Cached"), default=0)
+    last_scraped_at = models.DateTimeField(
+        _("Last Scraped At"), null=True, blank=True
+    )
+    last_scan_status = models.CharField(
+        _("Last Scan Status"), max_length=50, default="PENDING"
+    )
+    publication_count_cached = models.IntegerField(
+        _("Publication Count Cached"), default=0
+    )
 
     class Meta:
         db_table = "scholar_authors"
@@ -223,20 +298,43 @@ class AuthorProfile(BaseModel):
 
 class AutoScanConfig(models.Model):
     is_active = models.BooleanField(_("Is Active"), default=True)
-    scan_interval_hours = models.IntegerField(_("Scan Interval Hours"), default=168)
-    frequency_type = models.CharField(_("Frequency Type"), max_length=20, default="WEEKLY")  # DAILY, WEEKLY, MONTHLY
-    preferred_hour = models.IntegerField(_("Preferred Hour"), default=2)  # 0-23 (e.g. 2:00 AM)
+    scan_interval_hours = models.IntegerField(
+        _("Scan Interval Hours"), default=168
+    )
+    # Frequency types: DAILY, WEEKLY, MONTHLY
+    frequency_type = models.CharField(
+        _("Frequency Type"), max_length=20, default="WEEKLY"
+    )
+    # 0-23 (e.g. 2:00 AM)
+    preferred_hour = models.IntegerField(_("Preferred Hour"), default=2)
     preferred_minute = models.IntegerField(_("Preferred Minute"), default=0)
-    preferred_weekday = models.IntegerField(_("Preferred Weekday"), default=0)  # 0=Mon, 1=Tue, ..., 6=Sun
-    preferred_day_of_month = models.IntegerField(_("Preferred Day of Month"), default=1)  # 1-31
-    batch_size_per_hour = models.IntegerField(_("Batch Size Per Hour"), default=8)
+    # 0=Mon, 1=Tue, ..., 6=Sun
+    preferred_weekday = models.IntegerField(_("Preferred Weekday"), default=0)
+    # 1-31
+    preferred_day_of_month = models.IntegerField(
+        _("Preferred Day of Month"), default=1
+    )
+    batch_size_per_hour = models.IntegerField(
+        _("Batch Size Per Hour"), default=8
+    )
     delay_min_seconds = models.IntegerField(_("Delay Min Seconds"), default=8)
     delay_max_seconds = models.IntegerField(_("Delay Max Seconds"), default=15)
-    cooldown_min_seconds = models.IntegerField(_("Cooldown Min Seconds"), default=45)
-    cooldown_max_seconds = models.IntegerField(_("Cooldown Max Seconds"), default=90)
-    current_job_status = models.CharField(_("Current Job Status"), max_length=50, default="IDLE")  # IDLE, RUNNING, COMPLETED, FAILED
-    current_job_progress = models.IntegerField(_("Current Job Progress"), default=0)
-    current_job_detail = models.CharField(_("Current Job Detail"), max_length=255, default="", blank=True)
+    cooldown_min_seconds = models.IntegerField(
+        _("Cooldown Min Seconds"), default=45
+    )
+    cooldown_max_seconds = models.IntegerField(
+        _("Cooldown Max Seconds"), default=90
+    )
+    # IDLE, RUNNING, COMPLETED, FAILED
+    current_job_status = models.CharField(
+        _("Current Job Status"), max_length=50, default="IDLE"
+    )
+    current_job_progress = models.IntegerField(
+        _("Current Job Progress"), default=0
+    )
+    current_job_detail = models.CharField(
+        _("Current Job Detail"), max_length=255, default="", blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -253,24 +351,42 @@ class AutoScanConfig(models.Model):
 
 class AntiBlockConfig(models.Model):
     """
-    Singleton configuration model for managing Google Scholar scraper anti-blocking parameters,
-    proxy settings, CAPTCHA solver integration, and retry/backoff stats.
+    Singleton configuration model for managing Google Scholar scraper anti-blocking
+    parameters, proxy settings, CAPTCHA solver integration, and retry/backoff stats.
     """
     use_tor_proxy = models.BooleanField(_("Use Tor Proxy"), default=True)
-    use_free_proxy_pool = models.BooleanField(_("Use Free Proxy Pool"), default=True)
-    custom_proxy_list = models.TextField(_("Custom Proxy List"), blank=True, default='')
+    use_free_proxy_pool = models.BooleanField(
+        _("Use Free Proxy Pool"), default=True
+    )
+    custom_proxy_list = models.TextField(
+        _("Custom Proxy List"), blank=True, default=''
+    )
 
-    enable_captcha_solver = models.BooleanField(_("Enable CAPTCHA Solver"), default=False)
-    captcha_provider = models.CharField(_("CAPTCHA Provider"), max_length=50, default='2captcha')
-    captcha_api_key = models.CharField(_("CAPTCHA API Key"), max_length=255, blank=True, default='')
+    enable_captcha_solver = models.BooleanField(
+        _("Enable CAPTCHA Solver"), default=False
+    )
+    captcha_provider = models.CharField(
+        _("CAPTCHA Provider"), max_length=50, default='2captcha'
+    )
+    captcha_api_key = models.CharField(
+        _("CAPTCHA API Key"), max_length=255, blank=True, default=''
+    )
 
-    max_retries_per_request = models.IntegerField(_("Max Retries Per Request"), default=5)
-    adaptive_backoff_enabled = models.BooleanField(_("Adaptive Backoff Enabled"), default=True)
+    max_retries_per_request = models.IntegerField(
+        _("Max Retries Per Request"), default=5
+    )
+    adaptive_backoff_enabled = models.BooleanField(
+        _("Adaptive Backoff Enabled"), default=True
+    )
     base_delay_seconds = models.FloatField(_("Base Delay Seconds"), default=1.0)
     max_delay_seconds = models.FloatField(_("Max Delay Seconds"), default=15.0)
 
-    total_requests_count = models.IntegerField(_("Total Requests Count"), default=0)
-    captcha_encountered_count = models.IntegerField(_("CAPTCHA Encountered Count"), default=0)
+    total_requests_count = models.IntegerField(
+        _("Total Requests Count"), default=0
+    )
+    captcha_encountered_count = models.IntegerField(
+        _("CAPTCHA Encountered Count"), default=0
+    )
     captcha_solved_count = models.IntegerField(_("CAPTCHA Solved Count"), default=0)
     ip_rotations_count = models.IntegerField(_("IP Rotations Count"), default=0)
 
@@ -292,35 +408,67 @@ class AntiBlockConfig(models.Model):
 
 
 class Publication(BaseModel):
-    author = models.ForeignKey(AuthorProfile, on_delete=models.CASCADE, related_name="publications", verbose_name=_("Author"))
+    author = models.ForeignKey(
+        AuthorProfile,
+        on_delete=models.CASCADE,
+        related_name="publications",
+        verbose_name=_("Author"),
+    )
     title = models.TextField(_("Title"))
     authors_list = models.TextField(_("Authors List"), blank=True, null=True)
     venue = models.TextField(_("Venue/Journal"), blank=True, null=True)
     year = models.CharField(_("Year"), max_length=50, blank=True, null=True)
     citations = models.IntegerField(_("Citations Count"), default=0)
     display_order = models.IntegerField(_("Display Order"), default=0)
-    cites_per_year = models.JSONField(_("Citations Per Year History"), default=dict, blank=True)
+    cites_per_year = models.JSONField(
+        _("Citations Per Year History"), default=dict, blank=True
+    )
 
     # Matched journal values
-    journal = models.ForeignKey(Journal, on_delete=models.SET_NULL, null=True, blank=True, related_name="publications", verbose_name=_("Matched Journal"))
+    journal = models.ForeignKey(
+        Journal,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="publications",
+        verbose_name=_("Matched Journal"),
+    )
     sjr_q = models.CharField(_("Matched SJR Quartile"), max_length=10, default="N/A")
     if_val = models.CharField(_("Matched Impact Factor"), max_length=20, default="N/A")
-    wos = models.CharField(_("Matched Web of Science"), max_length=150, default="N/A")
+    wos = models.CharField(
+        _("Matched Web of Science"), max_length=150, default="N/A"
+    )
 
     # Scraped metadata fields matching Google Scholar exactly
-    pub_date = models.CharField(_("Publication Date"), max_length=150, blank=True, null=True)
+    pub_date = models.CharField(
+        _("Publication Date"), max_length=150, blank=True, null=True
+    )
     volume = models.CharField(_("Volume"), max_length=150, blank=True, null=True)
     issue = models.CharField(_("Issue"), max_length=150, blank=True, null=True)
     pages = models.CharField(_("Pages"), max_length=150, blank=True, null=True)
     publisher = models.CharField(_("Publisher"), max_length=500, blank=True, null=True)
     description = models.TextField(_("Description"), blank=True, null=True)
-    pub_url = models.URLField(_("Publication URL"), max_length=2000, blank=True, null=True)
-    eprint_url = models.URLField(_("Eprint PDF URL"), max_length=2000, blank=True, null=True)
-    url_related_articles = models.CharField(_("Related Articles URL"), max_length=2000, blank=True, null=True)
-    versions_count = models.CharField(_("Versions Count"), max_length=150, blank=True, null=True)
-    url_all_versions = models.CharField(_("All Versions URL"), max_length=2000, blank=True, null=True)
-    cites_id = models.CharField(_("Scholar Cites ID"), max_length=100, blank=True, null=True)
-    url_scholar_article = models.CharField(_("Scholar Article Link"), max_length=2000, blank=True, null=True)
+    pub_url = models.URLField(
+        _("Publication URL"), max_length=2000, blank=True, null=True
+    )
+    eprint_url = models.URLField(
+        _("Eprint PDF URL"), max_length=2000, blank=True, null=True
+    )
+    url_related_articles = models.CharField(
+        _("Related Articles URL"), max_length=2000, blank=True, null=True
+    )
+    versions_count = models.CharField(
+        _("Versions Count"), max_length=150, blank=True, null=True
+    )
+    url_all_versions = models.CharField(
+        _("All Versions URL"), max_length=2000, blank=True, null=True
+    )
+    cites_id = models.CharField(
+        _("Scholar Cites ID"), max_length=100, blank=True, null=True
+    )
+    url_scholar_article = models.CharField(
+        _("Scholar Article Link"), max_length=2000, blank=True, null=True
+    )
 
     class Meta:
         db_table = "scholar_publications"
@@ -373,14 +521,21 @@ class ProfileStatus(models.TextChoices):
 
 
 class ScholarProfile(BaseModel):
+    """
+    Scholar profile associated with a user for tracking academic publications.
+    """
     user = models.OneToOneField(
         "users.User",
         on_delete=models.CASCADE,
         related_name="scholar_profile",
         verbose_name=_("User"),
     )
-    scholar_url = models.URLField(_("Scholar URL"), max_length=500, blank=True, null=True)
-    scholar_id = models.CharField(_("Scholar ID"), max_length=100, blank=True, null=True)
+    scholar_url = models.URLField(
+        _("Scholar URL"), max_length=500, blank=True, null=True
+    )
+    scholar_id = models.CharField(
+        _("Scholar ID"), max_length=100, blank=True, null=True
+    )
     status = models.CharField(
         _("Status"),
         max_length=20,
@@ -396,6 +551,8 @@ class ScholarProfile(BaseModel):
 
     class Meta:
         db_table = "scholar_profiles"
+        verbose_name = _("Scholar Profile")
+        verbose_name_plural = _("Scholar Profiles")
         ordering = ["-created_at"]
 
     def __str__(self):
@@ -403,6 +560,9 @@ class ScholarProfile(BaseModel):
 
 
 class ScholarPublication(BaseModel):
+    """
+    Individual publication entry linked to a user's ScholarProfile.
+    """
     profile = models.ForeignKey(
         ScholarProfile,
         on_delete=models.CASCADE,
@@ -411,13 +571,19 @@ class ScholarPublication(BaseModel):
     )
     title = models.CharField(_("Publication Title"), max_length=500)
     authors = models.TextField(_("Authors"), blank=True, default="")
-    journal = models.CharField(_("Journal / Conference"), max_length=500, blank=True, default="")
+    journal = models.CharField(
+        _("Journal / Conference"), max_length=500, blank=True, default=""
+    )
     pub_year = models.IntegerField(_("Publication Year"), blank=True, null=True)
     citations = models.IntegerField(_("Citations Count"), default=0)
-    url = models.URLField(_("Publication Link"), max_length=500, blank=True, default="")
+    url = models.URLField(
+        _("Publication Link"), max_length=500, blank=True, default=""
+    )
 
     class Meta:
         db_table = "scholar_user_publications"
+        verbose_name = _("Scholar Publication")
+        verbose_name_plural = _("Scholar Publications")
         ordering = ["-pub_year", "-citations"]
 
     def __str__(self):
