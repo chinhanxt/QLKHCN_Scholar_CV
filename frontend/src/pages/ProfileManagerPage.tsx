@@ -420,6 +420,40 @@ export function ProfileManagerPage() {
 
 
 
+  // Visual citation trend calculation in ProfileManagerPage
+  const authorCitesPerYear = selectedProfile?.cites_per_year || {}
+  const officialYears = Object.keys(authorCitesPerYear).filter((y) => /^\d{4}$/.test(y)).sort()
+
+  const citationValues = officialYears.length > 0
+    ? officialYears.map((year) => ({ year, count: authorCitesPerYear[year] || 0 }))
+    : (selectedProfile?.publications
+        ? Array.from(
+            new Set(
+              selectedProfile.publications
+                .flatMap((p) => Object.keys(p.cites_per_year || {}))
+                .filter((y) => /^\d{4}$/.test(y))
+            )
+          ).sort().map((year) => ({
+            year,
+            count: selectedProfile.publications.reduce((sum, p) => sum + (p.cites_per_year?.[year] || 0), 0)
+          }))
+        : [])
+
+  const recentCitationValues = citationValues.slice(-8)
+  const maxRecentCites = Math.max(...recentCitationValues.map((v) => v.count), 1)
+
+  // Auto scroll main container to top when selecting a publication in ProfileManagerPage
+  useEffect(() => {
+    if (selectedPubId) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      const mainEl = document.querySelector('main')
+      if (mainEl) {
+        mainEl.scrollTop = 0
+        mainEl.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+  }, [selectedPubId])
+
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-32px)] md:h-[calc(100vh-48px)] overflow-hidden">
       {/* Main Split Pane Layout */}
@@ -616,31 +650,134 @@ export function ProfileManagerPage() {
                   </div>
                 </Card>
 
-                {/* Shared Publication Table List */}
-                <PublicationTableList
-                  publications={selectedProfile.publications}
-                  selectedPubIds={selectedPubIds}
-                  onSelectPub={(pub) => {
-                    setSelectedPubId(pub.id)
-                    setIsSidebarCollapsed(true)
-                  }}
-                  onToggleSelectPub={handleToggleSelectPub}
-                  onToggleSelectAll={handleToggleSelectAll}
-                  onDeselectAll={handleDeselectAll}
-                  onAddPub={() => setIsAddPubModalOpen(true)}
-                  onOpenTrash={() => setIsTrashModalOpen(true)}
-                  onMergePubs={() => setIsMergeModalOpen(true)}
-                  onDeleteSelectedPubs={handleBulkDeleteSelected}
-                  onExport={() => handleExportCSV(selectedProfile)}
-                  searchKeyword={pubKeyword}
-                  setSearchKeyword={setPubKeyword}
-                  yearFilter={pubYear}
-                  setYearFilter={setPubYear}
-                  quartileFilter={pubQuartile}
-                  setQuartileFilter={setPubQuartile}
-                  sortBy="citations_desc"
-                  setSortBy={() => {}}
-                />
+                {/* 70/30 Grid Layout: Publication List Table (Left 70%) + Cited By Sidebar Card (Right 30%) */}
+                <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 items-start">
+                  
+                  {/* LEFT (70% - Columns 7/10) */}
+                  <div className="lg:col-span-7 flex flex-col gap-6">
+                    <PublicationTableList
+                      publications={selectedProfile.publications}
+                      selectedPubIds={selectedPubIds}
+                      onSelectPub={(pub) => {
+                        setSelectedPubId(pub.id)
+                        setIsSidebarCollapsed(true)
+                      }}
+                      onToggleSelectPub={handleToggleSelectPub}
+                      onToggleSelectAll={handleToggleSelectAll}
+                      onDeselectAll={handleDeselectAll}
+                      onAddPub={() => setIsAddPubModalOpen(true)}
+                      onOpenTrash={() => setIsTrashModalOpen(true)}
+                      onMergePubs={() => setIsMergeModalOpen(true)}
+                      onDeleteSelectedPubs={handleBulkDeleteSelected}
+                      onExport={() => handleExportCSV(selectedProfile)}
+                      searchKeyword={pubKeyword}
+                      setSearchKeyword={setPubKeyword}
+                      yearFilter={pubYear}
+                      setYearFilter={setPubYear}
+                      quartileFilter={pubQuartile}
+                      setQuartileFilter={setPubQuartile}
+                      sortBy="citations_desc"
+                      setSortBy={() => {}}
+                    />
+                  </div>
+
+                  {/* RIGHT (30% - Sidebar Widget matching Scholar tab) */}
+                  <div className="lg:col-span-3 flex flex-col gap-6 w-full">
+                    <Card className="border-[#E5E7EB] rounded-3xl bg-white p-5 shadow-sm">
+                      <div className="flex justify-between items-center mb-3">
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Trích dẫn bởi</h3>
+                      </div>
+                      
+                      {/* Metrics comparison table */}
+                      <table className="w-full text-left text-[11px] border-collapse mb-5">
+                        <thead>
+                          <tr className="text-slate-400 font-bold border-b border-slate-100">
+                            <th className="py-1"></th>
+                            <th className="py-1 text-right w-16">Tất cả</th>
+                            <th className="py-1 text-right w-20">Từ 2021</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                          <tr>
+                            <td className="py-2 font-semibold">Số trích dẫn</td>
+                            <td className="py-2 text-right font-bold text-slate-800">{selectedProfile.citedby}</td>
+                            <td className="py-2 text-right font-bold text-slate-800">{selectedProfile.citedby5y ?? 0}</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 font-semibold">Chỉ số h-index</td>
+                            <td className="py-2 text-right font-bold text-slate-800">{selectedProfile.hindex}</td>
+                            <td className="py-2 text-right font-bold text-slate-800">{selectedProfile.hindex5y ?? 0}</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 font-semibold">Chỉ số i10-index</td>
+                            <td className="py-2 text-right font-bold text-slate-800">{selectedProfile.i10index}</td>
+                            <td className="py-2 text-right font-bold text-slate-800">{selectedProfile.i10index5y ?? 0}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Vertical citation trend bar chart */}
+                      {recentCitationValues.length === 0 ? (
+                        <div className="flex h-36 items-center justify-center text-xs text-[#64748B] italic">
+                          Chưa có lịch sử trích dẫn theo năm.
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="relative bg-slate-50/50 border border-slate-100 rounded-2xl p-3 flex justify-center items-center">
+                            <svg viewBox="0 0 240 140" className="w-full h-auto overflow-visible">
+                              <line x1="10" y1="20" x2="210" y2="20" stroke="#E2E8F0" strokeWidth="0.8" />
+                              <line x1="10" y1="70" x2="210" y2="70" stroke="#E2E8F0" strokeWidth="0.8" />
+                              <line x1="10" y1="120" x2="210" y2="120" stroke="#94A3B8" strokeWidth="1" />
+                              
+                              <text x="215" y="24" className="text-[9px] font-semibold fill-slate-500">{maxRecentCites}</text>
+                              <text x="215" y="74" className="text-[9px] font-semibold fill-slate-500">{Math.round(maxRecentCites / 2)}</text>
+                              <text x="215" y="124" className="text-[9px] font-semibold fill-slate-500">0</text>
+                              
+                              {recentCitationValues.map((v, i) => {
+                                const barWidth = 14
+                                const spacing = recentCitationValues.length > 1 ? (190 - barWidth) / (recentCitationValues.length - 1) : 0
+                                const x = 15 + i * spacing
+                                const barHeight = maxRecentCites > 0 ? (v.count / maxRecentCites) * 100 : 0
+                                const y = 120 - barHeight
+                                return (
+                                  <g key={v.year} className="group cursor-pointer">
+                                    <rect 
+                                      x={x} 
+                                      y={y} 
+                                      width={barWidth} 
+                                      height={barHeight} 
+                                      fill="#777777" 
+                                      className="hover:fill-[#2563EB] transition-colors"
+                                    />
+                                    {v.count > 0 && (
+                                      <text 
+                                        x={x + barWidth / 2} 
+                                        y={y - 4} 
+                                        textAnchor="middle" 
+                                        className="text-[8px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        {v.count}
+                                      </text>
+                                    )}
+                                    <text 
+                                      x={x + barWidth / 2} 
+                                      y="134" 
+                                      textAnchor="middle" 
+                                      className="text-[8px] font-bold fill-slate-400"
+                                    >
+                                      {v.year}
+                                    </text>
+                                  </g>
+                                )
+                              })}
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+
+                </div>
               </div>
             )
           ) : (
