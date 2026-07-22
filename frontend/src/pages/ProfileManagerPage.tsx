@@ -574,7 +574,6 @@ export function ProfileManagerPage() {
                       authorName={selectedProfile.name}
                       onBack={() => {
                         setSelectedPubId(null)
-                        setIsSidebarCollapsed(false)
                       }}
                       onEdit={(pub, e) => openEditPubModal(pub, e)}
                       onDelete={(pubId, e) => handleDeleteSinglePub(pubId, e)}
