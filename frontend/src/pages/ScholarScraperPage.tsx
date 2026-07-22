@@ -152,10 +152,15 @@ export function ScholarScraperPage() {
     setSelectedPubIds([])
   }, [profile])
 
-  // Automatically scroll to top when selecting a publication (matches Image 2 layout)
+  // Automatically scroll main scrollable container to top when selecting a publication (matches Image 2 layout)
   useEffect(() => {
     if (selectedPublication) {
       window.scrollTo({ top: 0, behavior: 'smooth' })
+      const mainEl = document.querySelector('main')
+      if (mainEl) {
+        mainEl.scrollTop = 0
+        mainEl.scrollTo({ top: 0, behavior: 'smooth' })
+      }
     }
   }, [selectedPublication])
   
