@@ -248,31 +248,41 @@ class AutoScanConfig(models.Model):
 
 
 class AntiBlockConfig(models.Model):
-    use_tor_proxy = models.BooleanField(default=True)
-    use_free_proxy_pool = models.BooleanField(default=True)
-    custom_proxy_list = models.TextField(blank=True, default='')
+    """
+    Singleton configuration model for managing Google Scholar scraper anti-blocking parameters,
+    proxy settings, CAPTCHA solver integration, and retry/backoff stats.
+    """
+    use_tor_proxy = models.BooleanField(_("Use Tor Proxy"), default=True)
+    use_free_proxy_pool = models.BooleanField(_("Use Free Proxy Pool"), default=True)
+    custom_proxy_list = models.TextField(_("Custom Proxy List"), blank=True, default='')
 
-    enable_captcha_solver = models.BooleanField(default=False)
-    captcha_provider = models.CharField(max_length=50, default='2captcha')
-    captcha_api_key = models.CharField(max_length=255, blank=True, default='')
+    enable_captcha_solver = models.BooleanField(_("Enable CAPTCHA Solver"), default=False)
+    captcha_provider = models.CharField(_("CAPTCHA Provider"), max_length=50, default='2captcha')
+    captcha_api_key = models.CharField(_("CAPTCHA API Key"), max_length=255, blank=True, default='')
 
-    max_retries_per_request = models.IntegerField(default=5)
-    adaptive_backoff_enabled = models.BooleanField(default=True)
-    base_delay_seconds = models.FloatField(default=1.0)
-    max_delay_seconds = models.FloatField(default=15.0)
+    max_retries_per_request = models.IntegerField(_("Max Retries Per Request"), default=5)
+    adaptive_backoff_enabled = models.BooleanField(_("Adaptive Backoff Enabled"), default=True)
+    base_delay_seconds = models.FloatField(_("Base Delay Seconds"), default=1.0)
+    max_delay_seconds = models.FloatField(_("Max Delay Seconds"), default=15.0)
 
-    total_requests_count = models.IntegerField(default=0)
-    captcha_encountered_count = models.IntegerField(default=0)
-    captcha_solved_count = models.IntegerField(default=0)
-    ip_rotations_count = models.IntegerField(default=0)
+    total_requests_count = models.IntegerField(_("Total Requests Count"), default=0)
+    captcha_encountered_count = models.IntegerField(_("CAPTCHA Encountered Count"), default=0)
+    captcha_solved_count = models.IntegerField(_("CAPTCHA Solved Count"), default=0)
+    ip_rotations_count = models.IntegerField(_("IP Rotations Count"), default=0)
 
     class Meta:
-        verbose_name = 'Anti-Block Config'
+        db_table = "scholar_anti_block_config"
+        verbose_name = _("Anti-Block Config")
+        verbose_name_plural = _("Anti-Block Configs")
+
+    def __str__(self) -> str:
+        return "Anti-Block Configuration"
 
     @classmethod
-    def get_solo(cls):
+    def get_solo(cls) -> "AntiBlockConfig":
         obj, _ = cls.objects.get_or_create(id=1)
         return obj
+
 
 
 
