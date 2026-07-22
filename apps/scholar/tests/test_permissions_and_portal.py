@@ -1,16 +1,17 @@
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIClient, APIRequestFactory
 
-from apps.core.permissions import IsAdminUser, IsProfileOwner
-from apps.scholar.models import ScholarProfile, ScholarPublication
+from apps.core.permissions import IsAdminUser
+from apps.core.permissions import IsProfileOwner
+from apps.scholar.models import ScholarProfile
+from apps.scholar.models import ScholarPublication
 
 User = get_user_model()
 
 
 class DummyProfile:
-
     def __init__(self, user):
         self.user = user
 
@@ -107,9 +108,7 @@ def test_is_profile_owner_permission():
     request_other = factory.get("/")
     request_other.user = other_user
     assert permission.has_permission(request_other, None) is True
-    assert (
-        permission.has_object_permission(request_other, None, profile_obj) is False
-    )
+    assert permission.has_object_permission(request_other, None, profile_obj) is False
     assert permission.has_object_permission(request_other, None, owner_user) is False
 
     # 4. Admin access (True)
@@ -135,9 +134,7 @@ def test_scholar_profile_and_publication_creation():
     )
     profile = ScholarProfile.objects.create(
         user=user,
-        scholar_url=(
-            "https://scholar.google.com/citations?user=AHHDABDaaaaJ"
-        ),
+        scholar_url=("https://scholar.google.com/citations?user=AHHDABDaaaaJ"),
         scholar_id="AHHDABDaaaaJ",
         status="PENDING",
     )
@@ -156,4 +153,21 @@ def test_scholar_profile_and_publication_creation():
     assert pub.citations == 42
 
 
+@pytest.mark.django_db
+def test_user_portal_profile_submission_and_get():
+    user = User.objects.create_user(email="portal_user@example.com", username="puser1", password="password123")  # noqa: S106
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    # 1. GET user profile (auto-created on first get as DRAFT)
+    res = client.get("/api/scholar/me/profile/")
+    assert res.status_code == 200
+    assert res.data["status"] == "DRAFT"
+
+    # 2. POST submit Scholar URL
+    submit_data = {"scholar_url": "https://scholar.google.com/citations?user=AHHDABDaaaaJ"}
+    res_submit = client.post("/api/scholar/me/profile/submit/", submit_data, format="json")
+    assert res_submit.status_code == 200
+    assert res_submit.data["status"] == "PENDING"
+    assert res_submit.data["scholar_id"] == "AHHDABDaaaaJ"
 

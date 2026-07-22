@@ -1,12 +1,19 @@
 import logging
 import os
+from re import search as re_search
+from django.utils import timezone
 from rest_framework import viewsets, status, permissions
+from rest_framework.viewsets import ViewSet, ModelViewSet
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
-from apps.scholar.models import AuthorProfile, AutoScanConfig, AntiBlockConfig
+from apps.core.permissions import IsAdminUser
+from apps.scholar.models import (
+    AuthorProfile, AutoScanConfig, AntiBlockConfig,
+    ScholarProfile, ScholarPublication, ProfileStatus,
+)
 from apps.scholar.scholarly.tor_helper import renew_tor_ip, get_tor_status
 from apps.scholar.tasks import scrape_author_cv_smart_task
 from apps.scholar.api.serializers import (
@@ -19,6 +26,9 @@ from apps.scholar.api.serializers import (
     ClarivateCrawlRequestSerializer,
     UnifiedCrawlRequestSerializer,
     AntiBlockConfigSerializer,
+    ScholarProfileSerializer,
+    ScholarPublicationSerializer,
+    ProfileSubmitSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -888,4 +898,51 @@ class RotateTorView(APIView):
         from apps.scholar.scholarly.tor_helper import renew_tor_ip
         success = renew_tor_ip()
         return Response({'status': 'success' if success else 'failed', 'rotated': success})
+
+
+class UserScholarProfileViewSet(ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def _get_or_create_profile(self, user):
+        profile, _ = ScholarProfile.objects.get_or_create(user=user)
+        return profile
+
+    @action(detail=False, methods=["get"], url_path="profile")
+    def my_profile(self, request):
+        profile = self._get_or_create_profile(request.user)
+        serializer = ScholarProfileSerializer(profile)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["post"], url_path="profile/submit")
+    def submit_profile(self, request):
+        profile = self._get_or_create_profile(request.user)
+        serializer = ProfileSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        url = serializer.validated_data["scholar_url"]
+        match = re_search(r"user=([a-zA-Z0-9_-]+)", url)
+        scholar_id = match.group(1) if match else None
+
+        profile.scholar_url = url
+        profile.scholar_id = scholar_id
+        profile.status = ProfileStatus.PENDING
+        profile.submitted_at = timezone.now()
+        profile.save()
+
+        return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
+
+
+class AdminScholarApprovalViewSet(ModelViewSet):
+    permission_classes = [IsAdminUser]
+    queryset = ScholarProfile.objects.all()
+    serializer_class = ScholarProfileSerializer
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve_profile(self, request, pk=None):
+        profile = self.get_object()
+        profile.status = ProfileStatus.APPROVED
+        profile.approved_at = timezone.now()
+        profile.save()
+        return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
+
 

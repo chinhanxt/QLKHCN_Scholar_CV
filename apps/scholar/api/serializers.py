@@ -2,7 +2,7 @@ from rest_framework import serializers
 from apps.scholar.models import (
     AuthorProfile, Publication, Journal,
     BioxbioJournal, BioxbioRanking, ScimagoJournal, ScimagoRanking, ClarivateJournal,
-    AntiBlockConfig,
+    AntiBlockConfig, ScholarProfile, ScholarPublication, ProfileStatus,
 )
 
 
@@ -234,10 +234,40 @@ class UnifiedCrawlRequestSerializer(serializers.Serializer):
 class AntiBlockConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = AntiBlockConfig
-        fields = '__all__'
+        fields = "__all__"
 
 
+class ScholarPublicationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ScholarPublication
+        fields = ["id", "title", "authors", "journal", "pub_year", "citations", "url"]
 
 
+class ScholarProfileSerializer(serializers.ModelSerializer):
+    publications = ScholarPublicationSerializer(many=True, read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = ScholarProfile
+        fields = [
+            "id",
+            "scholar_url",
+            "scholar_id",
+            "status",
+            "status_display",
+            "submitted_at",
+            "approved_at",
+            "total_citations",
+            "h_index",
+            "i10_index",
+            "publications",
+        ]
 
 
+class ProfileSubmitSerializer(serializers.Serializer):
+    scholar_url = serializers.URLField(required=True)
+
+    def validate_scholar_url(self, value):
+        if "scholar.google" not in value.lower():
+            raise serializers.ValidationError("Đường dẫn phải là liên kết hợp lệ từ Google Scholar.")
+        return value.strip()
