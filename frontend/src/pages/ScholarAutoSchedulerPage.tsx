@@ -5,25 +5,20 @@ import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { scholarApi } from '@/api/endpoints/scholar'
 import type { AuthorProfileDetail } from '@/api/endpoints/scholar'
-import { AntiBlockControlModal } from '@/components/scholar/AntiBlockControlModal'
 import {
   Clock,
   User,
   CheckCircle,
   XCircle,
   Loader2,
-  Power,
   X,
   Search,
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Upload,
   FileText,
   RefreshCw,
   Play,
-  ShieldAlert,
-  Server,
   Zap,
   Settings,
   List,
@@ -56,7 +51,6 @@ const WEEKDAYS = [
 
 
 export function ScholarAutoSchedulerPage() {
-  const [torInfo, setTorInfo] = useState<any>(null)
   const [config, setConfig] = useState<any>({
     is_active: true,
     frequency_type: 'WEEKLY',
@@ -79,10 +73,7 @@ export function ScholarAutoSchedulerPage() {
   const handleNextMonth = () => {
     setCurrentCalendarDate(new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 1, 1))
   }
-  const [bulkText, setBulkText] = useState('')
-  const [loadingTor, setLoadingTor] = useState(false)
   const [loadingConfig, setLoadingConfig] = useState(false)
-  const [loadingImport, setLoadingImport] = useState(false)
   const [authors, setAuthors] = useState<AuthorProfileDetail[]>([])
   const [loadingAuthors, setLoadingAuthors] = useState(false)
   const [selectedAuthorIds, setSelectedAuthorIds] = useState<number[]>([])
@@ -90,8 +81,11 @@ export function ScholarAutoSchedulerPage() {
   const [isJobBannerDismissed, setIsJobBannerDismissed] = useState(false)
   const [isLogModalOpen, setIsLogModalOpen] = useState(false)
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
-  const [isAntiBlockModalOpen, setIsAntiBlockModalOpen] = useState(false)
   const isScheduleModalOpenRef = useRef(isScheduleModalOpen)
+
+  // Author Table Search & Filter States
+  const [authorSearchTerm, setAuthorSearchTerm] = useState('')
+  const [authorStatusFilter, setAuthorStatusFilter] = useState<string>('ALL')
 
   useEffect(() => {
     isScheduleModalOpenRef.current = isScheduleModalOpen
@@ -211,15 +205,6 @@ export function ScholarAutoSchedulerPage() {
     prevJobStatusRef.current = config.current_job_status || null
   }, [config.current_job_status, config.current_job_detail])
 
-  const fetchTorStatus = async () => {
-    try {
-      const res = await scholarApi.getTorStatus()
-      setTorInfo(res.data)
-    } catch (e) {
-      setTorInfo({ status: 'offline' })
-    }
-  }
-
   const fetchConfig = async () => {
     try {
       const res = await scholarApi.getAutoScanConfig()
@@ -276,7 +261,6 @@ export function ScholarAutoSchedulerPage() {
   }
 
   useEffect(() => {
-    fetchTorStatus()
     fetchConfig()
     fetchAuthors(false)
 
@@ -288,69 +272,6 @@ export function ScholarAutoSchedulerPage() {
 
     return () => clearInterval(interval)
   }, [])
-
-  const handleRotateIp = async () => {
-    setLoadingTor(true)
-    addSchedulerLog(
-      'PROXY_TOR',
-      'THÔNG_TIN',
-      'Gửi lệnh đổi IP Tor',
-      'Đã phát tín hiệu NEWNYM tới Tor Control Port 9051...',
-      'Port 9051'
-    )
-    try {
-      await scholarApi.rotateTorIp()
-      toast.success('Đã gửi tín hiệu NEWNYM. IP Tor đã được đổi ngẫu nhiên!')
-      addSchedulerLog(
-        'PROXY_TOR',
-        'THÀNH_CÔNG',
-        'Đổi IP Tor thành công',
-        'Đã nhận xác nhận từ Tor Control. IP đã được đổi ngẫu nhiên.',
-        'Port 9051'
-      )
-      await fetchTorStatus()
-    } catch (e) {
-      toast.error('Lỗi khi đổi IP Tor.')
-      addSchedulerLog(
-        'PROXY_TOR',
-        'BÁO_LỖI',
-        'Lỗi đổi IP Tor',
-        'Không thể gửi tín hiệu NEWNYM đến Tor Control Port 9051.',
-        'Port 9051'
-      )
-    } finally {
-      setLoadingTor(false)
-    }
-  }
-
-  const handleStartTor = async () => {
-    setLoadingTor(true)
-    addSchedulerLog(
-      'PROXY_TOR',
-      'THÔNG_TIN',
-      'Bật Tor Proxy',
-      'Khởi động Tor Proxy Container...',
-      'Docker Container'
-    )
-    try {
-      const res = await scholarApi.startTorService()
-      toast.success(res.data?.message || 'Đã gửi lệnh bật Tor Proxy Container!')
-      addSchedulerLog(
-        'PROXY_TOR',
-        'THÀNH_CÔNG',
-        'Khởi động Tor Proxy thành công',
-        res.data?.message || 'Container Tor Proxy đã khởi động.',
-        'Docker Container'
-      )
-      await fetchTorStatus()
-    } catch (e: any) {
-      const errMsg = e.response?.data?.error || 'Lỗi khi bật Tor Proxy Container.'
-      toast.error(errMsg)
-      addSchedulerLog('PROXY_TOR', 'BÁO_LỖI', 'Lỗi bật Tor Container', errMsg, 'Docker Container')
-    } finally {
-      setLoadingTor(false)
-    }
-  }
 
   const handleSaveConfig = async () => {
     setLoadingConfig(true)
@@ -369,41 +290,6 @@ export function ScholarAutoSchedulerPage() {
       addSchedulerLog('CẤU_HÌNH', 'BÁO_LỖI', 'Lỗi lưu cấu hình', 'Không thể lưu thông số cấu hình auto-scan.', 'AutoScanConfig')
     } finally {
       setLoadingConfig(false)
-    }
-  }
-
-  const handleBulkImport = async () => {
-    if (!bulkText.trim()) {
-      toast.error('Vui lòng dán danh sách Scholar ID hoặc URL!')
-      return
-    }
-    const snippet = bulkText.trim().slice(0, 60)
-    const lineCount = bulkText.trim().split('\n').filter(Boolean).length
-    addSchedulerLog(
-      'NHẬP_CV',
-      'THÔNG_TIN',
-      'Bulk Import CV',
-      `Bắt đầu import ${lineCount} dòng dữ liệu CV. Mẫu: "${snippet}${bulkText.length > 60 ? '...' : ''}"`,
-      `Count: ${lineCount}`
-    )
-    setLoadingImport(true)
-    try {
-      const res = await scholarApi.bulkImportCVs({ scholar_ids_or_urls: bulkText, trigger_now: true })
-      toast.success(res.data?.message || 'Đã nhập danh sách CV thành công!')
-      addSchedulerLog(
-        'NHẬP_CV',
-        'THÀNH_CÔNG',
-        'Nhập danh sách CV tác giả',
-        res.data?.message || `Đã nhập thành công ${lineCount} hồ sơ CV.`,
-        `Count: ${lineCount}`
-      )
-      setBulkText('')
-      fetchAuthors()
-    } catch (e) {
-      toast.error('Lỗi khi nhập danh sách CV.')
-      addSchedulerLog('NHẬP_CV', 'BÁO_LỖI', 'Lỗi Bulk Import', 'Xảy ra lỗi trong quá trình import danh sách CV tác giả.', `Count: ${lineCount}`)
-    } finally {
-      setLoadingImport(false)
     }
   }
 
@@ -570,34 +456,64 @@ export function ScholarAutoSchedulerPage() {
     }
   }
 
-  const detectedCount = bulkText.trim().split('\n').filter(Boolean).length
+  const filteredAuthors = authors.filter((author: any) => {
+    const searchLower = authorSearchTerm.trim().toLowerCase()
+    const matchesSearch =
+      !searchLower ||
+      (author.name && author.name.toLowerCase().includes(searchLower)) ||
+      (author.scholar_id && author.scholar_id.toLowerCase().includes(searchLower)) ||
+      (author.affiliation && author.affiliation.toLowerCase().includes(searchLower))
+
+    const matchesStatus =
+      authorStatusFilter === 'ALL' ||
+      (authorStatusFilter === 'SUCCESS' && (author.last_scan_status === 'SUCCESS' || author.last_scan_status === 'UP_TO_DATE' || author.last_scan_status === 'UPDATED')) ||
+      (authorStatusFilter === 'IN_PROGRESS' && author.last_scan_status === 'IN_PROGRESS') ||
+      (authorStatusFilter === 'FAILED_CAPTCHA' && author.last_scan_status === 'FAILED_CAPTCHA') ||
+      (authorStatusFilter === 'FAILED' && (author.last_scan_status === 'FAILED' || author.last_scan_status === 'FAILED_ERROR')) ||
+      (authorStatusFilter === 'NEVER' && (!author.last_scan_status || author.last_scan_status === 'PENDING' || author.last_scan_status === 'NEVER'))
+
+    return matchesSearch && matchesStatus
+  })
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Row 1 (Top Card): Bulk Import CV Card */}
+      {/* 1. Top Section: Schedule Config & Quick Actions */}
       <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div>
-            <h2 className="font-bold text-slate-800 text-base flex items-center gap-2">
-              <Upload className="w-5 h-5 text-slate-700" />
-              <span>Nhập Danh Sách Hồ Sơ CV Tác Giả</span>
-            </h2>
-            <p className="text-xs text-slate-500">Đưa hàng loạt ID/URL tác giả vào hàng chờ cào CV tự động</p>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="font-bold text-slate-800 text-base sm:text-lg flex items-center gap-2">
+                <Settings className="w-5 h-5 text-[#005b9a]" />
+                <span>Cấu Hình Lịch Auto-Scan Tự Động</span>
+              </h2>
+              <label className="relative inline-flex items-center cursor-pointer ml-2">
+                <input
+                  type="checkbox"
+                  checked={config.is_active ?? true}
+                  onChange={(e) => handleToggleActive(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#005b9a]"></div>
+                <span className="ml-2 text-xs font-bold text-slate-700">Kích hoạt</span>
+              </label>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Thiết lập chu kỳ, mốc giờ & hạn ngạch quét tự động ngầm xoay vòng dữ liệu tác giả trong CSDL
+            </p>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
-            <div className="hidden lg:flex items-center gap-2 text-[11px] font-mono">
-              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">
-                ID: <code className="text-[#005b9a] font-bold">q81c5sAAAAAJ</code>
-              </span>
-              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 hidden xl:inline-block">
-                URL: <code className="text-[#005b9a]">https://scholar.google.com/citations?user=...</code>
-              </span>
-            </div>
+          <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+            <button
+              onClick={() => setIsScheduleModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-[#005b9a] hover:bg-[#004b80] text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm hover:scale-[1.01]"
+            >
+              <Settings className="w-4 h-4 text-white" />
+              <span>Chỉnh Sửa Lịch Quét</span>
+            </button>
 
             <button
               onClick={() => setIsLogModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 border border-slate-200 cursor-pointer transition-all shadow-3xs"
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 border border-slate-200 cursor-pointer transition-all shadow-3xs"
             >
               <FileText className="w-4 h-4 text-slate-600" />
               <span>Nhật Ký ({logs.length})</span>
@@ -605,11 +521,10 @@ export function ScholarAutoSchedulerPage() {
 
             <button
               onClick={() => {
-                fetchTorStatus()
                 fetchConfig()
                 fetchAuthors()
               }}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 border border-slate-200 cursor-pointer transition-all shadow-3xs"
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 border border-slate-200 cursor-pointer transition-all shadow-3xs"
             >
               <RefreshCw className="w-4 h-4 text-slate-600" />
               <span>Làm mới</span>
@@ -617,32 +532,51 @@ export function ScholarAutoSchedulerPage() {
           </div>
         </div>
 
-        <div className="relative">
-          <textarea
-            rows={4}
-            placeholder="Dán scholar_id (VD: q81c5sAAAAAJ) hoặc URL profile (VD: https://scholar.google.com/citations?user=q81c5sAAAAAJ)..."
-            value={bulkText}
-            onChange={(e) => setBulkText(e.target.value)}
-            className="w-full border border-slate-200/80 rounded-2xl p-4 text-xs font-mono focus:outline-none focus:border-[#005b9a] bg-slate-50/50 shadow-inner leading-relaxed"
-          />
-          <div className="absolute right-3 bottom-3 text-[11px] font-mono text-slate-400 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-slate-200/80 shadow-3xs">
-            Đã phát hiện <strong className="text-[#005b9a]">{detectedCount}</strong> ID/URL
-          </div>
-        </div>
+        {/* Schedule Summary Banner */}
+        <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Clock className="w-5 h-5 text-[#005b9a] shrink-0" />
+            <div>
+              <span className="text-xs font-bold text-slate-800 block">Lịch Quét Tự Động Hiện Tại:</span>
+              <span className="text-xs font-medium text-slate-600">
+                {(() => {
+                  const modeText =
+                    config.frequency_type === 'MONTHLY'
+                      ? 'Mode Hằng Tháng'
+                      : config.frequency_type === 'DAILY'
+                      ? 'Mode Hằng Ngày'
+                      : 'Mode Hằng Tuần'
 
-        <div className="flex justify-end">
-          <button
-            onClick={handleBulkImport}
-            disabled={loadingImport || !bulkText.trim()}
-            className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm hover:scale-[1.01] active:scale-[0.99]"
-          >
-            {loadingImport ? (
-              <Spinner className="w-4 h-4 text-white" />
-            ) : (
-              <Play className="w-4 h-4 text-white fill-white" />
-            )}
-            <span>Nhập & Quét CV</span>
-          </button>
+                  const dayText =
+                    config.frequency_type === 'MONTHLY'
+                      ? `Ngày ${config.preferred_day_of_month ?? 1}`
+                      : config.frequency_type === 'DAILY'
+                      ? 'Mỗi ngày'
+                      : WEEKDAYS.find((w) => w.value === (config.preferred_weekday ?? 0))?.label || 'Thứ 2'
+
+                  const hour = config.preferred_hour ?? 2
+                  const minute = config.preferred_minute ?? 0
+                  const hourStr = hour < 10 ? `0${hour}` : `${hour}`
+                  const minStr = minute < 10 ? `0${minute}` : `${minute}`
+                  const timePeriod = hour >= 18 || hour < 6 ? '(Đêm)' : '(Ngày)'
+                  const timeText = `${hourStr}:${minStr} ${timePeriod}`
+
+                  const quotaText = `${config.batch_size_per_hour ?? 8} CV/h`
+                  const delayText = `Delay ${config.delay_min_seconds ?? 8}-${config.delay_max_seconds ?? 15}s`
+
+                  return `${modeText} • ${dayText} • ${timeText} • ${quotaText} • ${delayText}`
+                })()}
+              </span>
+            </div>
+          </div>
+
+          <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border shrink-0 self-start sm:self-center ${
+            config.is_active
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-amber-50 text-amber-700 border-amber-200'
+          }`}>
+            {config.is_active ? '● Đang Bật Lịch Auto-Scan' : '○ Đang Tạm Dừng Lịch'}
+          </span>
         </div>
       </Card>
 
@@ -741,171 +675,6 @@ export function ScholarAutoSchedulerPage() {
           </div>
         </Card>
       )}
-
-      {/* 2. Row 2: Tor Proxy Widget & Schedule Config (2 Compact Cards Side-by-Side) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Card 1: Tor Proxy Status Card (Content-fitted height) */}
-        <Card className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
-          <div className="space-y-3">
-            {/* Header: Title "Tor Proxy Gateway", Status pill */}
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-2">
-                    <ShieldAlert className="w-5 h-5 text-slate-700" />
-                    <span>Tor Proxy Gateway</span>
-                  </h2>
-                  <span className="font-mono text-[10px] text-[#005b9a] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 font-semibold">
-                    Exit IP: {torInfo?.ip || '185.xxx.xxx.xxx'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500">Mã hóa đa tầng & Đổi IP ngẫu nhiên ngầm</p>
-              </div>
-              <span
-                className={`px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 shadow-3xs ${
-                  torInfo?.status === 'online'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : 'bg-rose-50 text-rose-700 border border-rose-200'
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${torInfo?.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                <span>{torInfo?.status === 'online' ? 'ĐANG HOẠT ĐỘNG' : 'NGẮT KẾT NỐI'}</span>
-              </span>
-            </div>
-
-            {/* Compact 2-Port Badges Bar */}
-            <div className="grid grid-cols-2 gap-2.5 text-xs">
-              <div className="bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-200/70 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
-                  <Server className="w-4 h-4 text-slate-500" />
-                  <span>SOCKS5 Proxy</span>
-                </span>
-                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
-                  Port 9050
-                </span>
-              </div>
-              <div className="bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-200/70 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
-                  <Zap className="w-4 h-4 text-slate-500" />
-                  <span>Control Port</span>
-                </span>
-                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
-                  Port 9051
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Integrated Action Button (showing 2 ports) */}
-          <div className="pt-1 flex flex-col sm:flex-row items-center gap-2">
-            {torInfo?.status === 'offline' && (
-              <button
-                onClick={handleStartTor}
-                disabled={loadingTor}
-                className="px-4 py-2.5 rounded-xl bg-[#005b9a] hover:bg-[#004b80] text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-              >
-                {loadingTor ? (
-                  <Spinner className="w-4 h-4 text-white" />
-                ) : (
-                  <Power className="w-4 h-4 text-white" />
-                )}
-                <span>Khởi Động Tor</span>
-              </button>
-            )}
-            <button
-              onClick={handleRotateIp}
-              disabled={loadingTor || torInfo?.status !== 'online'}
-              className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-            >
-              {loadingTor ? (
-                <Spinner className="w-4 h-4 text-white" />
-              ) : (
-                <RefreshCw className="w-4 h-4 text-white" />
-              )}
-              <span>Đổi IP Tor</span>
-            </button>
-
-            <button
-              onClick={() => setIsAntiBlockModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#005b9a] border border-blue-200/80 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-3xs"
-            >
-              <ShieldAlert className="w-4 h-4 text-[#005b9a]" />
-              <span>Hệ Thống Kháng Chặn (3 Lớp)</span>
-            </button>
-
-          </div>
-        </Card>
-
-        {/* Card 2: Auto-Scan Schedule Status Card (Content-fitted height) */}
-        <Card className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4 flex flex-col justify-between">
-          <div className="space-y-3">
-            {/* Header: Title "Cấu Hình Lịch Auto-Scan", Active toggle switch */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h2 className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-2">
-                  <Settings className="w-5 h-5 text-slate-700" />
-                  <span>Cấu Hình Lịch Auto-Scan</span>
-                </h2>
-                <p className="text-[11px] text-slate-500">Chu kỳ & mốc giờ quét tự động</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.is_active ?? true}
-                  onChange={(e) => handleToggleActive(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#005b9a]"></div>
-                <span className="ml-2 text-xs font-bold text-slate-700">Kích hoạt</span>
-              </label>
-            </div>
-
-            {/* Schedule Summary Badge */}
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
-              <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 flex-wrap">
-                {(() => {
-                  const modeText =
-                    config.frequency_type === 'MONTHLY'
-                      ? 'Mode Hằng Tháng'
-                      : config.frequency_type === 'DAILY'
-                      ? 'Mode Hằng Ngày'
-                      : 'Mode Hằng Tuần'
-
-                  const dayText =
-                    config.frequency_type === 'MONTHLY'
-                      ? `Ngày ${config.preferred_day_of_month ?? 1}`
-                      : config.frequency_type === 'DAILY'
-                      ? 'Mỗi ngày'
-                      : WEEKDAYS.find((w) => w.value === (config.preferred_weekday ?? 0))?.label || 'Thứ 2'
-
-                  const hour = config.preferred_hour ?? 2
-                  const minute = config.preferred_minute ?? 0
-                  const hourStr = hour < 10 ? `0${hour}` : `${hour}`
-                  const minStr = minute < 10 ? `0${minute}` : `${minute}`
-                  const timePeriod = hour >= 18 || hour < 6 ? '(Đêm)' : '(Ngày)'
-                  const timeText = `${hourStr}:${minStr} ${timePeriod}`
-
-                  const quotaText = `${config.batch_size_per_hour ?? 8} CV/h`
-                  const delayText = `Delay ${config.delay_min_seconds ?? 8}-${config.delay_max_seconds ?? 15}s`
-
-                  return `${modeText} • ${dayText} • ${timeText} • ${quotaText} • ${delayText}`
-                })()}
-              </span>
-            </div>
-          </div>
-
-          {/* Button */}
-          <div className="pt-1">
-            <button
-              onClick={() => setIsScheduleModalOpen(true)}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-100/90 hover:bg-slate-200 text-[#4F46E5] font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-200/80 shadow-3xs"
-            >
-              <Settings className="w-4 h-4 text-[#4F46E5]" />
-              <span>Cấu Hình Lịch</span>
-            </button>
-          </div>
-        </Card>
-      </div>
 
       {/* Floating Schedule Config Modal */}
       {isScheduleModalOpen && (
@@ -1363,11 +1132,15 @@ export function ScholarAutoSchedulerPage() {
       <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
-            <h2 className="font-bold text-slate-800 text-base flex items-center gap-2">
-              <List className="w-5 h-5 text-slate-700" />
-              <span>Trạng Thái Tự Động Quét CV Tác Giả</span>
-            </h2>
-            <p className="text-xs text-slate-500">Danh sách tác giả và trạng thái Fast Smart Check mới nhất</p>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                <List className="w-5 h-5 text-[#005b9a]" />
+                <span>Trạng Thái Tự Động Quét CV Tác Giả</span>
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Hệ thống tự động xoay vòng quét lại toàn bộ dữ liệu {authors.length} tác giả đã cào lưu trong CSDL theo lịch hẹn
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -1382,7 +1155,7 @@ export function ScholarAutoSchedulerPage() {
                 ) : (
                   <Play className="w-3.5 h-3.5 text-white fill-white" />
                 )}
-                <span>Quét {selectedAuthorIds.length} Tác Giả</span>
+                <span>Quét Thủ Công {selectedAuthorIds.length} Tác Giả</span>
               </button>
             )}
             <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200/80">
@@ -1391,13 +1164,53 @@ export function ScholarAutoSchedulerPage() {
           </div>
         </div>
 
+        {/* Filter & Search Bar */}
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-50/80 p-3 rounded-2xl border border-slate-200/70">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={authorSearchTerm}
+              onChange={(e) => setAuthorSearchTerm(e.target.value)}
+              placeholder="Tìm theo tên tác giả, Scholar ID, đơn vị..."
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-[#005b9a] font-medium shadow-3xs"
+            />
+            {authorSearchTerm && (
+              <button
+                onClick={() => setAuthorSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <span className="text-xs font-semibold text-slate-600 hidden md:inline">Lọc trạng thái:</span>
+            <select
+              value={authorStatusFilter}
+              onChange={(e) => setAuthorStatusFilter(e.target.value)}
+              className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-[#005b9a] cursor-pointer shadow-3xs"
+            >
+              <option value="ALL">Tất cả trạng thái ({authors.length})</option>
+              <option value="SUCCESS">Đã mới nhất / Đã cập nhật</option>
+              <option value="IN_PROGRESS">Đang xử lý</option>
+              <option value="FAILED_CAPTCHA">Bị chặn CAPTCHA</option>
+              <option value="FAILED">Báo lỗi</option>
+              <option value="NEVER">Chờ quét / Chưa cào</option>
+            </select>
+          </div>
+        </div>
+
         {loadingAuthors ? (
           <div className="py-12 flex justify-center items-center gap-2 text-slate-500 text-sm">
             <Spinner /> Đang tải danh sách tác giả...
           </div>
-        ) : authors.length === 0 ? (
+        ) : filteredAuthors.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs">
-            Chưa có tác giả nào trong hệ thống. Hãy nhập danh sách CV phía trên.
+            {authors.length === 0
+              ? 'Chưa có dữ liệu tác giả nào trong CSDL hệ thống.'
+              : 'Không tìm thấy tác giả nào phù hợp với bộ lọc tìm kiếm.'}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
@@ -1421,7 +1234,7 @@ export function ScholarAutoSchedulerPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {authors.map((author: any) => (
+                {filteredAuthors.map((author: any) => (
                   <tr key={author.id || author.scholar_id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-3.5 px-4">
                       <input
@@ -1671,11 +1484,6 @@ export function ScholarAutoSchedulerPage() {
           </div>
         </div>
       )}
-
-      <AntiBlockControlModal
-        isOpen={isAntiBlockModalOpen}
-        onClose={() => setIsAntiBlockModalOpen(false)}
-      />
     </div>
   )
 }
