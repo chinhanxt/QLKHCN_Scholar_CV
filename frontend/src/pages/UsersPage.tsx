@@ -17,6 +17,11 @@ import {
   UserX,
   Lock as LockIcon,
   KeyRound,
+  Bell,
+  ExternalLink,
+  Clock,
+  CheckCircle2,
+  Users,
 } from 'lucide-react'
 import {
   useUsers,
@@ -26,6 +31,7 @@ import {
   useDeleteUser,
   useResetUserPassword,
 } from '@/api/hooks/useUsers'
+import { useAdminProfiles, useApproveProfile } from '@/api/hooks/useUserPortal'
 import { getApiErrorMessage } from '@/lib/api-error'
 import type { UUID, UserListItem } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -37,6 +43,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table'
 
 export function UsersPage() {
+  const [mainTab, setMainTab] = useState<'users' | 'requests'>('users')
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -44,6 +51,8 @@ export function UsersPage() {
   const [deleteTarget, setDeleteTarget] = useState<UserListItem | null>(null)
 
   const { data, isLoading, isError, error } = useUsers(search ? { search } : undefined)
+  const { data: adminProfiles } = useAdminProfiles()
+  const pendingCount = adminProfiles?.filter((p) => p.status === 'PENDING').length || 0
 
   // Filter users by role on frontend if filter is active
   const filteredUsers = data?.results.filter((u) => {
@@ -54,8 +63,44 @@ export function UsersPage() {
 
   return (
     <div className="flex flex-col gap-5 p-2 sm:p-4">
-      {/* Control bar: Search, Role Filter & Create Button */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+      {/* Top Main Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+        <button
+          onClick={() => setMainTab('users')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
+            mainTab === 'users'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Users className="h-4 w-4" />
+          Danh sách Người dùng ({data?.count ?? 0})
+        </button>
+
+        <button
+          onClick={() => setMainTab('requests')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer relative ${
+            mainTab === 'requests'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Bell className="h-4 w-4" />
+          Yêu cầu & Thông báo Hồ sơ
+          {pendingCount > 0 && (
+            <span className="ml-1.5 px-2 py-0.5 text-[11px] font-extrabold rounded-full bg-amber-500 text-white animate-pulse">
+              {pendingCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {mainTab === 'requests' ? (
+        <AdminRequestsTab />
+      ) : (
+        <>
+          {/* Control bar: Search, Role Filter & Create Button */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
@@ -223,6 +268,162 @@ export function UsersPage() {
       {isCreateOpen && <CreateUserDialog onClose={() => setIsCreateOpen(false)} />}
       {editId && <EditUserDialog id={editId} onClose={() => setEditId(null)} />}
       {deleteTarget && <DeleteUserDialog user={deleteTarget} onClose={() => setDeleteTarget(null)} />}
+        </>
+      )}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* 0. ADMIN REQUESTS & NOTIFICATIONS TAB                                      */
+/* -------------------------------------------------------------------------- */
+
+function AdminRequestsTab() {
+  const { data: profiles, isLoading, isError, error } = useAdminProfiles()
+  const approveProfile = useApproveProfile()
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all')
+
+  const pendingCount = profiles?.filter((p) => p.status === 'PENDING').length || 0
+
+  const filteredProfiles = profiles?.filter((p) => {
+    if (filter === 'pending') return p.status === 'PENDING'
+    if (filter === 'approved') return p.status === 'APPROVED'
+    return true
+  })
+
+  const handleApprove = async (profileId: string, email?: string) => {
+    try {
+      await approveProfile.mutateAsync(profileId)
+      toast.success(`Đã duyệt và gửi hồ sơ cho người dùng ${email || ''} thành công!`)
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Duyệt hồ sơ thất bại'))
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Filter bar */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              filter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Tất cả yêu cầu ({profiles?.length || 0})
+          </button>
+          <button
+            onClick={() => setFilter('pending')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+              filter === 'pending' ? 'bg-white text-amber-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Clock className="h-3.5 w-3.5 text-amber-600" />
+            Đang chờ duyệt ({pendingCount})
+          </button>
+          <button
+            onClick={() => setFilter('approved')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+              filter === 'approved' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            Đã duyệt
+          </button>
+        </div>
+      </div>
+
+      {/* Requests Table */}
+      <Card className="rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden bg-white">
+        {isLoading ? (
+          <div className="flex items-center justify-center gap-2 p-12 text-sm text-slate-500">
+            <Spinner className="h-5 w-5 text-blue-600" /> Đang tải danh sách yêu cầu...
+          </div>
+        ) : isError ? (
+          <div className="p-12 text-center text-sm text-red-600">
+            {getApiErrorMessage(error, 'Không tải được danh sách yêu cầu hồ sơ')}
+          </div>
+        ) : (
+          <Table>
+            <THead>
+              <TR className="bg-slate-50/80 border-b border-slate-200/80">
+                <TH className="py-3.5 px-4 font-semibold text-slate-700">Tài khoản Email</TH>
+                <TH className="py-3.5 px-4 font-semibold text-slate-700">Google Scholar Link / ID</TH>
+                <TH className="py-3.5 px-4 font-semibold text-slate-700">Trạng thái</TH>
+                <TH className="py-3.5 px-4 font-semibold text-slate-700">Công trình & Chỉ số</TH>
+                <TH className="py-3.5 px-4 font-semibold text-slate-700 text-right">Thao tác</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {filteredProfiles?.map((p) => (
+                <TR key={p.id} className="hover:bg-slate-50/60 transition-colors border-b border-slate-100">
+                  <TD className="py-3.5 px-4 font-medium text-slate-900 text-sm">{p.user_email || 'User'}</TD>
+                  <TD className="py-3.5 px-4 text-xs font-mono text-slate-600">
+                    {p.scholar_url ? (
+                      <a
+                        href={p.scholar_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-700 hover:underline flex items-center gap-1 max-w-xs truncate"
+                      >
+                        {p.scholar_id ? `ID: ${p.scholar_id}` : p.scholar_url}
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
+                    ) : (
+                      <span className="text-slate-400">Chưa cung cấp</span>
+                    )}
+                  </TD>
+                  <TD className="py-3.5 px-4">
+                    {p.status === 'PENDING' ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 border border-amber-200/80">
+                        <Clock className="h-3.5 w-3.5 text-amber-600" /> Đang chờ duyệt
+                      </span>
+                    ) : p.status === 'APPROVED' ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/80">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Đã duyệt & Gửi
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 border border-slate-200">
+                        Chưa gửi
+                      </span>
+                    )}
+                  </TD>
+                  <TD className="py-3.5 px-4 text-xs text-slate-600">
+                    {p.status === 'APPROVED' ? (
+                      <span>{p.publications?.length || 0} bài báo (Citations: {p.total_citations}, h-index: {p.h_index})</span>
+                    ) : (
+                      <span className="text-slate-400">Chờ đồng bộ...</span>
+                    )}
+                  </TD>
+                  <TD className="py-3.5 px-4 text-right">
+                    {p.status === 'PENDING' ? (
+                      <Button
+                        size="sm"
+                        onClick={() => handleApprove(p.id, p.user_email)}
+                        disabled={approveProfile.isPending}
+                        className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg cursor-pointer flex items-center gap-1 ml-auto"
+                      >
+                        {approveProfile.isPending && <Spinner className="mr-1" />}
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Duyệt & Gửi cho User
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-emerald-600 font-medium">✓ Đã gửi</span>
+                    )}
+                  </TD>
+                </TR>
+              ))}
+              {(!filteredProfiles || filteredProfiles.length === 0) && (
+                <TR>
+                  <TD colSpan={5} className="py-12 text-center text-slate-500 text-sm">
+                    Chưa có yêu cầu hồ sơ nào.
+                  </TD>
+                </TR>
+              )}
+            </TBody>
+          </Table>
+        )}
+      </Card>
     </div>
   )
 }

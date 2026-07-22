@@ -958,10 +958,37 @@ class AdminScholarApprovalViewSet(ModelViewSet):
     def approve_profile(self, request: Request, pk: Optional[Any] = None) -> Response:
         """
         Phê duyệt hồ sơ Google Scholar của người dùng.
+        Đồng bộ dữ liệu bài báo từ AuthorProfile nếu tác giả đã được quét trước đó.
         """
         profile = self.get_object()
         profile.status = ProfileStatus.APPROVED
         profile.approved_at = timezone.now()
+
+        if profile.scholar_id:
+            author = AuthorProfile.objects.filter(scholar_id=profile.scholar_id).first()
+            if author:
+                profile.total_citations = author.citedby
+                profile.h_index = author.hindex
+                profile.i10_index = author.i10index
+
+                for pub in author.publications.all():
+                    try:
+                        year_val = int(pub.year) if pub.year and pub.year.isdigit() else None
+                    except ValueError:
+                        year_val = None
+
+                    ScholarPublication.objects.get_or_create(
+                        profile=profile,
+                        title=pub.title,
+                        defaults={
+                            "authors": pub.authors_list or "",
+                            "journal": pub.venue or "",
+                            "pub_year": year_val,
+                            "citations": pub.citations,
+                            "url": "",
+                        },
+                    )
+
         profile.save()
         return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
 

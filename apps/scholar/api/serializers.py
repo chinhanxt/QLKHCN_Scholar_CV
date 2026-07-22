@@ -251,6 +251,7 @@ class ScholarProfileSerializer(serializers.ModelSerializer):
     """
     Serializer hiển thị thông tin hồ sơ Google Scholar của người dùng.
     """
+    user_email = serializers.EmailField(source="user.email", read_only=True)
     publications = ScholarPublicationSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
 
@@ -258,6 +259,7 @@ class ScholarProfileSerializer(serializers.ModelSerializer):
         model = ScholarProfile
         fields = [
             "id",
+            "user_email",
             "scholar_url",
             "scholar_id",
             "status",
