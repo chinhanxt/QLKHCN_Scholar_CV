@@ -32,8 +32,13 @@ USE_TZ = True
 LOCALE_PATHS = [str(BASE_DIR / "locale")]
 
 # DATABASES
-# ------------------------------------------------------------------------------
-DATABASES = {"default": env.db("DATABASE_URL")}
+POSTGRES_USER = env("POSTGRES_USER", default="postgres")
+POSTGRES_PASSWORD = env("POSTGRES_PASSWORD", default="")
+POSTGRES_HOST = env("POSTGRES_HOST", default="postgres")
+POSTGRES_PORT = env("POSTGRES_PORT", default="5432")
+POSTGRES_DB = env("POSTGRES_DB", default="edu_ecosystem")
+default_db_url = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+DATABASES = {"default": env.db("DATABASE_URL", default=default_db_url)}
 DATABASES["default"]["ATOMIC_REQUESTS"] = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -1,8 +1,11 @@
+import re
 from rest_framework import serializers
 from apps.scholar.models import (
     AuthorProfile, Publication, Journal,
-    BioxbioJournal, BioxbioRanking, ScimagoJournal, ScimagoRanking, ClarivateJournal
+    BioxbioJournal, BioxbioRanking, ScimagoJournal, ScimagoRanking, ClarivateJournal,
+    AntiBlockConfig, ScholarProfile, ScholarPublication, ProfileStatus,
 )
+
 
 
 class JournalShortSerializer(serializers.ModelSerializer):
@@ -72,7 +75,7 @@ class PublicationSerializer(serializers.ModelSerializer):
         ]
 
 
-class AuthorProfileSerializer(serializers.ModelSerializer):
+class AuthorProfileDetailSerializer(serializers.ModelSerializer):
     publications = PublicationSerializer(many=True, read_only=True)
 
     class Meta:
@@ -84,8 +87,12 @@ class AuthorProfileSerializer(serializers.ModelSerializer):
             "affiliation",
             "email_domain",
             "citedby",
+            "citedby5y",
             "hindex",
+            "hindex5y",
             "i10index",
+            "i10index5y",
+            "cites_per_year",
             "interests",
             "publications",
             "auto_scan_enabled",
@@ -95,6 +102,10 @@ class AuthorProfileSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+AuthorProfileSerializer = AuthorProfileDetailSerializer
+
 
 
 class ScrapeAuthorRequestSerializer(serializers.Serializer):
@@ -221,6 +232,82 @@ class UnifiedCrawlRequestSerializer(serializers.Serializer):
     bioxbio_delay     = serializers.FloatField(default=2.0, min_value=0.1, max_value=10.0)
 
 
+class AntiBlockConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AntiBlockConfig
+        fields = "__all__"
 
 
+class ScholarPublicationSerializer(serializers.ModelSerializer):
+    """
+    Serializer cho bài báo thuộc Google Scholar Profile.
+    """
+    class Meta:
+        model = ScholarPublication
+        fields = ["id", "title", "authors", "journal", "pub_year", "citations", "url"]
 
+
+class ScholarProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer hiển thị thông tin hồ sơ Google Scholar của người dùng.
+    """
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+    publications = ScholarPublicationSerializer(many=True, read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    author_detail = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ScholarProfile
+        fields = [
+            "id",
+            "user_email",
+            "scholar_url",
+            "scholar_id",
+            "status",
+            "status_display",
+            "submitted_at",
+            "approved_at",
+            "total_citations",
+            "h_index",
+            "i10_index",
+            "publications",
+            "author_detail",
+        ]
+
+    def get_author_detail(self, obj):
+        scholar_id = (obj.scholar_id or "").strip()
+        if scholar_id:
+            author = AuthorProfile.objects.filter(scholar_id__iexact=scholar_id).prefetch_related("publications").first()
+            if not author:
+                author = AuthorProfile.objects.filter(scholar_id__icontains=scholar_id).prefetch_related("publications").first()
+            if not author:
+                for a in AuthorProfile.objects.all().prefetch_related("publications"):
+                    if scholar_id in a.scholar_id or a.scholar_id in scholar_id:
+                        author = a
+                        break
+            if author:
+                return AuthorProfileDetailSerializer(author).data
+
+        if obj.user:
+            username = (obj.user.username or "").strip()
+            if username:
+                author = AuthorProfile.objects.filter(name__icontains=username).prefetch_related("publications").first()
+                if author:
+                    return AuthorProfileDetailSerializer(author).data
+
+        return None
+
+
+class ProfileSubmitSerializer(serializers.Serializer):
+    """
+    Serializer xử lý dữ liệu gửi liên kết hồ sơ Google Scholar.
+    """
+    scholar_url = serializers.URLField(required=True)
+
+    def validate_scholar_url(self, value: str) -> str:
+        value_clean = value.strip()
+        if "scholar.google" not in value_clean.lower():
+            raise serializers.ValidationError("Đường dẫn phải là liên kết hợp lệ từ Google Scholar.")
+        if not re.search(r"[?&]user=([a-zA-Z0-9_-]+)", value_clean):
+            raise serializers.ValidationError("Đường dẫn Google Scholar phải chứa tham số user=ID hợp lệ.")
+        return value_clean

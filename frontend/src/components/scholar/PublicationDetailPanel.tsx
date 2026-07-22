@@ -212,57 +212,67 @@ export const PublicationDetailPanel: React.FC<PublicationDetailPanelProps> = ({
             <div className="text-center py-8 bg-[#F8FAFC] border border-dashed border-[#E5E7EB] rounded-2xl text-xs text-[#64748B] italic">
               Chưa có dữ liệu trích dẫn theo năm cho bài báo này.
             </div>
-          ) : (
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex justify-center items-center">
-              <svg viewBox="0 0 460 140" className="w-full h-auto overflow-visible">
-                <line x1="10" y1="20" x2="420" y2="20" stroke="#E2E8F0" strokeWidth="0.8" />
-                <line x1="10" y1="70" x2="420" y2="70" stroke="#E2E8F0" strokeWidth="0.8" />
-                <line x1="10" y1="120" x2="420" y2="120" stroke="#94A3B8" strokeWidth="1" />
+          ) : (() => {
+            const svgWidth = Math.max(460, values.length * 32)
+            const rightMargin = 40
+            const leftMargin = 15
+            const barAreaWidth = svgWidth - leftMargin - rightMargin
 
-                <text x="425" y="24" className="text-[10px] font-semibold fill-slate-500">{maxVal}</text>
-                <text x="425" y="74" className="text-[10px] font-semibold fill-slate-500">{Math.round(maxVal / 2)}</text>
-                <text x="425" y="124" className="text-[10px] font-semibold fill-slate-500">0</text>
+            return (
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 overflow-x-auto custom-scrollbar">
+                <svg viewBox={`0 0 ${svgWidth} 140`} style={{ minWidth: `${svgWidth}px` }} className="w-full h-auto overflow-visible">
+                  <line x1={leftMargin} y1="20" x2={svgWidth - rightMargin} y2="20" stroke="#E2E8F0" strokeWidth="0.8" />
+                  <line x1={leftMargin} y1="70" x2={svgWidth - rightMargin} y2="70" stroke="#E2E8F0" strokeWidth="0.8" />
+                  <line x1={leftMargin} y1="120" x2={svgWidth - rightMargin} y2="120" stroke="#94A3B8" strokeWidth="1" />
 
-                {values.map((v, i) => {
-                  const barWidth = 14
-                  const spacing = values.length > 1 ? (400 - barWidth) / (values.length - 1) : 0
-                  const x = 12 + i * spacing
-                  const barHeight = maxVal > 0 ? (v.count / maxVal) * 100 : 0
-                  const y = 120 - barHeight
-                  return (
-                    <g key={v.year} className="group cursor-pointer">
-                      <rect
-                        x={x}
-                        y={y}
-                        width={barWidth}
-                        height={barHeight}
-                        fill="#777777"
-                        className="hover:fill-[#2563EB] transition-colors"
-                      />
-                      {v.count > 0 && (
+                  <text x={svgWidth - rightMargin + 5} y="24" className="text-[10px] font-semibold fill-slate-500">{maxVal}</text>
+                  <text x={svgWidth - rightMargin + 5} y="74" className="text-[10px] font-semibold fill-slate-500">{Math.round(maxVal / 2)}</text>
+                  <text x={svgWidth - rightMargin + 5} y="124" className="text-[10px] font-semibold fill-slate-500">0</text>
+
+                  {values.map((v, i) => {
+                    const barWidth = 12
+                    const spacing = values.length > 1 ? (barAreaWidth - barWidth) / (values.length - 1) : 0
+                    const x = leftMargin + i * spacing
+                    const barHeight = maxVal > 0 ? (v.count / maxVal) * 100 : 0
+                    const y = 120 - barHeight
+
+                    return (
+                      <g key={v.year} className="group cursor-pointer">
+                        <rect
+                          x={x}
+                          y={y}
+                          width={barWidth}
+                          height={barHeight}
+                          fill="#777777"
+                          className="hover:fill-[#2563EB] transition-colors"
+                        >
+                          <title>{`${v.year}: ${v.count} trích dẫn`}</title>
+                        </rect>
+                        {v.count > 0 && (
+                          <text
+                            x={x + barWidth / 2}
+                            y={y - 4}
+                            textAnchor="middle"
+                            className="text-[8px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                          >
+                            {v.count}
+                          </text>
+                        )}
                         <text
                           x={x + barWidth / 2}
-                          y={y - 4}
+                          y="134"
                           textAnchor="middle"
-                          className="text-[8px] font-bold fill-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="text-[8px] font-bold fill-slate-500"
                         >
-                          {v.count}
+                          {v.year}
                         </text>
-                      )}
-                      <text
-                        x={x + barWidth / 2}
-                        y="134"
-                        textAnchor="middle"
-                        className="text-[9px] font-bold fill-slate-500"
-                      >
-                        {v.year}
-                      </text>
-                    </g>
-                  )
-                })}
-              </svg>
-            </div>
-          )}
+                      </g>
+                    )
+                  })}
+                </svg>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Scholar articles section */}

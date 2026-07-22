@@ -95,8 +95,11 @@ def get_scholar_settings():
         'SCHOLAR_HTTPS_PROXY': getattr(settings, 'SCHOLAR_HTTPS_PROXY', ''),
         'SCHOLAR_RETRIES': 3,
         'auto_crawl_enabled': False,
+        'auto_crawl_frequency': 'WEEKLY',
         'auto_crawl_hour': 2,
         'auto_crawl_minute': 0,
+        'auto_crawl_weekday': 0,
+        'auto_crawl_day_of_month': 1,
         'active_unified_task_id': None,
     }
     if os.path.exists(filepath):
@@ -120,15 +123,29 @@ def sync_celery_beat_schedule(data):
 
         task_name = 'scholar_auto_crawl_task'
         enabled = data.get('auto_crawl_enabled', False)
+        frequency = data.get('auto_crawl_frequency', 'WEEKLY')
         hour = int(data.get('auto_crawl_hour', 2))
         minute = int(data.get('auto_crawl_minute', 0))
+        weekday = int(data.get('auto_crawl_weekday', 0))
+        day_of_month = int(data.get('auto_crawl_day_of_month', 1))
 
         if enabled:
+            if frequency == 'WEEKLY':
+                celery_dow = str((weekday + 1) % 7)
+                day_of_week_str = celery_dow
+                day_of_month_str = '*'
+            elif frequency == 'MONTHLY':
+                day_of_week_str = '*'
+                day_of_month_str = str(day_of_month)
+            else: # DAILY
+                day_of_week_str = '*'
+                day_of_month_str = '*'
+
             schedule, _ = CrontabSchedule.objects.get_or_create(
                 minute=str(minute),
                 hour=str(hour),
-                day_of_week='*',
-                day_of_month='*',
+                day_of_week=day_of_week_str,
+                day_of_month=day_of_month_str,
                 month_of_year='*',
                 timezone='Asia/Ho_Chi_Minh',
             )
@@ -139,10 +156,10 @@ def sync_celery_beat_schedule(data):
                     'crontab': schedule,
                     'enabled': True,
                     'kwargs': json_lib.dumps({'is_automated': True}),
-                    'description': 'Tự động cào và đồng bộ dữ liệu journal theo lịch (giờ VN)',
+                    'description': f'Tự động cào và đồng bộ dữ liệu journal theo lịch ({frequency}, giờ VN)',
                 }
             )
-            logger.info(f"Celery Beat schedule updated: {hour:02d}:{minute:02d} (Asia/Ho_Chi_Minh)")
+            logger.info(f"Celery Beat schedule updated: frequency={frequency}, hour={hour:02d}:{minute:02d} (Asia/Ho_Chi_Minh)")
         else:
             PeriodicTask.objects.filter(name=task_name).update(enabled=False)
             logger.info("Celery Beat auto-crawl schedule disabled")
@@ -155,11 +172,13 @@ def save_scholar_settings(data):
     filepath = os.path.join(settings.BASE_DIR, 'config/scholar_settings.json')
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     try:
+        current = get_scholar_settings()
+        current.update(data)
         with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+            json.dump(current, f, indent=4, ensure_ascii=False)
         
         # Sync schedule configuration to database
-        sync_celery_beat_schedule(data)
+        sync_celery_beat_schedule(current)
         return True
     except Exception as e:
         logger.error(f"Error saving scholar settings: {e}")
@@ -326,8 +345,8 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
         processed_count = 0
 
         # High-performance parallel workers over Tor SOCKS5 proxy (10 parallel threads!)
-        max_workers = 10
-        min_delay, max_delay = 0.02, 0.1
+        max_workers = 15
+        min_delay, max_delay = 0.01, 0.05
 
         last_renew_time = 0.0
         renew_lock = threading.Lock()
@@ -428,8 +447,12 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
                     "affiliation": author.get("affiliation", "Không rõ cơ quan công tác"),
                     "email_domain": author.get("email_domain", "") or None,
                     "citedby": author.get("citedby", 0),
+                    "citedby5y": author.get("citedby5y", 0),
                     "hindex": author.get("hindex", 0),
+                    "hindex5y": author.get("hindex5y", 0),
                     "i10index": author.get("i10index", 0),
+                    "i10index5y": author.get("i10index5y", 0),
+                    "cites_per_year": author.get("cites_per_year", {}),
                     "interests": interests,
                 }
             )
@@ -853,7 +876,7 @@ def scheduled_auto_scan_cv_task():
 # 4. BIOXBIO CRAWLER TASK (No Selenium required!)
 # ==============================================================================
 @shared_task(bind=True)
-def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=None, max_workers=10, delay=2.0):
+def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=None, max_workers=20, delay=0.3):
     """
     Celery task to scrape BioxBio Impact Factor subjects, journals, and details.
     Updates PostgreSQL tables without heavy Selenium requirements.
@@ -865,6 +888,16 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=Non
     }
     
     session = requests.Session()
+    from requests.adapters import HTTPAdapter
+    adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+
+    from apps.scholar.scholarly.tor_helper import get_tor_proxies
+    tor_proxies = get_tor_proxies()
+    if tor_proxies:
+        session.proxies.update(tor_proxies)
+        logger.info(f"BioxBio Crawler: Using Docker Tor Proxy ({tor_proxies['http']})")
     
     try:
         r = session.get(start_url, headers=headers, timeout=15)
@@ -1110,7 +1143,7 @@ def crawl_bioxbio_task(self, start_url="https://www.bioxbio.com/", max_pages=Non
 # 5. SCIMAGO CRAWLER TASK (Downloads CSV directly without Selenium)
 # ==============================================================================
 @shared_task(bind=True)
-def crawl_scimago_task(self, start_url="https://www.scimagojr.com/journalrank.php", years=None, max_workers=5, delay=1.0):
+def crawl_scimago_task(self, start_url="https://www.scimagojr.com/journalrank.php", years=None, max_workers=10, delay=0.2):
     """
     Celery task to download SCImago CSV files directly using requests and import to PostgreSQL.
     """
@@ -1141,9 +1174,11 @@ def crawl_scimago_task(self, start_url="https://www.scimagojr.com/journalrank.ph
         base_url = start_url.split('?')[0]
         url = f"{base_url}?year={year}&out=xls"
         r = None
+        from apps.scholar.scholarly.tor_helper import get_tor_proxies
+        tor_proxies = get_tor_proxies()
         for attempt in range(3):
             try:
-                r = requests.get(url, headers=headers, timeout=60)
+                r = requests.get(url, headers=headers, proxies=tor_proxies, timeout=60)
                 if r.status_code == 200:
                     break
                 logger.warning(f"Failed to download SCImago CSV for {year}: Status {r.status_code}. Retrying in {(attempt+1)*5}s...")
@@ -1310,7 +1345,7 @@ def crawl_scimago_task(self, start_url="https://www.scimagojr.com/journalrank.ph
 # 6. CLARIVATE CRAWLER TASK
 # ==============================================================================
 @shared_task(bind=True)
-def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search", max_pages=None, max_workers=5, delay=0.5):
+def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search", max_pages=None, max_workers=15, delay=0.1):
     """
     Celery task to scrape the Clarivate Web of Science Master Journal List page-by-page.
     """
@@ -1327,6 +1362,16 @@ def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jpro
     }
     
     session = requests.Session()
+    from requests.adapters import HTTPAdapter
+    adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+
+    from apps.scholar.scholarly.tor_helper import get_tor_proxies
+    tor_proxies = get_tor_proxies()
+    if tor_proxies:
+        session.proxies.update(tor_proxies)
+        logger.info(f"Clarivate Crawler: Using Docker Tor Proxy ({tor_proxies['http']})")
     
     # 1. Fetch total pages
     search_id = str(hashlib.md5(str(time.time()).encode()).hexdigest())
@@ -1407,9 +1452,11 @@ def crawl_clarivate_task(self, start_url="https://mjl.clarivate.com/api/mjl/jpro
         try:
             res = session.post(url, headers=headers, json=page_payload, timeout=20)
             if res.status_code in [403, 429]:
+                from apps.scholar.scholarly.tor_helper import renew_tor_ip
+                renew_tor_ip()
                 with state_lock:
-                    crawler_state['sleep_until'] = time.time() + 30.0
-                logger.error(f"Clarivate API rate limited (Status {res.status_code}). Pausing for 30s...")
+                    crawler_state['sleep_until'] = time.time() + 2.0
+                logger.warning(f"Clarivate API rate limited (Status {res.status_code}). Renewed Tor IP & resuming in 2s...")
                 return page_num, None
             if res.status_code == 200:
                 return page_num, res.json()
@@ -1736,14 +1783,14 @@ def crawl_and_integrate_all_task(
     scimago_start_url="https://www.scimagojr.com/journalrank.php",
     clarivate_max_pages=None,
     clarivate_start_url="https://mjl.clarivate.com/api/mjl/jprof/public/rank-search",
-    clarivate_workers=5,
-    clarivate_delay=0.5,
-    scimago_workers=5,
-    scimago_delay=1.0,
+    clarivate_workers=15,
+    clarivate_delay=0.1,
+    scimago_workers=10,
+    scimago_delay=0.2,
     bioxbio_start_url="https://www.bioxbio.com/journal/",
     bioxbio_max_pages=None,
-    bioxbio_workers=10,
-    bioxbio_delay=2.0,
+    bioxbio_workers=20,
+    bioxbio_delay=0.3,
 ):
     """
     Task điều phối tổng hợp:
@@ -2126,5 +2173,20 @@ def task_postrun_handler(sender=None, task_id=None, task=None, retval=None, stat
             save_scholar_settings(settings_data)
         except Exception as e:
             logger.error(f"Error clearing active task ID in signal: {e}")
+
+
+@shared_task
+def refresh_free_proxy_pool_task():
+    import requests
+    from django.core.cache import cache
+    try:
+        r = requests.get("https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt", timeout=10)
+        if r.status_code == 200:
+            proxies = [f"http://{line.strip()}" for line in r.text.split('\n') if line.strip()][:50]
+            cache.set("scholar_free_proxies", proxies, 1800)
+            logger.info(f"Refreshed {len(proxies)} free proxies into Redis cache.")
+    except Exception as e:
+        logger.error(f"Failed to refresh free proxy pool: {e}")
+
 
 

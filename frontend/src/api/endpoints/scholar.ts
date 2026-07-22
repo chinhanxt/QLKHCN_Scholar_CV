@@ -46,6 +46,7 @@ export interface TaskStatusResponse {
   progress?: number
   message?: string
   result?: any
+  info?: any
 }
 
 export interface AuthorCandidate {
@@ -106,8 +107,12 @@ export interface AuthorProfileDetail {
   affiliation: string
   email_domain?: string | null
   citedby: number
+  citedby5y?: number
   hindex: number
+  hindex5y?: number
   i10index: number
+  i10index5y?: number
+  cites_per_year?: Record<string, number>
   interests: string[]
   publications: PublicationDetail[]
   created_at: string
@@ -186,6 +191,9 @@ export const scholarApi = {
   getCrawlHistoryDetail: (historyId: number) =>
     apiClient.get<any>(`/scholar/crawlers/${historyId}/history-detail/`),
 
+  clearCrawlHistory: () =>
+    apiClient.delete<{ status: string; deleted_count: number }>('/scholar/crawlers/clear-history/'),
+
 
   saveSettings: (payload: any) => 
     apiClient.post<any>('/scholar/crawlers/settings/', payload),
@@ -213,5 +221,12 @@ export const scholarApi = {
   triggerAuthorsScan: (author_ids: number[]) =>
     apiClient.post<any>('/scholar/auto-scan/trigger-authors/', { author_ids }),
 }
+
+export const antiBlockApi = {
+  getConfig: () => apiClient.get<any>('/scholar/anti-block/config/'),
+  updateConfig: (data: any) => apiClient.patch<any>('/scholar/anti-block/config/', data),
+  rotateTor: () => apiClient.post<any>('/scholar/anti-block/rotate-tor/'),
+}
+
 
 

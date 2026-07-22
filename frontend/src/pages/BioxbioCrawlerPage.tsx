@@ -11,8 +11,8 @@ import { CustomSelect } from '@/components/ui/CustomSelect'
 export function BioxbioCrawlerPage() {
   const [startUrl, setStartUrl] = useState('https://www.bioxbio.com/journal/')
   const [crawlMode, setCrawlMode] = useState<'all' | 'custom'>('all')
-  const [maxWorkers, setMaxWorkers] = useState(10)
-  const [delay, setDelay] = useState(2.0)
+  const [maxWorkers, setMaxWorkers] = useState(20)
+  const [delay, setDelay] = useState(0.3)
 
   // Inner tab and data viewer state
   const [activeTab, setActiveTab] = useState<'tool' | 'data'>('data')

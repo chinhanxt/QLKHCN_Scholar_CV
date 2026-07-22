@@ -17,6 +17,8 @@ export interface LoginPayload {
   password: string
 }
 
+
+
 /** Matches apps/users/api/serializers.py::UserSerializer */
 export interface User {
   id: UUID
@@ -27,6 +29,8 @@ export interface User {
   phone?: string | null
   avatar?: string | null
   is_active: boolean
+  is_staff: boolean
+  is_superuser: boolean
   date_joined: string
 }
 
@@ -37,7 +41,23 @@ export interface UserListItem {
   username: string
   first_name: string
   last_name: string
+  phone?: string | null
   is_active: boolean
+  is_staff: boolean
+  is_superuser: boolean
+  date_joined?: string
+}
+
+export interface CreateUserPayload {
+  email: string
+  username: string
+  password: string
+  first_name?: string
+  last_name?: string
+  phone?: string | null
+  is_active?: boolean
+  is_staff?: boolean
+  is_superuser?: boolean
 }
 
 export interface UpdateUserPayload {
@@ -45,9 +65,17 @@ export interface UpdateUserPayload {
   first_name?: string
   last_name?: string
   phone?: string | null
+  is_active?: boolean
+  is_staff?: boolean
+  is_superuser?: boolean
+}
+
+export interface ResetUserPasswordPayload {
+  new_password: string
 }
 
 export interface ChangePasswordPayload {
   old_password: string
   new_password: string
 }
+

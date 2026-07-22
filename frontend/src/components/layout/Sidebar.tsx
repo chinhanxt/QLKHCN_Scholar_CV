@@ -10,8 +10,6 @@ import {
   FolderHeart,
   Users,
   Settings,
-  HelpCircle,
-  Server,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -26,18 +24,14 @@ import { useAuthStore } from '@/stores/auth.store'
 import { fullName } from '@/lib/utils'
 
 const OTHER_TOOLS = [
-  { to: '/scholar/auto-scheduler', label: 'Tự động hóa CV', icon: Bot },
-  { to: '/scholar/scraper', label: 'Scholar Scraper', icon: GraduationCap },
-  { to: '/scholar/integrator', label: 'Data chuẩn', icon: GitMerge },
-  { to: '/scholar/profiles', label: 'Profile Manager', icon: FolderHeart },
+  { to: '/scholar/scraper', label: 'Google Scholar', icon: GraduationCap },
+  { to: '/scholar/auto-scheduler', label: 'Cập nhật tự động', icon: Bot },
+  { to: '/scholar/profiles', label: 'Hồ sơ', icon: FolderHeart },
 ]
-
 
 const SYSTEM_NAV = [
   { to: '/users', label: 'Người dùng', icon: Users },
   { to: '/settings', label: 'Cài đặt', icon: Settings },
-  { to: '/database', label: 'Cơ sở dữ liệu', icon: Server },
-  { to: '/help', label: 'Trợ giúp', icon: HelpCircle },
 ]
 
 interface SidebarProps {
@@ -132,7 +126,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const logout = useAuthStore((s) => s.logout)
   const location = useLocation()
 
-  const isCrawlActive = ['/scholar/unified', '/scholar/clarivate', '/scholar/scimago', '/scholar/bioxbio'].some(
+  const isCrawlActive = ['/scholar/unified', '/scholar/clarivate', '/scholar/scimago', '/scholar/bioxbio', '/scholar/integrator'].some(
     path => location.pathname === path
   )
   const [isCrawlOpen, setIsCrawlOpen] = useState(isCrawlActive)
@@ -217,8 +211,18 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
           </div>
 
           <div className="flex flex-col gap-1">
-            {/* 1. Parent Menu: Cào dữ liệu */}
-            {/* 1. Parent Menu: Cào dữ liệu */}
+            {/* Flat Nav links: Google Scholar, Cập nhật tự động, Hồ sơ */}
+            {OTHER_TOOLS.map(({ to, label, icon }) => (
+              <SidebarLink
+                key={to}
+                to={to}
+                label={label}
+                icon={icon}
+                isCollapsed={isCollapsed}
+              />
+            ))}
+
+            {/* Parent Menu: Dữ liệu */}
             <div className={cn("relative group", isCollapsed ? "w-full" : "")}>
               <button
                 onClick={() => !isCollapsed && setIsCrawlOpen(!isCrawlOpen)}
@@ -229,7 +233,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     ? "justify-center h-10 w-10 mx-auto px-0" 
                     : "px-3 py-2.5 text-sm font-medium"
                 )}
-                title={isCollapsed ? "Cào dữ liệu" : undefined}
+                title={isCollapsed ? "Dữ liệu" : undefined}
               >
                 <div className={cn("flex items-center overflow-hidden", isCollapsed ? "justify-center" : "gap-3")}>
                   <Download className={cn("h-4.5 w-4.5 shrink-0 transition-colors", isCrawlActive ? "text-[#005b9a]" : "text-slate-500", "group-hover:text-[#005b9a]")} />
@@ -237,7 +241,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     "transition-all duration-300 origin-left whitespace-nowrap overflow-hidden text-ellipsis",
                     isCollapsed ? "opacity-0 max-w-0 pointer-events-none" : "opacity-100 max-w-[150px]"
                   )}>
-                    Cào dữ liệu
+                    Dữ liệu
                   </span>
                 </div>
                 {!isCollapsed && (
@@ -247,17 +251,18 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                 )}
               </button>
 
-              {/* Inline Sub-menu (Only active in expanded mode, collapses smoothly to 0 height when collapsed) */}
+              {/* Inline Sub-menu */}
               <div
                 className={cn(
                   "flex flex-col ml-4 border-l border-slate-200 pl-3 mt-1 gap-1 overflow-hidden transition-all duration-300",
-                  (!isCollapsed && isCrawlOpen) ? "opacity-100 max-h-60" : "opacity-0 max-h-0 pointer-events-none"
+                  (!isCollapsed && isCrawlOpen) ? "opacity-100 max-h-72" : "opacity-0 max-h-0 pointer-events-none"
                 )}
               >
-                <SidebarChildLink to="/scholar/unified" label="Cào tổng hợp" icon={Layers} isCollapsed={false} />
-                <SidebarChildLink to="/scholar/clarivate" label="Clarivate Crawler" icon={Database} isCollapsed={false} />
-                <SidebarChildLink to="/scholar/scimago" label="SCImago Crawler" icon={BarChart3} isCollapsed={false} />
-                <SidebarChildLink to="/scholar/bioxbio" label="BioxBio Crawler" icon={Globe} isCollapsed={false} />
+                <SidebarChildLink to="/scholar/unified" label="Tự động hóa dữ liệu" icon={Layers} isCollapsed={false} />
+                <SidebarChildLink to="/scholar/clarivate" label="Clarivate" icon={Database} isCollapsed={false} />
+                <SidebarChildLink to="/scholar/scimago" label="SCImago" icon={BarChart3} isCollapsed={false} />
+                <SidebarChildLink to="/scholar/bioxbio" label="BioxBio" icon={Globe} isCollapsed={false} />
+                <SidebarChildLink to="/scholar/integrator" label="Cơ sở dữ liệu" icon={GitMerge} isCollapsed={false} />
               </div>
 
               {/* Hover Popover Sub-menu (Only active in collapsed mode) */}
@@ -272,27 +277,17 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                 <div className="bg-white border border-slate-200 rounded-xl shadow-xl p-2 flex flex-col gap-1">
                   <div className="px-2.5 py-1.5 border-b border-slate-100 mb-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Cào dữ liệu
+                      Dữ liệu
                     </span>
                   </div>
-                  <SidebarChildLink to="/scholar/unified" label="Cào tổng hợp" icon={Layers} isCollapsed={false} />
-                  <SidebarChildLink to="/scholar/clarivate" label="Clarivate Crawler" icon={Database} isCollapsed={false} />
-                  <SidebarChildLink to="/scholar/scimago" label="SCImago Crawler" icon={BarChart3} isCollapsed={false} />
-                  <SidebarChildLink to="/scholar/bioxbio" label="BioxBio Crawler" icon={Globe} isCollapsed={false} />
+                  <SidebarChildLink to="/scholar/unified" label="Tự động hóa dữ liệu" icon={Layers} isCollapsed={false} />
+                  <SidebarChildLink to="/scholar/clarivate" label="Clarivate" icon={Database} isCollapsed={false} />
+                  <SidebarChildLink to="/scholar/scimago" label="SCImago" icon={BarChart3} isCollapsed={false} />
+                  <SidebarChildLink to="/scholar/bioxbio" label="BioxBio" icon={Globe} isCollapsed={false} />
+                  <SidebarChildLink to="/scholar/integrator" label="Cơ sở dữ liệu" icon={GitMerge} isCollapsed={false} />
                 </div>
               </div>
             </div>
-
-            {/* Other Flat Nav links */}
-            {OTHER_TOOLS.map(({ to, label, icon }) => (
-              <SidebarLink
-                key={to}
-                to={to}
-                label={label}
-                icon={icon}
-                isCollapsed={isCollapsed}
-              />
-            ))}
           </div>
         </div>
 

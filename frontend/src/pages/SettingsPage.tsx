@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Settings, ShieldAlert, Check, RefreshCw } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
+import { AntiBlockSettingsCard } from '@/components/scholar/AntiBlockSettingsCard'
 
 export function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -75,8 +76,12 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       ) : (
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* Proxy Configuration Card */}
+        <div className="space-y-6">
+          {/* Anti-Blocking Suite Card */}
+          <AntiBlockSettingsCard />
+
+          <form onSubmit={handleSave} className="space-y-6">
+            {/* Proxy Configuration Card */}
           <Card className="border-slate-200 shadow-sm bg-white">
             <CardContent className="p-6 space-y-6">
               <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -224,6 +229,7 @@ export function SettingsPage() {
             </button>
           </div>
         </form>
+        </div>
       )}
     </div>
   )

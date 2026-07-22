@@ -151,6 +151,22 @@ export function ScholarScraperPage() {
   useEffect(() => {
     setSelectedPubIds([])
   }, [profile])
+
+  // Automatically scroll all scrollable containers to top when selecting a publication (matches Image 2 layout)
+  useEffect(() => {
+    if (selectedPublication) {
+      window.scrollTo({ top: 0, behavior: 'instant' })
+      const mainEl = document.querySelector('main')
+      if (mainEl) {
+        mainEl.scrollTop = 0
+      }
+      setTimeout(() => {
+        document.querySelectorAll('.overflow-y-auto').forEach((el) => {
+          el.scrollTop = 0
+        })
+      }, 0)
+    }
+  }, [selectedPublication])
   
   // Scraper Task state from Zustand Store
   const { taskId, taskStatus, progress, consoleLogs } = useCrawlerStore((state) => state.scholar)
@@ -400,8 +416,11 @@ export function ScholarScraperPage() {
         ['Họ và tên tác giả', profile.name],
         ['Cơ quan công tác', profile.affiliation || 'Không rõ cơ quan công tác'],
         [isSelectiveExport ? 'Tổng số trích dẫn bài xuất' : 'Tổng số trích dẫn', isSelectiveExport ? totalCitesOfExport : profile.citedby],
+        ['Tổng số trích dẫn (5 năm gần nhất)', profile.citedby5y ?? 0],
         ['Chỉ số H-index', profile.hindex || 0],
-        ['Chỉ số i10-index', profile.i10index || 0]
+        ['Chỉ số H-index (5 năm gần nhất)', profile.hindex5y ?? 0],
+        ['Chỉ số i10-index', profile.i10index || 0],
+        ['Chỉ số i10-index (5 năm gần nhất)', profile.i10index5y ?? 0]
       ]
 
       infoFields.forEach((field, i) => {
@@ -443,7 +462,7 @@ export function ScholarScraperPage() {
       const ifCount = pubsToExport.filter(p => p.if_val && p.if_val !== 'N/A').length
       const bothCount = pubsToExport.filter(p => p.if_val && p.if_val !== 'N/A' && p.sjr_q && p.sjr_q !== 'N/A').length
 
-      const statStartRow = 11
+      const statStartRow = 5 + infoFields.length + 1
       sheet1.getCell('A' + statStartRow).value = 'II. THỐNG KÊ ĐỐI KHỚP DANH MỤC CƠ SỞ DỮ LIỆU'
       sheet1.getCell('A' + statStartRow).font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF2563EB' } }
       sheet1.mergeCells(`A${statStartRow}:D${statStartRow}`)
@@ -754,22 +773,23 @@ export function ScholarScraperPage() {
   }
 
   // Clean values for visual computations
-  const citationYears = profile?.publications
-    ? Array.from(
-        new Set(
-          profile.publications
-            .flatMap((p) => Object.keys(p.cites_per_year || {}))
-            .filter((y) => /^\d{4}$/.test(y))
-        )
-      ).sort()
-    : []
+  const authorCitesPerYear = profile?.cites_per_year || {}
+  const officialYears = Object.keys(authorCitesPerYear).filter((y) => /^\d{4}$/.test(y)).sort()
 
-  const citationValues = citationYears.map((year) => {
-    const totalCites = profile?.publications.reduce((sum, p) => {
-      return sum + (p.cites_per_year?.[year] || 0)
-    }, 0) || 0
-    return { year, count: totalCites }
-  })
+  const citationValues = officialYears.length > 0
+    ? officialYears.map((year) => ({ year, count: authorCitesPerYear[year] || 0 }))
+    : (profile?.publications
+        ? Array.from(
+            new Set(
+              profile.publications
+                .flatMap((p) => Object.keys(p.cites_per_year || {}))
+                .filter((y) => /^\d{4}$/.test(y))
+            )
+          ).sort().map((year) => ({
+            year,
+            count: profile.publications.reduce((sum, p) => sum + (p.cites_per_year?.[year] || 0), 0)
+          }))
+        : [])
 
   const maxCites = Math.max(...citationValues.map((v) => v.count), 1)
 
@@ -1442,8 +1462,8 @@ export function ScholarScraperPage() {
           {/* Main Content Layout (Split 70/30) */}
           <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 items-start">
             
-            {/* LEFT (70% - Columns 7/10) */}
-            <div className="lg:col-span-7 flex flex-col gap-6">
+            {/* LEFT (70% in list view, 100% in detail view) */}
+            <div className={selectedPublication ? "lg:col-span-10 flex flex-col gap-6" : "lg:col-span-7 flex flex-col gap-6"}>
               
               {/* Detailed View Panel or Table List */}
               {selectedPublication ? (
@@ -1480,8 +1500,9 @@ export function ScholarScraperPage() {
 
             </div>
 
-            {/* RIGHT (30% - Columns 3/10 - Sidebar Widgets mirroring Scholar) */}
-            <div className="lg:col-span-3 flex flex-col gap-6 w-full">
+            {/* RIGHT (30% - Columns 3/10 - Sidebar Widgets mirroring Scholar, hidden in detail view) */}
+            {!selectedPublication && (
+              <div className="lg:col-span-3 flex flex-col gap-6 w-full">
               
               {/* Cited by Card */}
               <Card className="border-[#E5E7EB] rounded-3xl bg-white p-5 shadow-sm">
@@ -1508,17 +1529,17 @@ export function ScholarScraperPage() {
                     <tr>
                       <td className="py-2 font-semibold">Số trích dẫn</td>
                       <td className="py-2 text-right font-bold text-slate-800">{profile.citedby}</td>
-                      <td className="py-2 text-right font-bold text-slate-800">{Math.round(profile.citedby * 0.84)}</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{profile.citedby5y ?? 0}</td>
                     </tr>
                     <tr>
                       <td className="py-2 font-semibold">Chỉ số h-index</td>
                       <td className="py-2 text-right font-bold text-slate-800">{profile.hindex}</td>
-                      <td className="py-2 text-right font-bold text-slate-800">{Math.max(1, profile.hindex - 1)}</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{profile.hindex5y ?? 0}</td>
                     </tr>
                     <tr>
                       <td className="py-2 font-semibold">Chỉ số i10-index</td>
                       <td className="py-2 text-right font-bold text-slate-800">{profile.i10index}</td>
-                      <td className="py-2 text-right font-bold text-slate-800">{Math.max(0, profile.i10index - 1)}</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{profile.i10index5y ?? 0}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1586,7 +1607,8 @@ export function ScholarScraperPage() {
                 )}
               </Card>
 
-            </div>
+              </div>
+            )}
 
           </div>
 

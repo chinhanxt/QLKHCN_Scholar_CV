@@ -1,12 +1,21 @@
 import logging
 import os
+from re import search as re_search
+from django.utils import timezone
 from rest_framework import viewsets, status, permissions
+from rest_framework.viewsets import ViewSet, ModelViewSet
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from typing import Any, Optional
+from rest_framework.request import Request
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
-from apps.scholar.models import AuthorProfile, AutoScanConfig
+from apps.core.permissions import IsAdminUser
+from apps.scholar.models import (
+    AuthorProfile, AutoScanConfig, AntiBlockConfig,
+    ScholarProfile, ScholarPublication, ProfileStatus,
+)
 from apps.scholar.scholarly.tor_helper import renew_tor_ip, get_tor_status
 from apps.scholar.tasks import scrape_author_cv_smart_task
 from apps.scholar.api.serializers import (
@@ -18,6 +27,10 @@ from apps.scholar.api.serializers import (
     ScimagoCrawlRequestSerializer,
     ClarivateCrawlRequestSerializer,
     UnifiedCrawlRequestSerializer,
+    AntiBlockConfigSerializer,
+    ScholarProfileSerializer,
+    ScholarPublicationSerializer,
+    ProfileSubmitSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -222,9 +235,18 @@ class CrawlerViewSet(viewsets.ViewSet):
         except CrawlHistory.DoesNotExist:
             return Response({"error": "Không tìm thấy lịch sử lượt chạy."}, status=404)
 
+    @action(detail=False, methods=["delete"], url_path="clear-history")
+    def clear_history(self, request):
+        """
+        Xóa toàn bộ lịch sử các lượt chạy cào.
+        """
+        from apps.scholar.models import CrawlHistory
+        deleted_count, _ = CrawlHistory.objects.all().delete()
+        return Response({"status": "success", "deleted_count": deleted_count})
+
     @action(detail=False, methods=["get"], url_path="active-task")
     def active_task(self, request):
-        from apps.scholar.tasks import get_scholar_settings
+        from apps.scholar.tasks import get_scholar_settings, save_scholar_settings
         from celery.result import AsyncResult
         
         data = get_scholar_settings()
@@ -238,7 +260,28 @@ class CrawlerViewSet(viewsets.ViewSet):
         
         if task_id:
             res = AsyncResult(task_id)
-            if res.status in ('PENDING', 'PROGRESS'):
+            is_active = False
+            if res.status == 'PROGRESS':
+                is_active = True
+            elif res.status == 'PENDING':
+                try:
+                    from config.celery import app as celery_app
+                    i = celery_app.control.inspect(timeout=1.0)
+                    active = i.active() or {}
+                    reserved = i.reserved() or {}
+                    all_active_ids = set()
+                    for w_tasks in active.values():
+                        for t in w_tasks:
+                            all_active_ids.add(t.get('id'))
+                    for w_tasks in reserved.values():
+                        for t in w_tasks:
+                            all_active_ids.add(t.get('id'))
+                    if task_id in all_active_ids:
+                        is_active = True
+                except Exception as e:
+                    logger.warning(f"Celery inspect failed: {e}")
+
+            if is_active:
                 info = res.info or {}
                 if not isinstance(info, dict):
                     info = {}
@@ -247,9 +290,14 @@ class CrawlerViewSet(viewsets.ViewSet):
                     "status": res.status,
                     "progress": info.get('progress', 0),
                     "message": info.get('message', ''),
+                    "info": info,
                     "last_run_info": last_run_info,
                 })
-        
+            else:
+                # Stale task ID left over, clean it up
+                data['active_unified_task_id'] = None
+                save_scholar_settings(data)
+
         return Response({
             "task_id": None, 
             "status": "IDLE",
@@ -515,13 +563,17 @@ class CrawlerViewSet(viewsets.ViewSet):
             "task_id": task_id,
             "status": res.status,
             "progress": 0,
-            "message": ""
+            "message": "",
+            "info": {}
         }
         
         if res.status == "PROGRESS":
             info = res.info or {}
+            if not isinstance(info, dict):
+                info = {}
             response_data["progress"] = info.get("progress", 0)
             response_data["message"] = info.get("message", "")
+            response_data["info"] = info
         elif res.status == "SUCCESS":
             response_data["progress"] = 100
             response_data["message"] = "Tác vụ chạy hoàn tất thành công!"
@@ -822,3 +874,132 @@ class TriggerAuthorsScanView(APIView):
             "message": f"Đã phát lệnh quét ngầm trực tiếp cho {len(dispatched)} tác giả!",
             "dispatched": dispatched
         })
+
+
+class AntiBlockConfigView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        config = AntiBlockConfig.get_solo()
+        serializer = AntiBlockConfigSerializer(config)
+        return Response(serializer.data)
+
+    def patch(self, request):
+        config = AntiBlockConfig.get_solo()
+        serializer = AntiBlockConfigSerializer(config, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RotateTorView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        from apps.scholar.scholarly.tor_helper import renew_tor_ip
+        success = renew_tor_ip()
+        return Response({'status': 'success' if success else 'failed', 'rotated': success})
+
+
+class UserScholarProfileViewSet(ViewSet):
+    """
+    ViewSet dành cho người dùng cá nhân xem và gửi thông tin hồ sơ Google Scholar.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_or_create_profile(self, user: Any) -> ScholarProfile:
+        """
+        Lấy hoặc tạo mới ScholarProfile tương ứng với tài khoản người dùng.
+        """
+        profile, _ = ScholarProfile.objects.get_or_create(user=user)
+        return profile
+
+    @action(detail=False, methods=["get"], url_path="profile")
+    def my_profile(self, request: Request) -> Response:
+        """
+        Lấy thông tin hồ sơ Google Scholar của người dùng hiện tại.
+        """
+        profile = self._get_or_create_profile(request.user)
+        serializer = ScholarProfileSerializer(profile)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["post"], url_path="profile/submit")
+    def submit_profile(self, request: Request) -> Response:
+        """
+        Gửi liên kết hồ sơ Google Scholar để chờ duyệt.
+        """
+        profile = self._get_or_create_profile(request.user)
+        serializer = ProfileSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        url = serializer.validated_data["scholar_url"]
+        match = re_search(r"user=([a-zA-Z0-9_-]+)", url)
+        scholar_id = match.group(1) if match else None
+
+        profile.scholar_url = url
+        profile.scholar_id = scholar_id
+        profile.status = ProfileStatus.PENDING
+        profile.submitted_at = timezone.now()
+        profile.save()
+
+        return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
+
+
+class AdminScholarApprovalViewSet(ModelViewSet):
+    """
+    ViewSet dành cho Admin quản lý và phê duyệt các hồ sơ Google Scholar.
+    """
+    permission_classes = [IsAdminUser]
+    queryset = ScholarProfile.objects.all()
+    serializer_class = ScholarProfileSerializer
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve_profile(self, request: Request, pk: Optional[Any] = None) -> Response:
+        """
+        Phê duyệt hồ sơ Google Scholar của người dùng.
+        Đồng bộ dữ liệu bài báo từ AuthorProfile nếu tác giả đã được quét trước đó.
+        """
+        profile = self.get_object()
+        profile.status = ProfileStatus.APPROVED
+        profile.approved_at = timezone.now()
+
+        scholar_id = (profile.scholar_id or "").strip()
+        author = None
+        if scholar_id:
+            author = AuthorProfile.objects.filter(scholar_id__iexact=scholar_id).first()
+            if not author:
+                author = AuthorProfile.objects.filter(scholar_id__icontains=scholar_id).first()
+
+        if not author and profile.user:
+            author = AuthorProfile.objects.filter(name__icontains=profile.user.username).first()
+
+        if author:
+            if not profile.scholar_id:
+                profile.scholar_id = author.scholar_id
+            profile.total_citations = author.citedby
+            profile.h_index = author.hindex
+            profile.i10_index = author.i10index
+
+            for pub in author.publications.all():
+                try:
+                    year_val = int(pub.year) if pub.year and str(pub.year).isdigit() else None
+                except ValueError:
+                    year_val = None
+
+                ScholarPublication.objects.get_or_create(
+                    profile=profile,
+                    title=pub.title,
+                    defaults={
+                        "authors": pub.authors_list or "",
+                        "journal": pub.venue or "",
+                        "pub_year": year_val,
+                        "citations": pub.citations or 0,
+                        "url": pub.pub_url or "",
+                    },
+                )
+
+        profile.save()
+        return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
+
+
