@@ -442,15 +442,19 @@ export function ProfileManagerPage() {
   const recentCitationValues = citationValues.slice(-8)
   const maxRecentCites = Math.max(...recentCitationValues.map((v) => v.count), 1)
 
-  // Auto scroll main container to top when selecting a publication in ProfileManagerPage
+  // Auto scroll all scrollable containers to top when selecting a publication in ProfileManagerPage
   useEffect(() => {
     if (selectedPubId) {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: 'instant' })
       const mainEl = document.querySelector('main')
       if (mainEl) {
         mainEl.scrollTop = 0
-        mainEl.scrollTo({ top: 0, behavior: 'smooth' })
       }
+      setTimeout(() => {
+        document.querySelectorAll('.overflow-y-auto').forEach((el) => {
+          el.scrollTop = 0
+        })
+      }, 0)
     }
   }, [selectedPubId])
 
