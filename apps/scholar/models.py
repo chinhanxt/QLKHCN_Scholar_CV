@@ -247,6 +247,35 @@ class AutoScanConfig(models.Model):
         return obj
 
 
+class AntiBlockConfig(models.Model):
+    use_tor_proxy = models.BooleanField(default=True)
+    use_free_proxy_pool = models.BooleanField(default=True)
+    custom_proxy_list = models.TextField(blank=True, default='')
+
+    enable_captcha_solver = models.BooleanField(default=False)
+    captcha_provider = models.CharField(max_length=50, default='2captcha')
+    captcha_api_key = models.CharField(max_length=255, blank=True, default='')
+
+    max_retries_per_request = models.IntegerField(default=5)
+    adaptive_backoff_enabled = models.BooleanField(default=True)
+    base_delay_seconds = models.FloatField(default=1.0)
+    max_delay_seconds = models.FloatField(default=15.0)
+
+    total_requests_count = models.IntegerField(default=0)
+    captcha_encountered_count = models.IntegerField(default=0)
+    captcha_solved_count = models.IntegerField(default=0)
+    ip_rotations_count = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Anti-Block Config'
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(id=1)
+        return obj
+
+
+
 
 class Publication(BaseModel):
     author = models.ForeignKey(AuthorProfile, on_delete=models.CASCADE, related_name="publications", verbose_name=_("Author"))
