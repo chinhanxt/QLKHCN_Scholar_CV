@@ -400,8 +400,11 @@ export function ScholarScraperPage() {
         ['Họ và tên tác giả', profile.name],
         ['Cơ quan công tác', profile.affiliation || 'Không rõ cơ quan công tác'],
         [isSelectiveExport ? 'Tổng số trích dẫn bài xuất' : 'Tổng số trích dẫn', isSelectiveExport ? totalCitesOfExport : profile.citedby],
+        ['Tổng số trích dẫn (5 năm gần nhất)', profile.citedby5y ?? 0],
         ['Chỉ số H-index', profile.hindex || 0],
-        ['Chỉ số i10-index', profile.i10index || 0]
+        ['Chỉ số H-index (5 năm gần nhất)', profile.hindex5y ?? 0],
+        ['Chỉ số i10-index', profile.i10index || 0],
+        ['Chỉ số i10-index (5 năm gần nhất)', profile.i10index5y ?? 0]
       ]
 
       infoFields.forEach((field, i) => {
@@ -443,7 +446,7 @@ export function ScholarScraperPage() {
       const ifCount = pubsToExport.filter(p => p.if_val && p.if_val !== 'N/A').length
       const bothCount = pubsToExport.filter(p => p.if_val && p.if_val !== 'N/A' && p.sjr_q && p.sjr_q !== 'N/A').length
 
-      const statStartRow = 11
+      const statStartRow = 5 + infoFields.length + 1
       sheet1.getCell('A' + statStartRow).value = 'II. THỐNG KÊ ĐỐI KHỚP DANH MỤC CƠ SỞ DỮ LIỆU'
       sheet1.getCell('A' + statStartRow).font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF2563EB' } }
       sheet1.mergeCells(`A${statStartRow}:D${statStartRow}`)
@@ -754,22 +757,23 @@ export function ScholarScraperPage() {
   }
 
   // Clean values for visual computations
-  const citationYears = profile?.publications
-    ? Array.from(
-        new Set(
-          profile.publications
-            .flatMap((p) => Object.keys(p.cites_per_year || {}))
-            .filter((y) => /^\d{4}$/.test(y))
-        )
-      ).sort()
-    : []
+  const authorCitesPerYear = profile?.cites_per_year || {}
+  const officialYears = Object.keys(authorCitesPerYear).filter((y) => /^\d{4}$/.test(y)).sort()
 
-  const citationValues = citationYears.map((year) => {
-    const totalCites = profile?.publications.reduce((sum, p) => {
-      return sum + (p.cites_per_year?.[year] || 0)
-    }, 0) || 0
-    return { year, count: totalCites }
-  })
+  const citationValues = officialYears.length > 0
+    ? officialYears.map((year) => ({ year, count: authorCitesPerYear[year] || 0 }))
+    : (profile?.publications
+        ? Array.from(
+            new Set(
+              profile.publications
+                .flatMap((p) => Object.keys(p.cites_per_year || {}))
+                .filter((y) => /^\d{4}$/.test(y))
+            )
+          ).sort().map((year) => ({
+            year,
+            count: profile.publications.reduce((sum, p) => sum + (p.cites_per_year?.[year] || 0), 0)
+          }))
+        : [])
 
   const maxCites = Math.max(...citationValues.map((v) => v.count), 1)
 
@@ -1508,17 +1512,17 @@ export function ScholarScraperPage() {
                     <tr>
                       <td className="py-2 font-semibold">Số trích dẫn</td>
                       <td className="py-2 text-right font-bold text-slate-800">{profile.citedby}</td>
-                      <td className="py-2 text-right font-bold text-slate-800">{Math.round(profile.citedby * 0.84)}</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{profile.citedby5y ?? 0}</td>
                     </tr>
                     <tr>
                       <td className="py-2 font-semibold">Chỉ số h-index</td>
                       <td className="py-2 text-right font-bold text-slate-800">{profile.hindex}</td>
-                      <td className="py-2 text-right font-bold text-slate-800">{Math.max(1, profile.hindex - 1)}</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{profile.hindex5y ?? 0}</td>
                     </tr>
                     <tr>
                       <td className="py-2 font-semibold">Chỉ số i10-index</td>
                       <td className="py-2 text-right font-bold text-slate-800">{profile.i10index}</td>
-                      <td className="py-2 text-right font-bold text-slate-800">{Math.max(0, profile.i10index - 1)}</td>
+                      <td className="py-2 text-right font-bold text-slate-800">{profile.i10index5y ?? 0}</td>
                     </tr>
                   </tbody>
                 </table>

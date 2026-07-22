@@ -46,6 +46,7 @@ export interface TaskStatusResponse {
   progress?: number
   message?: string
   result?: any
+  info?: any
 }
 
 export interface AuthorCandidate {
@@ -106,8 +107,12 @@ export interface AuthorProfileDetail {
   affiliation: string
   email_domain?: string | null
   citedby: number
+  citedby5y?: number
   hindex: number
+  hindex5y?: number
   i10index: number
+  i10index5y?: number
+  cites_per_year?: Record<string, number>
   interests: string[]
   publications: PublicationDetail[]
   created_at: string
