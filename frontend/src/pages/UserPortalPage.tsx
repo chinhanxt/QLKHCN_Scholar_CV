@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -52,6 +52,23 @@ export function UserPortalPage() {
 
   // Interactive UI State for Profile Tab
   const [selectedPublication, setSelectedPublication] = useState<PublicationDetail | null>(null)
+
+  // Automatically scroll all scrollable containers to top when selecting a publication (matches Admin behavior)
+  useEffect(() => {
+    if (selectedPublication) {
+      window.scrollTo({ top: 0, behavior: 'instant' })
+      const mainEl = document.querySelector('main')
+      if (mainEl) {
+        mainEl.scrollTop = 0
+      }
+      setTimeout(() => {
+        document.querySelectorAll('.overflow-y-auto').forEach((el) => {
+          el.scrollTop = 0
+        })
+      }, 0)
+    }
+  }, [selectedPublication])
+
   const [pubSearch, setPubSearch] = useState('')
   const [yearFilter, setYearFilter] = useState('All')
   const [quartileFilter, setQuartileFilter] = useState('all')
