@@ -19,6 +19,14 @@ import { DatabasePage } from '@/pages/DatabasePage'
 import { HelpPage } from '@/pages/HelpPage'
 import { UserPortalPage } from '@/pages/UserPortalPage'
 
+import { useAuthStore } from '@/stores/auth.store'
+
+function FallbackRedirect() {
+  const user = useAuthStore((s) => s.user)
+  const isAdmin = user?.is_staff || user?.is_superuser
+  return <Navigate to={isAdmin ? '/' : '/portal'} replace />
+}
+
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   {
@@ -55,5 +63,5 @@ export const router = createBrowserRouter([
       },
     ],
   },
-  { path: '*', element: <Navigate to="/portal" replace /> },
+  { path: '*', element: <FallbackRedirect /> },
 ])

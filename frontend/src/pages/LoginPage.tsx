@@ -32,6 +32,7 @@ type FormValues = z.infer<typeof schema>
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const user = useAuthStore((s) => s.user)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const login = useLogin()
   const [showPassword, setShowPassword] = useState(false)
@@ -43,15 +44,19 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
-  if (isAuthenticated) return <Navigate to="/" replace />
+  if (isAuthenticated) {
+    const defaultTarget = user?.is_staff || user?.is_superuser ? '/' : '/portal'
+    return <Navigate to={defaultTarget} replace />
+  }
 
   const onSubmit = (values: FormValues) => {
     login.mutate(values, {
-      onSuccess: () => {
+      onSuccess: (loggedInUser) => {
         toast.success('Đăng nhập thành công!', {
           description: 'Chào mừng bạn trở lại hệ thống Edu Ecosystem.',
         })
-        const to = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? '/'
+        const defaultTarget = loggedInUser?.is_staff || loggedInUser?.is_superuser ? '/' : '/portal'
+        const to = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? defaultTarget
         navigate(to, { replace: true })
       },
       onError: (err) => {
