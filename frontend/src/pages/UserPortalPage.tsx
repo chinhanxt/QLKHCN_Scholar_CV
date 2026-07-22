@@ -197,7 +197,7 @@ export function UserPortalPage() {
               </div>
               <h3 className="text-lg font-bold text-slate-900">Hồ sơ đang trong quá trình xử lý</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Hồ sơ của bạn đang được kiểm tra và chờ duyệt. Vui lòng quay lại sau khi quản trị viên hoàn tất kiểm tra thông tin.
+                Hồ sơ của bạn đang trong quá trình kiểm tra và chờ duyệt. Vui lòng quay lại sau khi quản trị viên hoàn tất kiểm tra thông tin.
               </p>
               <Button onClick={() => setActiveTab('submit')} className="bg-blue-600 hover:bg-blue-700 text-xs font-semibold rounded-xl">
                 Xem trạng thái hồ sơ

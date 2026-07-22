@@ -16,7 +16,7 @@ class TestUserModel:
     def test_email_is_unique(self):
         UserFactory(email="test@example.com")
         with pytest.raises(Exception):  # noqa: B017
-            UserFactory(email="test@example.com", username="other")
+            User.objects.create(email="test@example.com", username="other")
 
     def test_str_returns_email(self):
         user = UserFactory(email="hello@test.com")
