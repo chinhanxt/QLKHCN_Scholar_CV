@@ -151,6 +151,13 @@ export function ScholarScraperPage() {
   useEffect(() => {
     setSelectedPubIds([])
   }, [profile])
+
+  // Automatically scroll to top when selecting a publication (matches Image 2 layout)
+  useEffect(() => {
+    if (selectedPublication) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [selectedPublication])
   
   // Scraper Task state from Zustand Store
   const { taskId, taskStatus, progress, consoleLogs } = useCrawlerStore((state) => state.scholar)
