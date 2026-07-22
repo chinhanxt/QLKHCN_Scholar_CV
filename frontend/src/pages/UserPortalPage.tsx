@@ -1,18 +1,15 @@
-import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import {
-  BookOpen,
   ExternalLink,
   Clock,
   CheckCircle2,
   AlertCircle,
   FileText,
-  User,
   KeyRound,
-  Send,
   Award,
   TrendingUp,
 } from 'lucide-react'
@@ -38,7 +35,13 @@ const submitSchema = z.object({
 type SubmitValues = z.infer<typeof submitSchema>
 
 export function UserPortalPage() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'submit' | 'settings'>('profile')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = (searchParams.get('tab') as 'profile' | 'submit' | 'settings') || 'profile'
+
+  const setActiveTab = (tab: 'profile' | 'submit' | 'settings') => {
+    setSearchParams({ tab })
+  }
+
   const { data: profile, isLoading } = useMyProfile()
   const submitProfile = useSubmitScholarProfile()
 
@@ -71,45 +74,6 @@ export function UserPortalPage() {
 
   return (
     <div className="space-y-6">
-      {/* Tab Navigation Header */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
-        <button
-          onClick={() => setActiveTab('profile')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
-            activeTab === 'profile'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <BookOpen className="h-4 w-4" />
-          Hồ sơ Scholar & CV
-        </button>
-
-        <button
-          onClick={() => setActiveTab('submit')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
-            activeTab === 'submit'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Send className="h-4 w-4" />
-          Cập nhật thông tin Hồ sơ
-        </button>
-
-        <button
-          onClick={() => setActiveTab('settings')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
-            activeTab === 'settings'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <User className="h-4 w-4" />
-          Tài khoản & Mật khẩu
-        </button>
-      </div>
-
       {/* Tab 1: Scholar Profile & CV */}
       {activeTab === 'profile' && (
         <div className="space-y-6">
