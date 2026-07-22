@@ -25,10 +25,10 @@ class TestTorHelper(unittest.TestCase):
         status = get_tor_status(control_host='localhost', control_port=9051, password='test_pass')
         self.assertEqual(status.get("status"), "online")
 
-    @patch.object(ProxyGenerator, '_use_proxy', return_value=True)
-    def test_proxy_generator_tor(self, mock_use_proxy):
+    @patch.object(ProxyGenerator, '_new_session')
+    def test_proxy_generator_tor(self, mock_new_session):
         pg = ProxyGenerator()
         res = pg.Tor(socks_host="tor", socks_port=9050)
         self.assertTrue(res)
         self.assertEqual(pg.proxy_mode, ProxyMode.TOR)
-        mock_use_proxy.assert_called_once_with(http="socks5h://tor:9050", https="socks5h://tor:9050")
+        mock_new_session.assert_called_with(proxies={"http": "socks5h://tor:9050", "https": "socks5h://tor:9050"})
