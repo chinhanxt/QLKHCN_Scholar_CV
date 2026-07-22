@@ -198,8 +198,12 @@ class AuthorProfile(BaseModel):
     affiliation = models.CharField(_("Affiliation"), max_length=500, blank=True, null=True)
     email_domain = models.CharField(_("Email Domain"), max_length=250, blank=True, null=True)
     citedby = models.IntegerField(_("Total Citations"), default=0)
+    citedby5y = models.IntegerField(_("5-Year Citations"), default=0, help_text=_("Trích dẫn 5 năm gần nhất"))
     hindex = models.IntegerField(_("H-Index"), default=0)
+    hindex5y = models.IntegerField(_("5-Year H-Index"), default=0, help_text=_("h-index 5 năm gần nhất"))
     i10index = models.IntegerField(_("i10-Index"), default=0)
+    i10index5y = models.IntegerField(_("5-Year i10-Index"), default=0, help_text=_("i10-index 5 năm gần nhất"))
+    cites_per_year = models.JSONField(_("Citations Per Year History"), default=dict, blank=True, help_text=_("Lịch sử trích dẫn theo từng năm của Tác giả"))
     interests = models.JSONField(_("Interests"), default=list, blank=True)
     
     auto_scan_enabled = models.BooleanField(_("Auto Scan Enabled"), default=True)
@@ -214,7 +218,7 @@ class AuthorProfile(BaseModel):
         ordering = ["name"]
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.scholar_id})"
 
 
 class AutoScanConfig(models.Model):
