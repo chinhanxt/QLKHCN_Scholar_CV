@@ -223,6 +223,15 @@ class CrawlerViewSet(viewsets.ViewSet):
         except CrawlHistory.DoesNotExist:
             return Response({"error": "Không tìm thấy lịch sử lượt chạy."}, status=404)
 
+    @action(detail=False, methods=["delete"], url_path="clear-history")
+    def clear_history(self, request):
+        """
+        Xóa toàn bộ lịch sử các lượt chạy cào.
+        """
+        from apps.scholar.models import CrawlHistory
+        deleted_count, _ = CrawlHistory.objects.all().delete()
+        return Response({"status": "success", "deleted_count": deleted_count})
+
     @action(detail=False, methods=["get"], url_path="active-task")
     def active_task(self, request):
         from apps.scholar.tasks import get_scholar_settings, save_scholar_settings

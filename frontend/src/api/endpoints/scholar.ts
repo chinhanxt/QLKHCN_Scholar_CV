@@ -191,6 +191,9 @@ export const scholarApi = {
   getCrawlHistoryDetail: (historyId: number) =>
     apiClient.get<any>(`/scholar/crawlers/${historyId}/history-detail/`),
 
+  clearCrawlHistory: () =>
+    apiClient.delete<{ status: string; deleted_count: number }>('/scholar/crawlers/clear-history/'),
+
 
   saveSettings: (payload: any) => 
     apiClient.post<any>('/scholar/crawlers/settings/', payload),

@@ -264,11 +264,13 @@ export function ScholarAutoSchedulerPage() {
     fetchConfig()
     fetchAuthors(false)
 
-    // Poll config & status silently every 4 seconds to reflect live progress without flashing UI
+    // Poll config & status silently every 6 seconds only when tab is active
     const interval = setInterval(() => {
-      fetchConfig()
-      fetchAuthors(true)
-    }, 4000)
+      if (document.visibilityState === 'visible') {
+        fetchConfig()
+        fetchAuthors(true)
+      }
+    }, 6000)
 
     return () => clearInterval(interval)
   }, [])

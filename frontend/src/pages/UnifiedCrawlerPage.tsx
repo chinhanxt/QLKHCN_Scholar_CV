@@ -345,6 +345,7 @@ export function UnifiedCrawlerPage() {
 
   const [savingSchedule, setSavingSchedule] = useState<boolean>(false)
   const [lastRunInfo, setLastRunInfo] = useState<any>(null)
+  const [dismissedBannerKey, setDismissedBannerKey] = useState<string>('')
   const [showHistory, setShowHistory] = useState(false)
   const [historyList, setHistoryList] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -378,6 +379,20 @@ export function UnifiedCrawlerPage() {
       toast.error('Không thể tải chi tiết logs của lượt chạy này.')
     } finally {
       setLoadingDetail(false)
+    }
+  }
+
+  const handleClearHistory = async () => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử nhật ký cào dữ liệu?')) return
+    try {
+      const res = await scholarApi.clearCrawlHistory()
+      toast.success(`Đã xóa sạch ${res.data.deleted_count} bản ghi nhật ký cào dữ liệu!`)
+      setHistoryList([])
+      setSelectedHistory(null)
+      setHistoryDetailLogs('')
+    } catch (err) {
+      console.error('Lỗi xóa nhật ký cào:', err)
+      toast.error('Không thể xóa nhật ký cào.')
     }
   }
 
@@ -515,9 +530,9 @@ export function UnifiedCrawlerPage() {
           <button
             onClick={handleOpenHistory}
             className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all text-slate-700 text-xs font-bold gap-2 cursor-pointer bg-white shadow-xs font-sans"
-            title="Xem lịch sử cào"
+            title="Xem nhật ký lịch sử cào dữ liệu"
           >
-            <History className="w-4 h-4 text-slate-500" /> Lịch sử cào
+            <History className="w-4 h-4 text-[#005b9a]" /> Nhật Ký
           </button>
           <button
             onClick={fetchStats}
@@ -895,8 +910,10 @@ export function UnifiedCrawlerPage() {
         </div>
         <div className="p-6 bg-white min-h-[300px] space-y-4">
           {/* Last Run History Alert Banner */}
-          {lastRunInfo?.time && (!taskId || taskStatus === 'IDLE' || taskStatus === 'SUCCESS' || taskStatus === 'FAILURE') && (
-            <div className="p-4 px-5 rounded-xl border border-sky-100 bg-sky-50/50 text-sky-950 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-xs animate-fade-in">
+          {lastRunInfo?.time &&
+            dismissedBannerKey !== `${lastRunInfo.time}-${lastRunInfo.status}-${lastRunInfo.message}` &&
+            (!taskId || taskStatus === 'IDLE' || taskStatus === 'SUCCESS' || taskStatus === 'FAILURE') && (
+            <div className="p-3.5 px-5 rounded-xl border border-sky-100 bg-sky-50/50 text-sky-950 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-xs animate-fade-in">
               <div className="flex flex-wrap items-center gap-2 font-medium">
                 <span className="inline-flex w-2 h-2 rounded-full bg-emerald-500 shadow-xs animate-pulse"></span>
                 <span>
@@ -908,8 +925,18 @@ export function UnifiedCrawlerPage() {
                   {lastRunInfo.status === 'SUCCESS' ? 'Thành công' : 'Thất bại'}
                 </span>
               </div>
-              <div className="opacity-95 font-semibold text-slate-700 flex items-center gap-1.5 bg-white border border-slate-150 px-3 py-1 rounded-lg">
-                <span>{lastRunInfo.message}</span>
+              <div className="flex items-center gap-3">
+                <div className="opacity-95 font-semibold text-slate-700 flex items-center gap-1.5 bg-white border border-slate-150 px-3 py-1 rounded-lg">
+                  <span>{lastRunInfo.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDismissedBannerKey(`${lastRunInfo.time}-${lastRunInfo.status}-${lastRunInfo.message}`)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                  title="Tắt thông báo này"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </div>
           )}
@@ -1218,18 +1245,30 @@ export function UnifiedCrawlerPage() {
             {/* Modal Header */}
             <div className="p-4 px-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-[#005b9a] animate-pulse" />
+                <History className="w-5 h-5 text-[#005b9a]" />
                 <div>
-                  <h3 className="font-bold text-slate-800 text-sm">Lịch sử Lượt chạy & Nhật ký Tiến trình</h3>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Hiển thị lịch sử hoạt động của hệ thống cào và đồng bộ.</p>
+                  <h3 className="font-bold text-slate-800 text-sm">Nhật Ký Lịch Sử Cào & Đẩy Dữ Liệu</h3>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Hiển thị chi tiết lịch sử hoạt động cào dữ liệu, thời gian thực thi và log tiến trình.</p>
                 </div>
               </div>
-              <button
-                onClick={() => { setShowHistory(false); setSelectedHistory(null); }}
-                className="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 hover:text-rose-600 transition-colors text-slate-400 cursor-pointer bg-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {historyList.length > 0 && (
+                  <button
+                    onClick={handleClearHistory}
+                    className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-3xs"
+                    title="Xóa toàn bộ lịch sử nhật ký cào"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Xóa Nhật Ký</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => { setShowHistory(false); setSelectedHistory(null); }}
+                  className="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 hover:text-rose-600 transition-colors text-slate-400 cursor-pointer bg-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body: Split dual-column layout */}
