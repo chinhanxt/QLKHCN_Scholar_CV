@@ -1,12 +1,11 @@
 import { Outlet, Link } from 'react-router-dom'
-import { GraduationCap, LogOut, User as UserIcon, ShieldAlert } from 'lucide-react'
+import { GraduationCap, LogOut, User as UserIcon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { Button } from '@/components/ui/button'
 
 export function UserLayout() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
-  const isAdmin = user?.is_staff || user?.is_superuser
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -21,19 +20,6 @@ export function UserLayout() {
           </Link>
 
           <div className="flex items-center gap-3">
-            {isAdmin && (
-              <Link to="/">
-                <Button
-                  size="sm"
-                  className="h-9 px-3 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                  title="Chuyển sang trang Quản trị Admin"
-                >
-                  <ShieldAlert className="h-4 w-4" />
-                  Giao diện Admin
-                </Button>
-              </Link>
-            )}
-
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
               <UserIcon className="h-3.5 w-3.5 text-slate-500" />
               {user?.email}

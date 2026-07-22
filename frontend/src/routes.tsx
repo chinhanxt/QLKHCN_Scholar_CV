@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { RequireAdmin } from '@/components/guards/RequireAdmin'
+import { RequireUser } from '@/components/guards/RequireUser'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { UserLayout } from '@/components/layout/UserLayout'
 import { LoginPage } from '@/pages/LoginPage'
@@ -32,10 +33,15 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
-      // User Portal Layout
+      // User Portal Layout (Normal users only - Admins redirected to /)
       {
-        element: <UserLayout />,
-        children: [{ path: '/portal', element: <UserPortalPage /> }],
+        element: <RequireUser />,
+        children: [
+          {
+            element: <UserLayout />,
+            children: [{ path: '/portal', element: <UserPortalPage /> }],
+          },
+        ],
       },
       // Admin Protected Routes
       {
