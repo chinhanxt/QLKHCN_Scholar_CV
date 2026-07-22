@@ -6,7 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 
-from apps.scholar.models import AuthorProfile, AutoScanConfig
+from apps.scholar.models import AuthorProfile, AutoScanConfig, AntiBlockConfig
 from apps.scholar.scholarly.tor_helper import renew_tor_ip, get_tor_status
 from apps.scholar.tasks import scrape_author_cv_smart_task
 from apps.scholar.api.serializers import (
@@ -18,6 +18,7 @@ from apps.scholar.api.serializers import (
     ScimagoCrawlRequestSerializer,
     ClarivateCrawlRequestSerializer,
     UnifiedCrawlRequestSerializer,
+    AntiBlockConfigSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -224,7 +225,7 @@ class CrawlerViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=["get"], url_path="active-task")
     def active_task(self, request):
-        from apps.scholar.tasks import get_scholar_settings
+        from apps.scholar.tasks import get_scholar_settings, save_scholar_settings
         from celery.result import AsyncResult
         
         data = get_scholar_settings()
@@ -238,7 +239,28 @@ class CrawlerViewSet(viewsets.ViewSet):
         
         if task_id:
             res = AsyncResult(task_id)
-            if res.status in ('PENDING', 'PROGRESS'):
+            is_active = False
+            if res.status == 'PROGRESS':
+                is_active = True
+            elif res.status == 'PENDING':
+                try:
+                    from config.celery import app as celery_app
+                    i = celery_app.control.inspect(timeout=1.0)
+                    active = i.active() or {}
+                    reserved = i.reserved() or {}
+                    all_active_ids = set()
+                    for w_tasks in active.values():
+                        for t in w_tasks:
+                            all_active_ids.add(t.get('id'))
+                    for w_tasks in reserved.values():
+                        for t in w_tasks:
+                            all_active_ids.add(t.get('id'))
+                    if task_id in all_active_ids:
+                        is_active = True
+                except Exception as e:
+                    logger.warning(f"Celery inspect failed: {e}")
+
+            if is_active:
                 info = res.info or {}
                 if not isinstance(info, dict):
                     info = {}
@@ -247,9 +269,14 @@ class CrawlerViewSet(viewsets.ViewSet):
                     "status": res.status,
                     "progress": info.get('progress', 0),
                     "message": info.get('message', ''),
+                    "info": info,
                     "last_run_info": last_run_info,
                 })
-        
+            else:
+                # Stale task ID left over, clean it up
+                data['active_unified_task_id'] = None
+                save_scholar_settings(data)
+
         return Response({
             "task_id": None, 
             "status": "IDLE",
@@ -515,13 +542,17 @@ class CrawlerViewSet(viewsets.ViewSet):
             "task_id": task_id,
             "status": res.status,
             "progress": 0,
-            "message": ""
+            "message": "",
+            "info": {}
         }
         
         if res.status == "PROGRESS":
             info = res.info or {}
+            if not isinstance(info, dict):
+                info = {}
             response_data["progress"] = info.get("progress", 0)
             response_data["message"] = info.get("message", "")
+            response_data["info"] = info
         elif res.status == "SUCCESS":
             response_data["progress"] = 100
             response_data["message"] = "Tác vụ chạy hoàn tất thành công!"
@@ -822,3 +853,30 @@ class TriggerAuthorsScanView(APIView):
             "message": f"Đã phát lệnh quét ngầm trực tiếp cho {len(dispatched)} tác giả!",
             "dispatched": dispatched
         })
+
+
+class AntiBlockConfigView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        config = AntiBlockConfig.get_solo()
+        serializer = AntiBlockConfigSerializer(config)
+        return Response(serializer.data)
+
+    def patch(self, request):
+        config = AntiBlockConfig.get_solo()
+        serializer = AntiBlockConfigSerializer(config, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RotateTorView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        from apps.scholar.scholarly.tor_helper import renew_tor_ip
+        success = renew_tor_ip()
+        return Response({'status': 'success' if success else 'failed', 'rotated': success})
+

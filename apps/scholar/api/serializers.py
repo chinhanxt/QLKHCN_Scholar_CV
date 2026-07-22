@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from apps.scholar.models import (
     AuthorProfile, Publication, Journal,
-    BioxbioJournal, BioxbioRanking, ScimagoJournal, ScimagoRanking, ClarivateJournal
+    BioxbioJournal, BioxbioRanking, ScimagoJournal, ScimagoRanking, ClarivateJournal,
+    AntiBlockConfig,
 )
+
 
 
 class JournalShortSerializer(serializers.ModelSerializer):
@@ -227,6 +229,13 @@ class UnifiedCrawlRequestSerializer(serializers.Serializer):
         help_text="Giới hạn trang (trống = tất cả)")
     bioxbio_workers   = serializers.IntegerField(default=10, min_value=1, max_value=30)
     bioxbio_delay     = serializers.FloatField(default=2.0, min_value=0.1, max_value=10.0)
+
+
+class AntiBlockConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AntiBlockConfig
+        fields = '__all__'
+
 
 
 

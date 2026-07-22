@@ -2175,3 +2175,18 @@ def task_postrun_handler(sender=None, task_id=None, task=None, retval=None, stat
             logger.error(f"Error clearing active task ID in signal: {e}")
 
 
+@shared_task
+def refresh_free_proxy_pool_task():
+    import requests
+    from django.core.cache import cache
+    try:
+        r = requests.get("https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt", timeout=10)
+        if r.status_code == 200:
+            proxies = [f"http://{line.strip()}" for line in r.text.split('\n') if line.strip()][:50]
+            cache.set("scholar_free_proxies", proxies, 1800)
+            logger.info(f"Refreshed {len(proxies)} free proxies into Redis cache.")
+    except Exception as e:
+        logger.error(f"Failed to refresh free proxy pool: {e}")
+
+
+
