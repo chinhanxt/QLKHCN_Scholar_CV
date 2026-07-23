@@ -140,9 +140,10 @@ export function EmailSettingsCard() {
                 type="text"
                 value={form.DEFAULT_FROM_EMAIL}
                 onChange={(e) => setForm({ ...form, DEFAULT_FROM_EMAIL: e.target.value })}
-                placeholder="Edu Ecosystem <noreply@example.com>"
+                placeholder="Edu Ecosystem <nguyenhuy151025@gmail.com>"
                 className="w-full mt-1 p-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50 font-mono"
               />
+              <span className="text-[11px] text-slate-400 mt-1 block">Khuyên dùng dạng chuẩn Gmail: <code className="text-slate-600 bg-slate-100 px-1 py-0.5 rounded">Tên Hiển Thị &lt;email_của_bạn@gmail.com&gt;</code></span>
             </div>
 
             <div className="pt-2 flex justify-end">
