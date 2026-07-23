@@ -46,6 +46,7 @@ flowchart TD
         H[Topbar Header]
         Bell[Notification Bell Dropdown]
         P[User Portal CV]
+        Set[Admin Settings Sub-Tabs]
     end
 
     A --> S
@@ -60,6 +61,7 @@ flowchart TD
     DB -->|REST API| Bell
     H --> Bell
     Bell --> P
+    Set -->|Configure SMTP & Test Email| E
 ```
 
 ---
@@ -145,6 +147,8 @@ Provides unified helper methods for dispatching notifications:
 - `GET /api/v1/notifications/unread-count/`: Lightweight endpoint returning `{ "unread_count": N }` for real-time header bell badge.
 - `POST /api/v1/notifications/{id}/mark-read/`: Marks single notification as read.
 - `POST /api/v1/notifications/mark-all-read/`: Marks all user notifications as read.
+- `GET /api/v1/scholar/crawlers/email-settings/` & `POST`: Manage SMTP host, port, credentials & sender name.
+- `POST /api/v1/scholar/crawlers/test-email/`: Send a test email to verify Admin SMTP configuration.
 
 ---
 
@@ -165,12 +169,24 @@ Provides unified helper methods for dispatching notifications:
 
 ---
 
-## 7. Verification & Testing Strategy
+## 7. Admin Settings Page Sub-Tabs (`frontend/src/pages/SettingsPage.tsx`)
+
+The Admin Settings page (`/settings`) is structured into **2 sub-tabs**:
+
+1. **Tab 1: Cấu hình Proxy & Crawler (Proxy & Anti-Block)**:
+   - Configures Tor SOCKS5 proxy, proxy pools, retries, and anti-captcha settings.
+2. **Tab 2: Cấu hình Dịch vụ Email (SMTP Email Settings)**:
+   - Configures SMTP Host (`EMAIL_HOST`), Port (`EMAIL_PORT`), TLS/SSL, Account (`EMAIL_HOST_USER`), App Password (`EMAIL_HOST_PASSWORD`), and Default From Email (`DEFAULT_FROM_EMAIL`).
+   - Includes **"Gửi Email Thử nghiệm"** button to send a live test email and confirm credentials.
+
+---
+
+## 8. Verification & Testing Strategy
 
 1. **Unit Tests**:
    - Test `Notification` creation & REST API endpoints (`unread-count`, `mark-read`, `mark-all-read`).
    - Test `NotificationService` email rendering and async dispatch.
    - Test automatic trigger inside `approve_profile` endpoint and `scrape_author_cv_smart_task`.
 2. **Integration Verification**:
-   - Verify SMTP configuration in `.env`.
+   - Verify SMTP configuration in `.env` and via Admin Email Settings sub-tab.
    - Verify frontend Bell UI badge updates upon approval or background scan completion.
