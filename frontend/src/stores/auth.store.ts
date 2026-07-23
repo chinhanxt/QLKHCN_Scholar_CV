@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { queryClient } from '@/lib/query-client'
 import type { User } from '@/types'
 
 interface AuthState {
@@ -36,14 +37,16 @@ export const useAuthStore = create<AuthState>()(
           hasHydrated: true,
           isAuthenticated: Boolean(state.accessToken || state.refreshToken),
         })),
-      logout: () =>
+      logout: () => {
+        queryClient.clear()
         set({
           accessToken: null,
           refreshToken: null,
           user: null,
           isAuthenticated: false,
           hasHydrated: true,
-        }),
+        })
+      },
     }),
     {
       name: 'eco-sys-auth',
