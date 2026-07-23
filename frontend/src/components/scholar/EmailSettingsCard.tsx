@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { notificationApi } from '@/api/endpoints/notifications'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Mail, Send, Check } from 'lucide-react'
+import { Mail, Send, Check, Eye, EyeOff } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 
 export function EmailSettingsCard() {
@@ -10,6 +10,7 @@ export function EmailSettingsCard() {
   const [isSaving, setIsSaving] = useState(false)
   const [isSendingTest, setIsSendingTest] = useState(false)
   const [testEmail, setTestEmail] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const [form, setForm] = useState({
     EMAIL_HOST: 'smtp.gmail.com',
@@ -112,13 +113,23 @@ export function EmailSettingsCard() {
 
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase">Mật khẩu ứng dụng (App Password)</label>
-                <input
-                  type="password"
-                  value={form.EMAIL_HOST_PASSWORD || ''}
-                  onChange={(e) => setForm({ ...form, EMAIL_HOST_PASSWORD: e.target.value })}
-                  placeholder="•••• •••• •••• ••••"
-                  className="w-full mt-1 p-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50 font-mono"
-                />
+                <div className="relative mt-1">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={form.EMAIL_HOST_PASSWORD || ''}
+                    onChange={(e) => setForm({ ...form, EMAIL_HOST_PASSWORD: e.target.value })}
+                    placeholder="•••• •••• •••• ••••"
+                    className="w-full p-2.5 pr-10 text-xs rounded-xl border border-slate-200 bg-slate-50 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#005b9a] transition-colors cursor-pointer p-1"
+                    title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             </div>
 
