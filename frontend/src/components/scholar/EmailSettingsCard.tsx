@@ -49,7 +49,6 @@ export function EmailSettingsCard() {
     }
     setIsSendingTest(true)
     try {
-      await notificationApi.saveEmailSettings(form)
       const res = await notificationApi.sendTestEmail(testEmail)
       toast.success(res.data.message || `Đã gửi thư thử nghiệm tới ${testEmail}!`)
     } catch (err: any) {
@@ -120,6 +119,7 @@ export function EmailSettingsCard() {
                     value={form.EMAIL_HOST_PASSWORD || ''}
                     onChange={(e) => setForm({ ...form, EMAIL_HOST_PASSWORD: e.target.value })}
                     placeholder="•••• •••• •••• ••••"
+                    autoComplete="new-password"
                     className="w-full p-2.5 pr-10 text-xs rounded-xl border border-slate-200 bg-slate-50 font-mono"
                   />
                   <button
