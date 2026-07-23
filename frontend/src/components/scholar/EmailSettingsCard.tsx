@@ -27,14 +27,14 @@ export function EmailSettingsCard() {
       .finally(() => setIsLoading(false))
   }, [])
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     setIsSaving(true)
     try {
-      await notificationApi.saveEmailSettings(form)
-      toast.success('Đã lưu cấu hình Email SMTP thành công!')
-    } catch {
-      toast.error('Lưu cấu hình Email thất bại.')
+      const res = await notificationApi.saveEmailSettings(form)
+      toast.success(res.data.message || 'Đã lưu cấu hình Email SMTP thành công!')
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Lưu cấu hình Email thất bại.')
     } finally {
       setIsSaving(false)
     }
@@ -47,10 +47,12 @@ export function EmailSettingsCard() {
     }
     setIsSendingTest(true)
     try {
-      await notificationApi.sendTestEmail(testEmail)
-      toast.success(`Đã gửi thư thử nghiệm tới ${testEmail}!`)
-    } catch {
-      toast.error('Gửi email thử nghiệm thất bại.')
+      await notificationApi.saveEmailSettings(form)
+      const res = await notificationApi.sendTestEmail(testEmail)
+      toast.success(res.data.message || `Đã gửi thư thử nghiệm tới ${testEmail}!`)
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.error || 'Gửi email thử nghiệm thất bại. Vui lòng kiểm tra tài khoản & Mật khẩu ứng dụng.'
+      toast.error(errMsg)
     } finally {
       setIsSendingTest(false)
     }
@@ -109,15 +111,26 @@ export function EmailSettingsCard() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">Tên người gửi mặc định</label>
+                <label className="text-xs font-bold text-slate-500 uppercase">Mật khẩu ứng dụng (App Password)</label>
                 <input
-                  type="text"
-                  value={form.DEFAULT_FROM_EMAIL}
-                  onChange={(e) => setForm({ ...form, DEFAULT_FROM_EMAIL: e.target.value })}
-                  placeholder="Edu Ecosystem <noreply@example.com>"
+                  type="password"
+                  value={form.EMAIL_HOST_PASSWORD || ''}
+                  onChange={(e) => setForm({ ...form, EMAIL_HOST_PASSWORD: e.target.value })}
+                  placeholder="•••• •••• •••• ••••"
                   className="w-full mt-1 p-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50 font-mono"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase">Tên người gửi mặc định (Default From Email)</label>
+              <input
+                type="text"
+                value={form.DEFAULT_FROM_EMAIL}
+                onChange={(e) => setForm({ ...form, DEFAULT_FROM_EMAIL: e.target.value })}
+                placeholder="Edu Ecosystem <noreply@example.com>"
+                className="w-full mt-1 p-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50 font-mono"
+              />
             </div>
 
             <div className="pt-2 flex justify-end">

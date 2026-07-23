@@ -22,6 +22,7 @@ export interface EmailSettings {
   EMAIL_PORT: number
   EMAIL_USE_TLS: boolean
   EMAIL_HOST_USER: string
+  EMAIL_HOST_PASSWORD?: string
   DEFAULT_FROM_EMAIL: string
 }
 

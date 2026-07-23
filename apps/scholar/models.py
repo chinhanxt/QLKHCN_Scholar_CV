@@ -325,6 +325,14 @@ class AutoScanConfig(models.Model):
     cooldown_max_seconds = models.IntegerField(
         _("Cooldown Max Seconds"), default=90
     )
+    # SMTP Email Configuration
+    email_host = models.CharField(_("Email Host"), max_length=255, default="smtp.gmail.com")
+    email_port = models.IntegerField(_("Email Port"), default=587)
+    email_use_tls = models.BooleanField(_("Email Use TLS"), default=True)
+    email_host_user = models.CharField(_("Email Host User"), max_length=255, default="", blank=True)
+    email_host_password = models.CharField(_("Email Host Password"), max_length=255, default="", blank=True)
+    default_from_email = models.CharField(_("Default From Email"), max_length=255, default="", blank=True)
+
     # IDLE, RUNNING, COMPLETED, FAILED
     current_job_status = models.CharField(
         _("Current Job Status"), max_length=50, default="IDLE"

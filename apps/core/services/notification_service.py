@@ -3,7 +3,7 @@ import threading
 from typing import Any
 
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import EmailMultiAlternatives, get_connection
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
@@ -38,19 +38,65 @@ class NotificationService:
         from_email = from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "webmaster@localhost")
 
         def _dispatch_email():
+            from django.db import close_old_connections
+            close_old_connections()
+
             try:
+                host = getattr(settings, "EMAIL_HOST", "smtp.gmail.com")
+                port = getattr(settings, "EMAIL_PORT", 587)
+                user = getattr(settings, "EMAIL_HOST_USER", "")
+                password = getattr(settings, "EMAIL_HOST_PASSWORD", "")
+                use_tls = getattr(settings, "EMAIL_USE_TLS", True)
+                sender = from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "Edu Ecosystem <noreply@example.com>")
+
+                try:
+                    from apps.scholar.models import AutoScanConfig
+                    cfg = AutoScanConfig.get_solo()
+                    if cfg.email_host:
+                        host = cfg.email_host
+                    if cfg.email_port:
+                        port = cfg.email_port
+                    if cfg.email_host_user:
+                        user = cfg.email_host_user
+                    if cfg.email_host_password:
+                        password = cfg.email_host_password
+                    if cfg.default_from_email:
+                        sender = cfg.default_from_email
+                except Exception:
+                    pass
+
+                if user and ("<" not in sender and "@" not in sender):
+                    sender = f"{sender} <{user}>"
+
+                if user and password and getattr(settings, "EMAIL_BACKEND", "") != "django.core.mail.backends.locmem.EmailBackend":
+                    conn = get_connection(
+                        backend="django.core.mail.backends.smtp.EmailBackend",
+                        host=host,
+                        port=port,
+                        username=user,
+                        password=password,
+                        use_tls=use_tls,
+                        timeout=10,
+                    )
+                else:
+                    conn = get_connection()
+
                 html_content = render_to_string(template_name, context)
                 text_content = strip_tags(html_content)
                 email = EmailMultiAlternatives(
                     subject=subject,
                     body=text_content,
-                    from_email=from_email,
+                    from_email=sender,
                     to=recipient_list,
+                    connection=conn,
                 )
                 email.attach_alternative(html_content, "text/html")
                 email.send(fail_silently=False)
+                logger.info("Email sent successfully to %s via %s:%s", recipient_list, host, port)
             except Exception as e:
-                logger.error("Failed to send email '%s' to %s: %s", subject, recipient_list, e, exc_info=True)
+                logger.error("Failed to send email to %s: %s", recipient_list, e, exc_info=True)
+            finally:
+                close_old_connections()
 
         if async_email:
             thread = threading.Thread(target=_dispatch_email, daemon=True)
@@ -155,3 +201,15 @@ class NotificationService:
             )
 
         return notification
+
+    @classmethod
+    def send_test_email(cls, recipient_email: str, smtp_override: dict[str, Any] | None = None) -> None:
+        """Send a test email to verify SMTP configuration."""
+        from django.utils import timezone
+        cls.send_email_async(
+            subject="[Edu Ecosystem] Thư thử nghiệm cấu hình Email SMTP",
+            recipient_list=[recipient_email],
+            template_name="emails/test_email.html",
+            context={"timestamp": str(timezone.now()), "user_email": recipient_email},
+            async_email=False,
+        )

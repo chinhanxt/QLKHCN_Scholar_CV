@@ -9,7 +9,7 @@
         <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Email Kiểm Tra Hệ Thống</h1>
     </div>
     <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px;">
-        <p>Xin chào <strong>{{ user.get_full_name|default:user.username }}</strong>,</p>
+        <p>Xin chào <strong>{% if user %}{{ user.get_full_name|default:user.username }}{% else %}{{ user_email|default:"Quý người dùng" }}{% endif %}</strong>,</p>
         <p>Đây là email thử nghiệm gửi từ Hệ thống Quản lý Khai thác Dữ liệu Khoa học (QLKHCN Scholar CV).</p>
         <p style="background-color: #f3f4f6; padding: 10px; border-radius: 4px;">{{ message|default:"Hệ thống hoạt động bình thường." }}</p>
     </div>

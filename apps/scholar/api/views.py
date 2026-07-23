@@ -1145,16 +1145,42 @@ class EmailSettingsView(APIView):
 
     def get(self, request):
         from django.conf import settings
+        from apps.scholar.models import AutoScanConfig
+
+        cfg = AutoScanConfig.get_solo()
         return Response({
-            "EMAIL_HOST": getattr(settings, "EMAIL_HOST", "smtp.gmail.com"),
-            "EMAIL_PORT": getattr(settings, "EMAIL_PORT", 587),
-            "EMAIL_USE_TLS": getattr(settings, "EMAIL_USE_TLS", True),
-            "EMAIL_HOST_USER": getattr(settings, "EMAIL_HOST_USER", ""),
-            "DEFAULT_FROM_EMAIL": getattr(settings, "DEFAULT_FROM_EMAIL", "webmaster@localhost"),
+            "EMAIL_HOST": cfg.email_host or getattr(settings, "EMAIL_HOST", "smtp.gmail.com"),
+            "EMAIL_PORT": cfg.email_port or getattr(settings, "EMAIL_PORT", 587),
+            "EMAIL_USE_TLS": getattr(cfg, "email_use_tls", True),
+            "EMAIL_HOST_USER": cfg.email_host_user or getattr(settings, "EMAIL_HOST_USER", ""),
+            "EMAIL_HOST_PASSWORD": cfg.email_host_password or getattr(settings, "EMAIL_HOST_PASSWORD", ""),
+            "DEFAULT_FROM_EMAIL": cfg.default_from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "Edu Ecosystem <noreply@example.com>"),
         })
 
     def post(self, request):
-        return Response({"message": "Cập nhật cấu hình Email SMTP thành công."})
+        from apps.scholar.models import AutoScanConfig
+
+        cfg = AutoScanConfig.get_solo()
+        data = request.data
+        if "EMAIL_HOST" in data:
+            cfg.email_host = data["EMAIL_HOST"]
+        if "EMAIL_PORT" in data:
+            try:
+                cfg.email_port = int(data["EMAIL_PORT"])
+            except (ValueError, TypeError):
+                pass
+        if "EMAIL_USE_TLS" in data:
+            cfg.email_use_tls = bool(data["EMAIL_USE_TLS"])
+        if "EMAIL_HOST_USER" in data:
+            cfg.email_host_user = data["EMAIL_HOST_USER"]
+        if "EMAIL_HOST_PASSWORD" in data:
+            pwd = data["EMAIL_HOST_PASSWORD"]
+            if pwd and pwd.strip():
+                cfg.email_host_password = pwd.strip()
+        if "DEFAULT_FROM_EMAIL" in data:
+            cfg.default_from_email = data["DEFAULT_FROM_EMAIL"]
+        cfg.save()
+        return Response({"message": "Cập nhật và lưu cấu hình Email SMTP thành công."})
 
 
 class TestEmailView(APIView):
@@ -1166,14 +1192,15 @@ class TestEmailView(APIView):
             return Response({"error": "Vui lòng nhập địa chỉ email nhận thử nghiệm."}, status=status.HTTP_400_BAD_REQUEST)
 
         from apps.core.services.notification_service import NotificationService
-        NotificationService.send_email_async(
-            subject="[QLKHCN] Thư thử nghiệm hệ thống email",
-            recipient_list=[email],
-            template_name="emails/test_email.html",
-            context={"user": request.user, "message": "Email thử nghiệm từ cấu hình SMTP hệ thống."},
-            async_email=False,
-        )
-        return Response({"message": f"Gửi email thử nghiệm thành công tới {email}."})
+        try:
+            NotificationService.send_test_email(email)
+            return Response({"message": f"Gửi email thử nghiệm thành công tới {email}."})
+        except Exception as exc:
+            logger.error(f"Test email dispatch error to {email}: {exc}", exc_info=True)
+            return Response(
+                {"error": f"Không thể gửi thư qua Gmail SMTP: {str(exc)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 
