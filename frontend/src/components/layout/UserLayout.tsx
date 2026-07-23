@@ -121,8 +121,8 @@ function UserSidebar({ isCollapsed, onToggle }: UserSidebarProps) {
 
       {/* User Info Footer */}
       {user && (
-        <div className="flex flex-col border-t border-slate-200 bg-slate-50/50 transition-all duration-300 shrink-0 p-3 items-center relative">
-          <div className="flex items-center gap-2 w-full justify-start relative">
+        <div className="flex flex-col border-t border-slate-200 bg-slate-50/50 transition-all duration-300 shrink-0 p-3 items-center">
+          <div className="flex items-center gap-2.5 w-full justify-start overflow-hidden">
             <div
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e6f0f7] text-[#005b9a] font-bold text-sm"
               title={user.email}
@@ -131,18 +131,13 @@ function UserSidebar({ isCollapsed, onToggle }: UserSidebarProps) {
             </div>
             <div
               className={cn(
-                'leading-tight min-w-0 transition-all duration-300 origin-left overflow-hidden flex-1',
-                isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100'
+                'leading-tight min-w-0 transition-all duration-300 origin-left overflow-hidden',
+                isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[130px]'
               )}
             >
               <div className="text-xs font-semibold text-slate-800 truncate" title={user.email}>
                 {user.email}
               </div>
-            </div>
-
-            {/* Notification Bell next to email */}
-            <div className={cn('transition-all duration-300 relative', isCollapsed ? 'opacity-0 pointer-events-none w-0' : 'opacity-100')}>
-              <NotificationBell direction="up" />
             </div>
 
             <button
@@ -177,7 +172,12 @@ export function UserLayout() {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-slate-50 relative">
+      {/* Floating Top-Right Notification Bell */}
+      <div className="fixed top-4 right-6 z-50">
+        <NotificationBell direction="down" />
+      </div>
+
       <UserSidebar isCollapsed={isCollapsed} onToggle={() => setIsCollapsed(!isCollapsed)} />
       <div className="flex-1 min-w-0">
         <main className="p-4 md:p-6">

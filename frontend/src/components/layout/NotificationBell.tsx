@@ -31,15 +31,15 @@ export function NotificationBell({ direction = 'down' }: NotificationBellProps) 
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Bell Button */}
+      {/* Floating Glassmorphic Bell Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-xl text-slate-500 hover:text-[#005b9a] hover:bg-slate-100/80 transition-all cursor-pointer flex items-center justify-center shrink-0"
+        className="relative p-2.5 rounded-2xl bg-white/90 backdrop-blur-md border border-slate-200/90 shadow-sm hover:shadow-md hover:bg-white text-slate-600 hover:text-[#005b9a] transition-all duration-200 cursor-pointer flex items-center justify-center shrink-0"
         title="Thông báo hệ thống"
       >
         <Bell className="w-4.5 h-4.5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-rose-500 rounded-full shadow-sm animate-pulse border-2 border-white">
+          <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-rose-500 rounded-full shadow-sm animate-pulse border-2 border-white">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -49,7 +49,7 @@ export function NotificationBell({ direction = 'down' }: NotificationBellProps) 
       {isOpen && (
         <div
           className={`absolute ${
-            direction === 'up' ? 'bottom-full mb-3 left-0' : 'right-0 mt-2'
+            direction === 'up' ? 'bottom-full mb-3 right-0' : 'right-0 mt-2'
           } w-80 sm:w-96 bg-white rounded-2xl border border-slate-200/90 shadow-2xl z-50 overflow-hidden transition-all duration-200`}
         >
           {/* Header */}
