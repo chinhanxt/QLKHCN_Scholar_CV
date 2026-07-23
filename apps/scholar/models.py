@@ -357,6 +357,27 @@ class AutoScanConfig(models.Model):
         return obj
 
 
+class EmailTemplate(models.Model):
+    """Model storing customizable email templates for system notifications."""
+    template_key = models.CharField(_("Template Key"), max_length=100, unique=True)
+    name = models.CharField(_("Template Name"), max_length=255)
+    description = models.TextField(_("Description"), blank=True, default="")
+    subject = models.CharField(_("Subject Line"), max_length=255)
+    html_content = models.TextField(_("HTML Content"))
+    available_variables = models.JSONField(_("Available Variables"), default=list, blank=True)
+    is_active = models.BooleanField(_("Is Active"), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "scholar_email_template"
+        verbose_name = _("Email Template")
+        verbose_name_plural = _("Email Templates")
+
+    def __str__(self):
+        return f"{self.name} ({self.template_key})"
+
+
 class AntiBlockConfig(models.Model):
     """
     Singleton configuration model for managing Google Scholar scraper anti-blocking

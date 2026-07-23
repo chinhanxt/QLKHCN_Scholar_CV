@@ -1,26 +1,66 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
     <meta charset="utf-8">
-    <title>Phát hiện bài báo mới</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phát hiện bài báo khoa học mới</title>
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background-color: #0284c7; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-        <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Phát hiện {{ new_count }} bài báo mới!</h1>
-    </div>
-    <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px;">
-        <p>Xin chào <strong>{{ user.get_full_name|default:user.username }}</strong>,</p>
-        <p>Hệ thống đã phát hiện thêm {{ new_count }} bài báo khoa học mới thuộc hồ sơ của bạn (Tổng số: {{ total_pubs }} bài báo).</p>
-        
-        <h3 style="color: #0284c7; margin-top: 20px;">Danh sách công trình mới:</h3>
-        <ul style="background-color: #f0f9ff; padding: 15px 15px 15px 35px; border-radius: 6px; border: 1px solid #bae6fd;">
-            {% for title in new_titles %}
-                <li style="margin-bottom: 8px;"><strong>{{ title }}</strong></li>
-            {% empty %}
-                <li>(Không có danh sách chi tiết)</li>
-            {% endfor %}
-        </ul>
-        <p>Vui lòng đăng nhập hệ thống để kiểm tra và cập nhật thêm thông tin nếu cần thiết.</p>
-    </div>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1e293b; background-color: #f8fafc; margin: 0; padding: 24px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+        <!-- Header -->
+        <tr>
+            <td style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); padding: 32px 24px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.3px;">📄 Scholar ✔ &bull; Phát Hiện {{ new_count|default:1 }} Bài Báo Mới!</h1>
+                <p style="color: #e0f2fe; margin: 6px 0 0 0; font-size: 13px;">Hệ thống Quản lý &amp; Khai thác Dữ liệu Khoa học</p>
+            </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+            <td style="padding: 32px 28px;">
+                <p style="margin-top: 0; font-size: 15px; font-weight: 600; color: #0f172a;">
+                    Xin chào {% if user %}{{ user.get_full_name|default:user.username }}{% else %}{{ user_email }}{% endif %},
+                </p>
+
+                <p style="font-size: 14px; color: #334155; margin-bottom: 20px; line-height: 1.6;">
+                    Hệ thống tự động quét vừa phát hiện thêm <strong style="color: #0284c7;">{{ new_count|default:1 }} công trình khoa học mới</strong> thuộc hồ sơ của bạn. Nâng tổng số bài báo khoa học trong hệ thống lên <strong>{{ total_pubs|default:0 }} bài báo</strong>.
+                </p>
+
+                <!-- New Publications Box -->
+                <div style="background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #0369a1; text-transform: uppercase;">✨ Danh sách bài báo mới phát hiện:</h3>
+                    </div>
+                    <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #0f172a;">
+                        {% for title in new_titles %}
+                            <li style="margin-bottom: 10px; line-height: 1.5;"><strong style="color: #0369a1;">•</strong> {{ title }}</li>
+                        {% empty %}
+                            <li style="color: #64748b;">(Đã cập nhật chỉ số bài báo mới vào hệ thống)</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <!-- Total Count Stats Summary Card -->
+                <table width="100%" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: #475569;">
+                    <tr>
+                        <td><strong>Tổng số bài báo khoa học hiện tại:</strong></td>
+                        <td style="text-align: right; color: #005b9a; font-weight: 800; font-size: 15px;">{{ total_pubs|default:0 }} bài</td>
+                    </tr>
+                </table>
+
+                <p style="font-size: 13px; color: #64748b; margin-bottom: 0;">
+                    Trân trọng,<br>
+                    <strong>Scholar ✔ &bull; Đội ngũ Quản trị Hệ thống Khoa học</strong>
+                </p>
+            </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #f1f5f9; padding: 16px 24px; text-align: center; font-size: 11px; color: #94a3b8;">
+                Đây là thư tự động từ Hệ thống Scholar CV &amp; Quản Lý Khoa Học. Vui lòng không phản hồi trực tiếp thư này.
+            </td>
+        </tr>
+    </table>
 </body>
 </html>

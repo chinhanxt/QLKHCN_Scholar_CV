@@ -6,6 +6,8 @@ from apps.scholar.api.views import (
     AntiBlockConfigView, RotateTorView,
     UserScholarProfileViewSet, AdminScholarApprovalViewSet,
     EmailSettingsView, TestEmailView,
+    EmailTemplateListView, EmailTemplateDetailView, EmailTemplateResetView,
+    EmailTemplatePreviewView, EmailTemplateSendTestView,
 )
 
 app_name = "scholar_auto_scan"
@@ -24,6 +26,11 @@ urlpatterns = [
     path('anti-block/rotate-tor/', RotateTorView.as_view(), name='rotate-tor'),
     path('crawlers/email-settings/', EmailSettingsView.as_view(), name='email-settings'),
     path('crawlers/test-email/', TestEmailView.as_view(), name='test-email'),
+    path('crawlers/email-templates/', EmailTemplateListView.as_view(), name='email-templates-list'),
+    path('crawlers/email-templates/<str:template_key>/', EmailTemplateDetailView.as_view(), name='email-templates-detail'),
+    path('crawlers/email-templates/<str:template_key>/reset/', EmailTemplateResetView.as_view(), name='email-templates-reset'),
+    path('crawlers/email-templates/<str:template_key>/preview/', EmailTemplatePreviewView.as_view(), name='email-templates-preview'),
+    path('crawlers/email-templates/<str:template_key>/send-test/', EmailTemplateSendTestView.as_view(), name='email-templates-send-test'),
 ] + router.urls
 
 

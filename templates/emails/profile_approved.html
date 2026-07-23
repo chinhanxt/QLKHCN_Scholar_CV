@@ -1,22 +1,78 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hồ sơ nhà khoa học đã được phê duyệt</title>
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background-color: #4f46e5; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-        <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Hồ sơ đã được đồng bộ &amp; phê duyệt</h1>
-    </div>
-    <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px;">
-        <p>Xin chào <strong>{{ user.get_full_name|default:user.username }}</strong>,</p>
-        <p>Hồ sơ nhà khoa học Google Scholar của bạn (ID: <code>{{ scholar_id }}</code>) đã được hệ thống phê duyệt và đồng bộ thành công.</p>
-        <div style="background-color: #f9fafb; padding: 15px; border-left: 4px solid #4f46e5; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>Số bài báo đồng bộ:</strong> {{ synced_count }}</p>
-            <p style="margin: 5px 0;"><strong>Tổng trích dẫn:</strong> {{ total_citations }}</p>
-            <p style="margin: 5px 0;"><strong>Chỉ số H-index:</strong> {{ h_index }}</p>
-        </div>
-        <p>Cảm ơn bạn đã đóng góp thông tin cho hệ thống quản lý khoa học.</p>
-    </div>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1e293b; background-color: #f8fafc; margin: 0; padding: 24px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+        <!-- Header -->
+        <tr>
+            <td style="background: linear-gradient(135deg, #005b9a 0%, #003b66 100%); padding: 32px 24px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.3px;">🎓 Scholar ✔ &bull; Phê Duyệt Hồ Sơ Khoa Học</h1>
+                <p style="color: #e0f2fe; margin: 6px 0 0 0; font-size: 13px;">Hệ thống Quản lý &amp; Khai thác Dữ liệu Khoa học</p>
+            </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+            <td style="padding: 32px 28px;">
+                <p style="margin-top: 0; font-size: 15px; font-weight: 600; color: #0f172a;">
+                    Xin chào {% if user %}{{ user.get_full_name|default:user.username }}{% else %}{{ user_email }}{% endif %},
+                </p>
+
+                <p style="font-size: 14px; color: #334155; margin-bottom: 24px; line-height: 1.6;">
+                    Chúc mừng! Hồ sơ lý lịch khoa học Google Scholar của bạn (Mã định danh: <code style="background-color: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px;">{{ scholar_id }}</code>) đã được Ban quản trị phê duyệt và đồng bộ thành công vào hệ thống.
+                </p>
+
+                <!-- Grid Stats Card -->
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                    <h3 style="margin: 0 0 16px 0; font-size: 13px; font-weight: 700; color: #005b9a; text-transform: uppercase; letter-spacing: 0.5px;">📊 Thống kê chỉ số khoa học đã đồng bộ</h3>
+                    <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+                        <tr>
+                            <td width="31%" style="padding: 12px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; text-align: center;">
+                                <div style="font-size: 22px; font-weight: 800; color: #005b9a;">{{ synced_count|default:0 }}</div>
+                                <div style="font-size: 11px; font-weight: 600; color: #64748b; margin-top: 2px;">Bài báo khoa học</div>
+                            </td>
+                            <td width="3.5%"></td>
+                            <td width="31%" style="padding: 12px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; text-align: center;">
+                                <div style="font-size: 22px; font-weight: 800; color: #0284c7;">{{ total_citations|default:0 }}</div>
+                                <div style="font-size: 11px; font-weight: 600; color: #64748b; margin-top: 2px;">Tổng trích dẫn</div>
+                            </td>
+                            <td width="3.5%"></td>
+                            <td width="31%" style="padding: 12px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; text-align: center;">
+                                <div style="font-size: 22px; font-weight: 800; color: #16a34a;">{{ h_index|default:0 }}</div>
+                                <div style="font-size: 11px; font-weight: 600; color: #64748b; margin-top: 2px;">Chỉ số H-Index</div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Status Card -->
+                <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 18px;">✅</span>
+                        <strong style="color: #166534; font-size: 14px;">Trạng thái hồ sơ: ĐÃ KÍCH HOẠT QUÉT TỰ ĐỘNG</strong>
+                    </div>
+                    <p style="margin: 6px 0 0 0; font-size: 13px; color: #15803d;">
+                        Hệ thống sẽ tự động theo dõi, cập nhật trích dẫn và phát hiện các bài báo mới thuộc hồ sơ của bạn hàng ngày.
+                    </p>
+                </div>
+
+                <p style="font-size: 13px; color: #64748b; margin-bottom: 0;">
+                    Trân trọng,<br>
+                    <strong>Scholar ✔ &bull; Đội ngũ Quản trị Hệ thống Khoa học</strong>
+                </p>
+            </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #f1f5f9; padding: 16px 24px; text-align: center; font-size: 11px; color: #94a3b8;">
+                Đây là thư tự động từ Hệ thống Scholar CV &amp; Quản Lý Khoa Học. Vui lòng không phản hồi trực tiếp thư này.
+            </td>
+        </tr>
+    </table>
 </body>
 </html>

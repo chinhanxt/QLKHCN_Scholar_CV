@@ -121,6 +121,15 @@ export function useAdminApproveProfile() {
   })
 }
 
+export function useAdminResendEmailProfile() {
+  return useMutation({
+    mutationFn: async (profileId: string) => {
+      const response = await api.post<{ message: string }>(`/scholar/admin/profiles/${profileId}/resend-email/`)
+      return response.data
+    },
+  })
+}
+
 export const useApproveProfile = useAdminApproveProfile
 
 export interface QuickPreviewResult {

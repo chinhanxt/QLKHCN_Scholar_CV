@@ -572,60 +572,71 @@ export function ScholarAutoSchedulerPage() {
         </div>
       </Card>
 
-      {/* Live Job Execution Progress & Status Monitor Card */}
+      {/* Live Job Execution Progress & Status Monitor Card - Friendly White Theme */}
       {!isJobBannerDismissed && config.current_job_status && config.current_job_status !== 'IDLE' && (
-        <Card
-          className={`p-5 rounded-2xl text-white shadow-lg border transition-all duration-300 ${
+        <div
+          className={`relative overflow-hidden p-3.5 px-4.5 rounded-2xl border transition-all duration-300 shadow-sm ${
             config.current_job_status === 'RUNNING'
-              ? 'bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-indigo-700/50'
+              ? 'bg-white dark:bg-slate-900 border-sky-200 dark:border-sky-500/30 text-slate-800 dark:text-slate-100 shadow-sky-100/50'
               : config.current_job_status === 'COMPLETED'
-              ? 'bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 border-emerald-600/50'
-              : 'bg-gradient-to-r from-rose-950 via-slate-900 to-rose-950 border-rose-700/50'
+              ? 'bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-500/30 text-slate-800 dark:text-slate-100 shadow-emerald-100/50'
+              : 'bg-white dark:bg-slate-900 border-rose-200 dark:border-rose-500/30 text-slate-800 dark:text-slate-100 shadow-rose-100/50'
           }`}
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2.5 font-bold text-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
               {config.current_job_status === 'RUNNING' && (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
-                  <span className="tracking-wide uppercase text-xs text-cyan-300">
-                    TIẾN TRÌNH QUÉT TỰ ĐỘNG CV NGẦM (BACKGROUND JOB)
-                  </span>
-                </>
+                <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400 shrink-0">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                </div>
               )}
               {config.current_job_status === 'COMPLETED' && (
-                <>
-                  <CheckCircle className="h-5 w-5 text-emerald-400" />
-                  <span className="tracking-wide uppercase text-xs text-emerald-300">
-                    HOÀN THÀNH TIẾN TRÌNH QUÉT CV NGẦM
-                  </span>
-                </>
+                <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 shrink-0">
+                  <CheckCircle className="h-3.5 w-3.5" />
+                </div>
               )}
               {config.current_job_status === 'FAILED' && (
-                <>
-                  <XCircle className="h-5 w-5 text-rose-400" />
-                  <span className="tracking-wide uppercase text-xs text-rose-300">
-                    BÁO LỖI QUÉT CV / BỊ GOOGLE CAPTCHA CHẶN
-                  </span>
-                </>
+                <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400 shrink-0">
+                  <XCircle className="h-3.5 w-3.5" />
+                </div>
               )}
+
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                <span
+                  className={`font-semibold text-xs tracking-tight shrink-0 ${
+                    config.current_job_status === 'RUNNING'
+                      ? 'text-sky-700 dark:text-sky-300'
+                      : config.current_job_status === 'COMPLETED'
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : 'text-rose-700 dark:text-rose-400'
+                  }`}
+                >
+                  {config.current_job_status === 'RUNNING' && 'Đang quét ngầm'}
+                  {config.current_job_status === 'COMPLETED' && 'Hoàn thành quét CV'}
+                  {config.current_job_status === 'FAILED' && 'Lỗi tiến trình'}
+                </span>
+                <span className="text-slate-300 dark:text-slate-600 hidden sm:inline">•</span>
+                <span className="text-xs text-slate-600 dark:text-slate-300 font-normal truncate max-w-xl">
+                  {config.current_job_detail || 'Đang thực hiện tiến trình...'}
+                </span>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
               <span
-                className={`text-xs font-mono font-bold px-3 py-1 rounded-full border ${
+                className={`text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full border ${
                   config.current_job_status === 'RUNNING'
-                    ? 'bg-indigo-900/90 text-cyan-300 border-indigo-500/50'
+                    ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/30'
                     : config.current_job_status === 'COMPLETED'
-                    ? 'bg-emerald-900/90 text-emerald-300 border-emerald-500/50'
-                    : 'bg-rose-900/90 text-rose-300 border-rose-500/50'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30'
+                    : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/30'
                 }`}
               >
                 {config.current_job_status === 'RUNNING'
                   ? `${config.current_job_progress || 0}%`
                   : config.current_job_status === 'COMPLETED'
-                  ? '100% THÀNH CÔNG'
-                  : 'THẤT BẠI'}
+                  ? '100% Thành công'
+                  : 'Thất bại'}
               </span>
 
               {config.current_job_status !== 'RUNNING' && (
@@ -635,27 +646,24 @@ export function ScholarAutoSchedulerPage() {
                     setConfig((prev: any) => ({ ...prev, current_job_status: 'IDLE' }))
                     scholarApi.updateAutoScanConfig({ current_job_status: 'IDLE' }).then(fetchConfig)
                   }}
-                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/20 transition-colors cursor-pointer shrink-0"
-                  title="Tắt thông báo"
+                  className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                  title="Đóng thông báo"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
           </div>
 
-          <p className="text-xs text-slate-200 font-medium mb-3">
-            {config.current_job_detail || 'Đang theo dõi tiến trình thực hiện ngầm...'}
-          </p>
-
-          <div className="w-full bg-slate-950/80 rounded-full h-2.5 overflow-hidden border border-white/10 p-0.5">
+          {/* Integrated Soft Progress Line */}
+          <div className="mt-2.5 w-full bg-slate-100 dark:bg-slate-800/80 rounded-full h-1 overflow-hidden">
             <div
-              className={`h-1.5 rounded-full transition-all duration-500 shadow-sm ${
+              className={`h-full rounded-full transition-all duration-500 ${
                 config.current_job_status === 'RUNNING'
-                  ? 'bg-gradient-to-r from-cyan-400 to-blue-500'
+                  ? 'bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500 animate-pulse'
                   : config.current_job_status === 'COMPLETED'
-                  ? 'bg-gradient-to-r from-emerald-400 to-teal-400'
-                  : 'bg-gradient-to-r from-rose-500 to-red-600'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                  : 'bg-gradient-to-r from-rose-500 to-red-500'
               }`}
               style={{
                 width: `${Math.max(
@@ -665,7 +673,7 @@ export function ScholarAutoSchedulerPage() {
               }}
             />
           </div>
-        </Card>
+        </div>
       )}
 
       {/* Floating Schedule Config Modal */}

@@ -23,6 +23,7 @@ class NotificationService:
         context: dict[str, Any] | None = None,
         async_email: bool = True,
         from_email: str | None = None,
+        smtp_override: dict[str, Any] | None = None,
     ) -> None:
         """Send an HTML email. If async_email is True, sends via a background daemon thread."""
         if isinstance(recipient_list, str):
@@ -37,46 +38,77 @@ class NotificationService:
 
         from_email = from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "webmaster@localhost")
 
+        if smtp_override is None:
+            smtp_override = {}
+
+        try:
+            from apps.scholar.models import AutoScanConfig
+            cfg = AutoScanConfig.get_solo()
+            if cfg.email_host and "email_host" not in smtp_override and "EMAIL_HOST" not in smtp_override:
+                smtp_override["EMAIL_HOST"] = cfg.email_host
+            if cfg.email_port and "email_port" not in smtp_override and "EMAIL_PORT" not in smtp_override:
+                smtp_override["EMAIL_PORT"] = cfg.email_port
+            if cfg.email_host_user and "email_host_user" not in smtp_override and "EMAIL_HOST_USER" not in smtp_override:
+                smtp_override["EMAIL_HOST_USER"] = cfg.email_host_user
+            if cfg.email_host_password and "email_host_password" not in smtp_override and "EMAIL_HOST_PASSWORD" not in smtp_override:
+                smtp_override["EMAIL_HOST_PASSWORD"] = cfg.email_host_password.strip()
+            if cfg.default_from_email and "default_from_email" not in smtp_override and "DEFAULT_FROM_EMAIL" not in smtp_override:
+                smtp_override["DEFAULT_FROM_EMAIL"] = cfg.default_from_email
+            if "email_use_tls" not in smtp_override and "EMAIL_USE_TLS" not in smtp_override:
+                smtp_override["EMAIL_USE_TLS"] = cfg.email_use_tls
+        except Exception as e:
+            logger.warning("Could not pre-fetch AutoScanConfig for email: %s", e)
+
         def _dispatch_email():
-            from django.db import close_old_connections
-            close_old_connections()
+            if async_email:
+                from django.db import close_old_connections
+                close_old_connections()
 
             try:
-                host = "smtp.gmail.com"
-                port = 587
-                user = getattr(settings, "EMAIL_HOST_USER", "")
-                password = getattr(settings, "EMAIL_HOST_PASSWORD", "")
+                host = smtp_override.get("EMAIL_HOST") or smtp_override.get("email_host") or getattr(settings, "EMAIL_HOST", "smtp.gmail.com")
+                port = int(smtp_override.get("EMAIL_PORT") or smtp_override.get("email_port") or getattr(settings, "EMAIL_PORT", 587))
+                user = smtp_override.get("EMAIL_HOST_USER") or smtp_override.get("email_host_user") or getattr(settings, "EMAIL_HOST_USER", "")
+                pwd_val = smtp_override.get("EMAIL_HOST_PASSWORD") or smtp_override.get("email_host_password") or getattr(settings, "EMAIL_HOST_PASSWORD", "")
+                password = pwd_val.strip() if pwd_val else ""
+                sender = smtp_override.get("DEFAULT_FROM_EMAIL") or smtp_override.get("default_from_email") or from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "Scholar ☑️")
+                
                 use_tls = True
-                sender = from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "Edu Ecosystem <noreply@example.com>")
+                if "EMAIL_USE_TLS" in smtp_override or "email_use_tls" in smtp_override:
+                    use_tls = bool(smtp_override.get("EMAIL_USE_TLS", smtp_override.get("email_use_tls")))
 
-                try:
-                    from apps.scholar.models import AutoScanConfig
-                    cfg = AutoScanConfig.get_solo()
-                    if cfg.email_host:
-                        host = cfg.email_host
-                    if cfg.email_port:
-                        port = cfg.email_port
-                    if cfg.email_host_user:
-                        user = cfg.email_host_user
-                    if cfg.email_host_password:
-                        password = cfg.email_host_password.strip()
-                    if cfg.default_from_email:
-                        sender = cfg.default_from_email
-                except Exception:
-                    pass
+                use_ssl = False
+                if port == 465:
+                    use_tls = False
+                    use_ssl = True
 
-                if not sender or ("<" not in sender and "@" not in sender):
-                    if user:
-                        sender = f"{sender.strip()} <{user}>" if sender and sender.strip() else f"Scholar Ecosystem <{user}>"
+                display_name = "Scholar ☑️"
+                if sender:
+                    if "<" in sender:
+                        extracted = sender.split("<")[0].strip().strip('"').strip("'")
+                        if extracted:
+                            display_name = extracted
+                    elif "@" in sender and " " not in sender:
+                        pass
                     else:
-                        sender = "Scholar Ecosystem <noreply@example.com>"
+                        display_name = sender.strip()
 
-                headers = {}
+                if user:
+                    sender = f"{display_name} <{user.strip()}>"
+                else:
+                    sender = f"{display_name} <noreply@example.com>"
+
+                headers = {
+                    "Auto-Submitted": "auto-generated",
+                    "X-Auto-Response-Suppress": "All",
+                    "X-Mailer": "EduEcosystem-Scholar-CV",
+                }
                 if user:
                     headers["Reply-To"] = user
-                    headers["X-Mailer"] = "EduEcosystem-Scholar-CV"
 
-                if user and password and getattr(settings, "EMAIL_BACKEND", "") != "django.core.mail.backends.locmem.EmailBackend":
+                is_locmem = getattr(settings, "EMAIL_BACKEND", "") == "django.core.mail.backends.locmem.EmailBackend"
+                if is_locmem:
+                    conn = get_connection()
+                elif user and password:
                     conn = get_connection(
                         backend="django.core.mail.backends.smtp.EmailBackend",
                         host=host,
@@ -84,15 +116,39 @@ class NotificationService:
                         username=user,
                         password=password,
                         use_tls=use_tls,
+                        use_ssl=use_ssl,
                         timeout=10,
                     )
                 else:
-                    conn = get_connection()
+                    missing = []
+                    if not user:
+                        missing.append("Tài khoản Email gửi")
+                    if not password:
+                        missing.append("Mật khẩu ứng dụng (App Password)")
+                    err_msg = f"Chưa cấu hình {', '.join(missing)}. Vui lòng nhập và Lưu cấu hình SMTP trong Cài đặt."
+                    logger.error(err_msg)
+                    if not async_email:
+                        raise ValueError(err_msg)
+                    return
 
-                html_content = render_to_string(template_name, context)
+                final_subject = subject
+                html_content = ""
+                try:
+                    from apps.scholar.models import EmailTemplate
+                    tpl_obj = EmailTemplate.objects.filter(template_key=template_name, is_active=True).first()
+                    if tpl_obj and tpl_obj.html_content:
+                        from django.template import Template as DjangoTemplate, Context
+                        html_content = DjangoTemplate(tpl_obj.html_content).render(Context(context))
+                        if tpl_obj.subject and not context.get("keep_original_subject"):
+                            final_subject = DjangoTemplate(tpl_obj.subject).render(Context(context))
+                except Exception as tpl_err:
+                    logger.warning("Could not render custom DB EmailTemplate for %s: %s", template_name, tpl_err)
+
+                if not html_content:
+                    html_content = render_to_string(template_name, context)
                 text_content = strip_tags(html_content)
                 email = EmailMultiAlternatives(
-                    subject=subject,
+                    subject=final_subject,
                     body=text_content,
                     from_email=sender,
                     to=recipient_list,
@@ -107,7 +163,9 @@ class NotificationService:
                 if not async_email:
                     raise e
             finally:
-                close_old_connections()
+                if async_email:
+                    from django.db import close_old_connections
+                    close_old_connections()
 
         if async_email:
             thread = threading.Thread(target=_dispatch_email, daemon=True)
@@ -120,12 +178,29 @@ class NotificationService:
         cls,
         user: Any,
         scholar_id: str,
-        synced_count: int,
-        total_citations: int,
-        h_index: int,
+        synced_count: int = 0,
+        total_citations: int = 0,
+        h_index: int = 0,
         async_email: bool = True,
     ) -> Notification:
         """Create a profile approved notification and send confirmation email."""
+        if not synced_count or synced_count == 0:
+            try:
+                from apps.scholar.models import ScholarPublication
+                synced_count = ScholarPublication.objects.filter(profile__user=user).count()
+            except Exception:
+                pass
+
+        if not total_citations or not h_index:
+            try:
+                from apps.scholar.models import ScholarProfile
+                prof = ScholarProfile.objects.filter(user=user).first()
+                if prof:
+                    total_citations = total_citations or prof.total_citations or 0
+                    h_index = h_index or prof.h_index or 0
+            except Exception:
+                pass
+
         title = "Hồ sơ Google Scholar đã được phê duyệt"
         message = (
             f"Hồ sơ Google Scholar ({scholar_id}) của bạn đã được phê duyệt. "
@@ -154,9 +229,10 @@ class NotificationService:
                 "synced_count": synced_count,
                 "total_citations": total_citations,
                 "h_index": h_index,
+                "keep_original_subject": True,
             }
             cls.send_email_async(
-                subject=f"[QLKHCN] {title}",
+                subject=f"Thông báo: {title}",
                 recipient_list=[user.email],
                 template_name="emails/profile_approved.html",
                 context=context,
@@ -169,13 +245,20 @@ class NotificationService:
     def notify_user_new_publications(
         cls,
         user: Any,
-        new_count: int,
-        total_pubs: int,
+        new_count: int = 1,
+        total_pubs: int = 0,
         new_titles: list[str] | None = None,
         async_email: bool = True,
     ) -> Notification:
         """Create a new publications detected notification and send alert email."""
         new_titles = new_titles or []
+        if not total_pubs or total_pubs == 0:
+            try:
+                from apps.scholar.models import ScholarPublication
+                total_pubs = ScholarPublication.objects.filter(profile__user=user).count()
+            except Exception:
+                pass
+
         title = f"Phát hiện {new_count} bài báo khoa học mới"
         message = (
             f"Hệ thống đã phát hiện {new_count} bài báo khoa học mới thuộc hồ sơ của bạn. "
@@ -202,9 +285,10 @@ class NotificationService:
                 "new_count": new_count,
                 "total_pubs": total_pubs,
                 "new_titles": new_titles,
+                "keep_original_subject": True,
             }
             cls.send_email_async(
-                subject=f"[QLKHCN] {title}",
+                subject=f"Thông báo: {title}",
                 recipient_list=[user.email],
                 template_name="emails/new_publications.html",
                 context=context,
@@ -229,4 +313,5 @@ class NotificationService:
             template_name="emails/test_email.html",
             context={"timestamp": now_local.strftime("%d/%m/%Y %H:%M:%S"), "user_email": recipient_email},
             async_email=False,
+            smtp_override=smtp_override,
         )

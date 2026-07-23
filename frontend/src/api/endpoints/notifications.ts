@@ -26,6 +26,18 @@ export interface EmailSettings {
   DEFAULT_FROM_EMAIL: string
 }
 
+export interface EmailTemplateItem {
+  id: number
+  template_key: string
+  name: string
+  description: string
+  subject: string
+  html_content: string
+  available_variables: string[]
+  is_active: boolean
+  updated_at: string
+}
+
 export const notificationApi = {
   getNotifications: (params?: { category?: string; is_read?: boolean }) =>
     apiClient.get<{ results: NotificationItem[] }>('/core/notifications/', { params }),
@@ -45,6 +57,21 @@ export const notificationApi = {
   saveEmailSettings: (payload: Partial<EmailSettings>) =>
     apiClient.post<{ message: string }>('/scholar/crawlers/email-settings/', payload),
 
-  sendTestEmail: (email: string) =>
-    apiClient.post<{ message: string }>('/scholar/crawlers/test-email/', { email }),
+  sendTestEmail: (email: string, smtpConfig?: Partial<EmailSettings>) =>
+    apiClient.post<{ message: string }>('/scholar/crawlers/test-email/', { email, ...smtpConfig }),
+
+  getEmailTemplates: () =>
+    apiClient.get<EmailTemplateItem[]>('/scholar/crawlers/email-templates/'),
+
+  updateEmailTemplate: (templateKey: string, payload: { subject?: string; html_content?: string; is_active?: boolean }) =>
+    apiClient.post<{ message: string }>(`/scholar/crawlers/email-templates/${templateKey}/`, payload),
+
+  resetEmailTemplate: (templateKey: string) =>
+    apiClient.post<{ message: string }>(`/scholar/crawlers/email-templates/${templateKey}/reset/`),
+
+  previewEmailTemplate: (templateKey: string, payload?: { subject?: string; html_content?: string }) =>
+    apiClient.post<{ html: string; subject: string }>(`/scholar/crawlers/email-templates/${templateKey}/preview/`, payload),
+
+  sendTemplateTestEmail: (templateKey: string, email: string, smtpConfig?: Partial<EmailSettings>) =>
+    apiClient.post<{ message: string }>(`/scholar/crawlers/email-templates/${templateKey}/send-test/`, { email, smtp_override: smtpConfig }),
 }

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { notificationApi } from '@/api/endpoints/notifications'
+import type { EmailSettings } from '@/api/endpoints/notifications'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Mail, Send, Check, Eye, EyeOff } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
+import { EmailTemplateManager } from './EmailTemplateManager'
 
 export function EmailSettingsCard() {
   const [isLoading, setIsLoading] = useState(false)
@@ -12,12 +14,13 @@ export function EmailSettingsCard() {
   const [testEmail, setTestEmail] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<EmailSettings>({
     EMAIL_HOST: 'smtp.gmail.com',
     EMAIL_PORT: 587,
     EMAIL_USE_TLS: true,
     EMAIL_HOST_USER: '',
-    DEFAULT_FROM_EMAIL: ''
+    EMAIL_HOST_PASSWORD: '',
+    DEFAULT_FROM_EMAIL: 'Scholar ✔'
   })
 
   useEffect(() => {
@@ -49,7 +52,7 @@ export function EmailSettingsCard() {
     }
     setIsSendingTest(true)
     try {
-      const res = await notificationApi.sendTestEmail(testEmail)
+      const res = await notificationApi.sendTestEmail(testEmail, form)
       toast.success(res.data.message || `Đã gửi thư thử nghiệm tới ${testEmail}!`)
     } catch (err: any) {
       const errMsg = err?.response?.data?.error || err?.response?.data?.detail || 'Gửi email thử nghiệm thất bại. Vui lòng kiểm tra tài khoản & Mật khẩu ứng dụng.'
@@ -143,7 +146,7 @@ export function EmailSettingsCard() {
                 placeholder="Edu Ecosystem <nguyenhuy151025@gmail.com>"
                 className="w-full mt-1 p-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50 font-mono"
               />
-              <span className="text-[11px] text-slate-400 mt-1 block">Khuyên dùng dạng chuẩn Gmail: <code className="text-slate-600 bg-slate-100 px-1 py-0.5 rounded">Tên Hiển Thị &lt;email_của_bạn@gmail.com&gt;</code></span>
+              <span className="text-[11px] text-slate-400 mt-1 block">Chỉ cần nhập tên hiển thị (vd: <code className="text-slate-600 bg-slate-100 px-1 py-0.5 rounded">Scholar ☑️</code>), hệ thống sẽ tự động ghép với Email tài khoản gửi.</span>
             </div>
 
             <div className="pt-2 flex justify-end">
@@ -165,9 +168,9 @@ export function EmailSettingsCard() {
         <CardContent className="p-6 space-y-4">
           <h3 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-2">
             <Send className="w-4 h-4 text-emerald-600" />
-            Kiểm tra gửi Email thử nghiệm
+            Kiểm tra kết nối gửi Email thử nghiệm (Quick Test)
           </h3>
-          <p className="text-xs text-slate-500">Nhập địa chỉ email cá nhân để kiểm tra trực tiếp thông báo từ hệ thống.</p>
+          <p className="text-xs text-slate-500">Nhập địa chỉ email cá nhân để kiểm tra trực tiếp thông báo kết nối từ máy chủ SMTP.</p>
           <form onSubmit={handleSendTest} className="flex gap-2">
             <input
               type="email"
@@ -187,6 +190,9 @@ export function EmailSettingsCard() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Email Template Manager Component */}
+      <EmailTemplateManager smtpForm={form} />
     </div>
   )
 }

@@ -19,6 +19,7 @@ export function ScholarRequestsPage() {
   const approveProfile = useApproveProfile()
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all')
   const [search, setSearch] = useState('')
+  const [approvingId, setApprovingId] = useState<string | null>(null)
 
   // Bảng chỉ hiển thị các user thực sự ĐÃ GỬI YÊU CẦU (Bỏ qua các user chưa gửi / DRAFT không có URL)
   const submittedProfiles = useMemo(() => {
@@ -60,11 +61,14 @@ export function ScholarRequestsPage() {
   }, [submittedProfiles, filter, search])
 
   const handleApprove = async (profileId: string, email?: string) => {
+    setApprovingId(profileId)
     try {
       await approveProfile.mutateAsync(profileId)
       toast.success(`Đã duyệt và gửi hồ sơ cho người dùng ${email || ''} thành công!`)
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Duyệt hồ sơ thất bại'))
+    } finally {
+      setApprovingId(null)
     }
   }
 
@@ -180,14 +184,14 @@ export function ScholarRequestsPage() {
                       <Button
                         size="sm"
                         onClick={() => handleApprove(p.id, p.user_email)}
-                        disabled={approveProfile.isPending}
+                        disabled={approvingId !== null}
                         className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg cursor-pointer flex items-center gap-1 ml-auto shadow-2xs"
                       >
-                        {approveProfile.isPending && <Spinner className="mr-1" />}
+                        {approvingId === p.id && <Spinner className="mr-1" />}
                         <CheckCircle2 className="h-3.5 w-3.5" /> Duyệt & Gửi cho User
                       </Button>
                     ) : (
-                      <span className="text-xs text-emerald-600 font-semibold">✓ Đã gửi</span>
+                      <span className="text-xs text-emerald-600 font-semibold">✓ Đã duyệt</span>
                     )}
                   </TD>
                 </TR>

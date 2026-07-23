@@ -1061,15 +1061,10 @@ class AdminScholarApprovalViewSet(ModelViewSet):
     queryset = ScholarProfile.objects.select_related("user").all()
     serializer_class = ScholarProfileSerializer
 
-    @action(detail=True, methods=["post"], url_path="approve")
-    def approve_profile(self, request: Request, pk: Optional[Any] = None) -> Response:
-        """
-        Phê duyệt hồ sơ Google Scholar của người dùng.
-        Đồng bộ dữ liệu bài báo từ AuthorProfile nếu tác giả đã được quét trước đó.
-        """
-        profile = self.get_object()
+    def _sync_and_notify_approved(self, profile: ScholarProfile):
         profile.status = ProfileStatus.APPROVED
-        profile.approved_at = timezone.now()
+        if not profile.approved_at:
+            profile.approved_at = timezone.now()
 
         scholar_id = (profile.scholar_id or "").strip()
         author = None
@@ -1095,24 +1090,27 @@ class AdminScholarApprovalViewSet(ModelViewSet):
                 except ValueError:
                     year_val = None
 
-                sp_obj, created = ScholarPublication.objects.get_or_create(
-                    profile=profile,
-                    title=pub.title,
-                    defaults={
-                        "authors": pub.authors_list or "",
-                        "journal": pub.venue or "",
-                        "pub_year": year_val,
-                        "citations": pub.citations or 0,
-                        "url": pub.pub_url or "",
-                    },
-                )
-                if not created:
+                sp_qs = ScholarPublication.objects.filter(profile=profile, title=pub.title)
+                if sp_qs.exists():
+                    sp_obj = sp_qs.first()
                     sp_obj.authors = pub.authors_list or ""
                     sp_obj.journal = pub.venue or ""
                     sp_obj.pub_year = year_val
                     sp_obj.citations = pub.citations or 0
                     sp_obj.url = pub.pub_url or ""
                     sp_obj.save()
+                    if sp_qs.count() > 1:
+                        sp_qs.exclude(id=sp_obj.id).delete()
+                else:
+                    sp_obj = ScholarPublication.objects.create(
+                        profile=profile,
+                        title=pub.title,
+                        authors=pub.authors_list or "",
+                        journal=pub.venue or "",
+                        pub_year=year_val,
+                        citations=pub.citations or 0,
+                        url=pub.pub_url or "",
+                    )
                 synced_titles.add(pub.title)
 
             # Clean up stale automatic publications no longer present in AuthorProfile
@@ -1130,6 +1128,7 @@ class AdminScholarApprovalViewSet(ModelViewSet):
                     synced_count=synced_count,
                     total_citations=profile.total_citations or 0,
                     h_index=profile.h_index or 0,
+                    async_email=False,
                 )
             except Exception as e:
                 logger.error(
@@ -1137,7 +1136,44 @@ class AdminScholarApprovalViewSet(ModelViewSet):
                     exc_info=True,
                 )
 
+    def perform_update(self, serializer):
+        profile = serializer.save()
+        if profile.status == ProfileStatus.APPROVED:
+            self._sync_and_notify_approved(profile)
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve_profile(self, request: Request, pk: Optional[Any] = None) -> Response:
+        """
+        Phê duyệt hồ sơ Google Scholar của người dùng.
+        Đồng bộ dữ liệu bài báo từ AuthorProfile nếu tác giả đã được quét trước đó.
+        """
+        profile = self.get_object()
+        self._sync_and_notify_approved(profile)
         return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="resend-email")
+    def resend_email(self, request: Request, pk: Optional[Any] = None) -> Response:
+        """
+        Gửi lại Email thông báo phê duyệt hồ sơ cho người dùng.
+        """
+        profile = self.get_object()
+        if not profile.user or not profile.user.email:
+            return Response({"error": "Hồ sơ chưa gắn tài khoản email người dùng."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.core.services.notification_service import NotificationService
+        synced_count = ScholarPublication.objects.filter(profile=profile).count()
+        try:
+            NotificationService.notify_user_profile_approved(
+                user=profile.user,
+                scholar_id=profile.scholar_id or "",
+                synced_count=synced_count,
+                total_citations=profile.total_citations or 0,
+                h_index=profile.h_index or 0,
+                async_email=False,
+            )
+            return Response({"message": f"Đã gửi lại Email thông báo thành công tới {profile.user.email}!"})
+        except Exception as exc:
+            return Response({"error": f"Gửi email thất bại: {str(exc)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class EmailSettingsView(APIView):
@@ -1148,13 +1184,20 @@ class EmailSettingsView(APIView):
         from apps.scholar.models import AutoScanConfig
 
         cfg = AutoScanConfig.get_solo()
+        raw_from = cfg.default_from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "Scholar ☑️")
+        display_name = raw_from
+        if "<" in raw_from:
+            display_name = raw_from.split("<")[0].strip().strip('"').strip("'")
+        if not display_name:
+            display_name = "Scholar ☑️"
+
         return Response({
             "EMAIL_HOST": cfg.email_host or getattr(settings, "EMAIL_HOST", "smtp.gmail.com"),
             "EMAIL_PORT": cfg.email_port or getattr(settings, "EMAIL_PORT", 587),
             "EMAIL_USE_TLS": getattr(cfg, "email_use_tls", True),
             "EMAIL_HOST_USER": cfg.email_host_user or getattr(settings, "EMAIL_HOST_USER", ""),
             "EMAIL_HOST_PASSWORD": cfg.email_host_password or getattr(settings, "EMAIL_HOST_PASSWORD", ""),
-            "DEFAULT_FROM_EMAIL": cfg.default_from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "Edu Ecosystem <noreply@example.com>"),
+            "DEFAULT_FROM_EMAIL": display_name,
         })
 
     def post(self, request):
@@ -1178,7 +1221,10 @@ class EmailSettingsView(APIView):
             if pwd and pwd.strip():
                 cfg.email_host_password = pwd.strip()
         if "DEFAULT_FROM_EMAIL" in data:
-            cfg.default_from_email = data["DEFAULT_FROM_EMAIL"]
+            val = data["DEFAULT_FROM_EMAIL"] or ""
+            if "<" in val:
+                val = val.split("<")[0].strip().strip('"').strip("'")
+            cfg.default_from_email = val or "Scholar ☑️"
         cfg.save()
         return Response({"message": "Cập nhật và lưu cấu hình Email SMTP thành công."})
 
@@ -1193,7 +1239,7 @@ class TestEmailView(APIView):
 
         from apps.core.services.notification_service import NotificationService
         try:
-            NotificationService.send_test_email(email)
+            NotificationService.send_test_email(email, smtp_override=request.data)
             return Response({"message": f"Gửi email thử nghiệm thành công tới {email}."})
         except Exception as exc:
             logger.error(f"Test email dispatch error to {email}: {exc}", exc_info=True)
@@ -1201,6 +1247,201 @@ class TestEmailView(APIView):
                 {"error": f"Không thể gửi thư qua Gmail SMTP: {str(exc)}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class EmailTemplateListView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def _ensure_initial_templates(self):
+        from apps.scholar.models import EmailTemplate
+        from django.template.loader import render_to_string
+
+        defaults = [
+            {
+                "template_key": "test_email.html",
+                "name": "Thư thử nghiệm kết nối SMTP",
+                "description": "Email tự động để kiểm tra cấu hình kết nối máy chủ Gmail SMTP.",
+                "subject": "[Edu Ecosystem] Xác nhận Email SMTP - {{ timestamp }}",
+                "available_variables": ["timestamp", "user_email"],
+            },
+            {
+                "template_key": "profile_approved.html",
+                "name": "Thư thông báo Phê duyệt Hồ sơ Scholar",
+                "description": "Email tự động gửi khi hồ sơ Google Scholar của nhà nghiên cứu được duyệt.",
+                "subject": "[QLKHCN] Hồ sơ Google Scholar đã được phê duyệt",
+                "available_variables": ["user", "scholar_id", "synced_count", "total_citations", "h_index"],
+            },
+            {
+                "template_key": "new_publications.html",
+                "name": "Thư thông báo Phát hiện Bài báo Mới",
+                "description": "Email tự động gửi khi crawler phát hiện thêm các bài báo khoa học mới.",
+                "subject": "[QLKHCN] Phát hiện {{ new_count }} bài báo khoa học mới",
+                "available_variables": ["user", "new_count", "total_pubs", "new_titles"],
+            },
+        ]
+
+        for item in defaults:
+            obj, created = EmailTemplate.objects.get_or_create(
+                template_key=item["template_key"],
+                defaults={
+                    "name": item["name"],
+                    "description": item["description"],
+                    "subject": item["subject"],
+                    "html_content": render_to_string(f"emails/{item['template_key']}"),
+                    "available_variables": item["available_variables"],
+                }
+            )
+            if not created and (not obj.html_content or len(obj.html_content) < 100 or obj.html_content.startswith("<h1>")):
+                try:
+                    obj.html_content = render_to_string(f"emails/{item['template_key']}")
+                    obj.save()
+                except Exception:
+                    pass
+
+    def get(self, request):
+        from apps.scholar.models import EmailTemplate
+        self._ensure_initial_templates()
+        templates = EmailTemplate.objects.all().order_by("id")
+        data = [
+            {
+                "id": t.id,
+                "template_key": t.template_key,
+                "name": t.name,
+                "description": t.description,
+                "subject": t.subject,
+                "html_content": t.html_content,
+                "available_variables": t.available_variables,
+                "is_active": t.is_active,
+                "updated_at": t.updated_at.isoformat(),
+            }
+            for t in templates
+        ]
+        return Response(data)
+
+
+class EmailTemplateDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request, template_key):
+        from apps.scholar.models import EmailTemplate
+        t = get_object_or_404(EmailTemplate, template_key=template_key)
+        return Response({
+            "id": t.id,
+            "template_key": t.template_key,
+            "name": t.name,
+            "description": t.description,
+            "subject": t.subject,
+            "html_content": t.html_content,
+            "available_variables": t.available_variables,
+            "is_active": t.is_active,
+            "updated_at": t.updated_at.isoformat(),
+        })
+
+    def post(self, request, template_key):
+        from apps.scholar.models import EmailTemplate
+        t = get_object_or_404(EmailTemplate, template_key=template_key)
+        if "subject" in request.data:
+            t.subject = request.data["subject"]
+        if "html_content" in request.data:
+            t.html_content = request.data["html_content"]
+        if "is_active" in request.data:
+            t.is_active = bool(request.data["is_active"])
+        t.save()
+        return Response({"message": f"Đã cập nhật mẫu email '{t.name}' thành công."})
+
+
+class EmailTemplateResetView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, template_key):
+        from apps.scholar.models import EmailTemplate
+        from django.template.loader import render_to_string
+
+        t = get_object_or_404(EmailTemplate, template_key=template_key)
+        t.html_content = render_to_string(f"emails/{template_key}")
+        t.save()
+        return Response({"message": f"Đã khôi phục mẫu email '{t.name}' về mặc định ban đầu."})
+
+
+class EmailTemplatePreviewView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, template_key):
+        from apps.scholar.models import EmailTemplate
+        from django.template import Template, Context
+        from django.utils import timezone
+
+        t = EmailTemplate.objects.filter(template_key=template_key).first()
+        html_raw = request.data.get("html_content") or (t.html_content if t else "")
+        subject_raw = request.data.get("subject") or (t.subject if t else "")
+
+        dummy_user_email = request.user.email or "nhan.nguyen@example.com"
+        dummy_context = {
+            "user": request.user,
+            "user_email": dummy_user_email,
+            "timestamp": timezone.localtime().strftime("%d/%m/%Y %H:%M:%S"),
+            "scholar_id": "SCH-889920",
+            "synced_count": 18,
+            "total_citations": 540,
+            "h_index": 14,
+            "new_count": 3,
+            "total_pubs": 25,
+            "new_titles": [
+                "Nghiên cứu & Ứng dụng Trí tuệ Nhân tạo trong Y tế Số",
+                "Tối ưu hóa Thuật toán Thu thập Dữ liệu Khoa học",
+                "Phân tích Chỉ số Trích dẫn Học thuật với Python & Django"
+            ],
+        }
+
+        try:
+            rendered_html = Template(html_raw).render(Context(dummy_context))
+            rendered_subject = Template(subject_raw).render(Context(dummy_context))
+            return Response({"html": rendered_html, "subject": rendered_subject})
+        except Exception as exc:
+            return Response({"error": f"Lỗi cú pháp mẫu email: {str(exc)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EmailTemplateSendTestView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, template_key):
+        email = request.data.get("email")
+        if not email:
+            return Response({"error": "Vui lòng nhập địa chỉ email nhận thử nghiệm."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.core.services.notification_service import NotificationService
+        from django.utils import timezone
+
+        dummy_context = {
+            "user": request.user,
+            "user_email": email,
+            "timestamp": timezone.localtime().strftime("%d/%m/%Y %H:%M:%S"),
+            "scholar_id": "SCH-889920",
+            "synced_count": 18,
+            "total_citations": 540,
+            "h_index": 14,
+            "new_count": 3,
+            "total_pubs": 25,
+            "new_titles": [
+                "Nghiên cứu & Ứng dụng Trí tuệ Nhân tạo trong Y tế Số",
+                "Tối ưu hóa Thuật toán Thu thập Dữ liệu Khoa học",
+                "Phân tích Chỉ số Trích dẫn Học thuật với Python & Django"
+            ],
+        }
+
+        try:
+            NotificationService.send_email_async(
+                subject=f"[Kiểm Tra Mẫu] {template_key}",
+                recipient_list=[email],
+                template_name=template_key,
+                context=dummy_context,
+                async_email=False,
+                smtp_override=request.data.get("smtp_override"),
+            )
+            return Response({"message": f"Đã gửi thư thử nghiệm mẫu '{template_key}' thành công tới {email}!"})
+        except Exception as exc:
+            logger.error(f"Test template send error: {exc}", exc_info=True)
+            return Response({"error": f"Gửi thư thử nghiệm thất bại: {str(exc)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 
