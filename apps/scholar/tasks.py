@@ -666,6 +666,51 @@ def scrape_author_profile_task(self, author_id, limit=100, detailed=False):
 # FAST SMART CHECK & CELERY BEAT AUTO-SCAN TASKS
 # ==============================================================================
 
+def sync_scholar_profile_from_author(author) -> None:
+    """
+    Tự động đồng bộ các chỉ số và danh sách bài báo từ AuthorProfile
+    sang ScholarProfile (hồ sơ cá nhân của user) nếu tài khoản có scholar_id trùng khớp.
+    """
+    from apps.scholar.models import ScholarProfile, ScholarPublication
+    from django.db import models
+
+    scholar_id = (author.scholar_id or "").strip()
+    if not scholar_id:
+        return
+
+    profiles = ScholarProfile.objects.filter(
+        models.Q(scholar_id__iexact=scholar_id) | models.Q(scholar_id__icontains=scholar_id)
+    )
+
+    for profile in profiles:
+        profile.total_citations = author.citedby or 0
+        profile.h_index = author.hindex or 0
+        profile.i10_index = author.i10index or 0
+
+        author_pubs = list(author.publications.all())
+        profile.publications.all().delete()
+        sp_objs = []
+        for pub in author_pubs:
+            try:
+                year_val = int(pub.year) if pub.year and str(pub.year).isdigit() else None
+            except ValueError:
+                year_val = None
+
+            sp_objs.append(
+                ScholarPublication(
+                    profile=profile,
+                    title=pub.title,
+                    authors=pub.authors_list or "",
+                    journal=pub.venue or "",
+                    pub_year=year_val,
+                    citations=pub.citations or 0,
+                    url=pub.pub_url or "",
+                )
+            )
+        ScholarPublication.objects.bulk_create(sp_objs)
+        profile.save()
+
+
 @shared_task(bind=True, max_retries=5)
 def scrape_author_cv_smart_task(self, author_id):
     """
@@ -711,6 +756,8 @@ def scrape_author_cv_smart_task(self, author_id):
             # Step 1: Light Fetch (Page 1 Profile, pagesize=100) - 1 Request Only!
             author_online = scholarly.search_author_id(author.scholar_id, filled=False)
             if author_online:
+                # Populate publications, citations, and basics sections from the 1st page
+                author_online = scholarly.fill(author_online, sections=['basics', 'citations', 'publications'])
                 break
         except Exception as exc:
             last_exception = exc
@@ -736,6 +783,20 @@ def scrape_author_cv_smart_task(self, author_id):
         online_pubs = author_online.get("publications", [])
         online_count = len(online_pubs)
 
+        # Sync citation metrics on AuthorProfile
+        if "citedby" in author_online:
+            author.citedby = author_online.get("citedby", author.citedby)
+        if "hindex" in author_online:
+            author.hindex = author_online.get("hindex", author.hindex)
+        if "i10index" in author_online:
+            author.i10index = author_online.get("i10index", author.i10index)
+        if "citedby5y" in author_online:
+            author.citedby5y = author_online.get("citedby5y", author.citedby5y)
+        if "hindex5y" in author_online:
+            author.hindex5y = author_online.get("hindex5y", author.hindex5y)
+        if "i10index5y" in author_online:
+            author.i10index5y = author_online.get("i10index5y", author.i10index5y)
+
         existing_pubs = list(author.publications.order_by("display_order").values_list("title", flat=True))
         existing_count = len(existing_pubs)
 
@@ -748,7 +809,12 @@ def scrape_author_cv_smart_task(self, author_id):
             author.last_scraped_at = timezone.now()
             author.last_scan_status = "UP_TO_DATE"
             author.publication_count_cached = online_count
-            author.save(update_fields=["last_scraped_at", "last_scan_status", "publication_count_cached"])
+            author.save(update_fields=[
+                "last_scraped_at", "last_scan_status", "publication_count_cached",
+                "citedby", "hindex", "i10index", "citedby5y", "hindex5y", "i10index5y"
+            ])
+
+            sync_scholar_profile_from_author(author)
 
             config.current_job_status = "COMPLETED"
             config.current_job_progress = 100
@@ -767,7 +833,10 @@ def scrape_author_cv_smart_task(self, author_id):
 
         # Step 2: New publications detected -> Fill & Ingest missing publications
         author.last_scan_status = "IN_PROGRESS"
-        author.save(update_fields=["last_scan_status"])
+        author.save(update_fields=[
+            "last_scan_status", "citedby", "hindex", "i10index",
+            "citedby5y", "hindex5y", "i10index5y"
+        ])
 
         config.current_job_progress = 90
         config.current_job_detail = f"Phát hiện bài mới cho {author.name}. Đang cào bổ sung..."
@@ -775,34 +844,86 @@ def scrape_author_cv_smart_task(self, author_id):
 
         # Process new/missing publications
         new_count = 0
+        new_titles = []
         existing_titles_set = set(t.strip().lower() for t in existing_pubs)
 
         for idx, pub_entry in enumerate(online_pubs):
             pub_title = pub_entry.get("bib", {}).get("title", "").strip()
+            if not pub_title:
+                continue
             if pub_title.lower() not in existing_titles_set:
                 # Apply human-like delay per page/publication
                 time.sleep(random.uniform(config.delay_min_seconds, config.delay_max_seconds))
 
-                # Create or update publication record
+                venue_clean = pub_entry.get("bib", {}).get("venue", "").strip()
+                norm_title = normalize_title(venue_clean)
+                journal_fk = None
+                sjr_q = "N/A"
+                if_val = "N/A"
+                wos = "N/A"
+                if norm_title:
+                    from apps.scholar.models import Journal
+                    journal_fk = Journal.objects.filter(title_normalized=norm_title).first()
+                    if journal_fk:
+                        sjr_q = journal_fk.latest_quartile or "N/A"
+                        if journal_fk.latest_if is not None:
+                            if_val = f"{journal_fk.latest_if:.3f}" if isinstance(journal_fk.latest_if, (int, float)) else str(journal_fk.latest_if)
+                        wos = journal_fk.wos_core_collection or "N/A"
+
                 pub_date = pub_entry.get("bib", {}).get("pub_year", None)
+                pub_url = pub_entry.get("pub_url") or pub_entry.get("bib", {}).get("url") or ""
                 Publication.objects.create(
                     author=author,
                     display_order=idx,
                     title=pub_title,
                     authors_list=pub_entry.get("bib", {}).get("author", ""),
-                    venue=pub_entry.get("bib", {}).get("venue", ""),
+                    venue=venue_clean,
                     year=str(pub_date) if pub_date else "",
                     citations=pub_entry.get("num_citations", 0),
+                    pub_url=pub_url,
                     url_related_articles=pub_entry.get("url_related_articles"),
                     url_all_versions=pub_entry.get("url_all_versions"),
                     versions_count=pub_entry.get("versions_count"),
+                    journal=journal_fk,
+                    sjr_q=sjr_q,
+                    if_val=if_val,
+                    wos=wos,
                 )
                 new_count += 1
+                new_titles.append(pub_title)
+            else:
+                # Update citations and display order for existing publication
+                Publication.objects.filter(author=author, title__iexact=pub_title).update(
+                    citations=pub_entry.get("num_citations", 0),
+                    display_order=idx
+                )
 
         author.last_scraped_at = timezone.now()
         author.last_scan_status = "UPDATED"
         author.publication_count_cached = author.publications.count()
         author.save(update_fields=["last_scraped_at", "last_scan_status", "publication_count_cached"])
+
+        sync_scholar_profile_from_author(author)
+
+        if new_count > 0:
+            from apps.core.services.notification_service import NotificationService
+            from apps.scholar.models import ScholarProfile
+            from django.db import models
+
+            scholar_id = (author.scholar_id or "").strip()
+            if scholar_id:
+                profiles = ScholarProfile.objects.filter(
+                    models.Q(scholar_id__iexact=scholar_id) | models.Q(scholar_id__icontains=scholar_id)
+                ).select_related("user")
+                for profile in profiles:
+                    if profile.user:
+                        total_pubs = profile.publications.count()
+                        NotificationService.notify_user_new_publications(
+                            user=profile.user,
+                            new_count=new_count,
+                            total_pubs=total_pubs,
+                            new_titles=new_titles,
+                        )
 
         config.current_job_status = "COMPLETED"
         config.current_job_progress = 100

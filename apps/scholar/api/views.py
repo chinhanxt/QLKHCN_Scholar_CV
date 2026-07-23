@@ -1119,6 +1119,18 @@ class AdminScholarApprovalViewSet(ModelViewSet):
             ScholarPublication.objects.filter(profile=profile).exclude(title__in=synced_titles).delete()
 
         profile.save()
+
+        if profile.user:
+            from apps.core.services.notification_service import NotificationService
+            synced_count = ScholarPublication.objects.filter(profile=profile).count()
+            NotificationService.notify_user_profile_approved(
+                user=profile.user,
+                scholar_id=profile.scholar_id or "",
+                synced_count=synced_count,
+                total_citations=profile.total_citations or 0,
+                h_index=profile.h_index or 0,
+            )
+
         return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
 
 
