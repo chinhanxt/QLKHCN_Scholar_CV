@@ -1058,7 +1058,7 @@ class AdminScholarApprovalViewSet(ModelViewSet):
     ViewSet dành cho Admin quản lý và phê duyệt các hồ sơ Google Scholar.
     """
     permission_classes = [IsAdminUser]
-    queryset = ScholarProfile.objects.all()
+    queryset = ScholarProfile.objects.select_related("user").all()
     serializer_class = ScholarProfileSerializer
 
     @action(detail=True, methods=["post"], url_path="approve")
@@ -1123,13 +1123,19 @@ class AdminScholarApprovalViewSet(ModelViewSet):
         if profile.user:
             from apps.core.services.notification_service import NotificationService
             synced_count = ScholarPublication.objects.filter(profile=profile).count()
-            NotificationService.notify_user_profile_approved(
-                user=profile.user,
-                scholar_id=profile.scholar_id or "",
-                synced_count=synced_count,
-                total_citations=profile.total_citations or 0,
-                h_index=profile.h_index or 0,
-            )
+            try:
+                NotificationService.notify_user_profile_approved(
+                    user=profile.user,
+                    scholar_id=profile.scholar_id or "",
+                    synced_count=synced_count,
+                    total_citations=profile.total_citations or 0,
+                    h_index=profile.h_index or 0,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to send profile approved notification for profile {profile.id}: {e}",
+                    exc_info=True,
+                )
 
         return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
 

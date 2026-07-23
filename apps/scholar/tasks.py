@@ -918,12 +918,18 @@ def scrape_author_cv_smart_task(self, author_id):
                 for profile in profiles:
                     if profile.user:
                         total_pubs = profile.publications.count()
-                        NotificationService.notify_user_new_publications(
-                            user=profile.user,
-                            new_count=new_count,
-                            total_pubs=total_pubs,
-                            new_titles=new_titles,
-                        )
+                        try:
+                            NotificationService.notify_user_new_publications(
+                                user=profile.user,
+                                new_count=new_count,
+                                total_pubs=total_pubs,
+                                new_titles=new_titles,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to send new publications notification for profile {profile.id}: {e}",
+                                exc_info=True,
+                            )
 
         config.current_job_status = "COMPLETED"
         config.current_job_progress = 100
