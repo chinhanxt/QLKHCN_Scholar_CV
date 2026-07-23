@@ -65,8 +65,16 @@ class NotificationService:
                 except Exception:
                     pass
 
-                if user and ("<" not in sender and "@" not in sender):
-                    sender = f"{sender} <{user}>"
+                if not sender or ("<" not in sender and "@" not in sender):
+                    if user:
+                        sender = f"{sender.strip()} <{user}>" if sender and sender.strip() else f"Scholar Ecosystem <{user}>"
+                    else:
+                        sender = "Scholar Ecosystem <noreply@example.com>"
+
+                headers = {}
+                if user:
+                    headers["Reply-To"] = user
+                    headers["X-Mailer"] = "EduEcosystem-Scholar-CV"
 
                 if user and password and getattr(settings, "EMAIL_BACKEND", "") != "django.core.mail.backends.locmem.EmailBackend":
                     conn = get_connection(
@@ -88,6 +96,7 @@ class NotificationService:
                     body=text_content,
                     from_email=sender,
                     to=recipient_list,
+                    headers=headers,
                     connection=conn,
                 )
                 email.attach_alternative(html_content, "text/html")
