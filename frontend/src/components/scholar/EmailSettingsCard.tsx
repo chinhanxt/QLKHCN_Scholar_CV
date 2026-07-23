@@ -41,7 +41,8 @@ export function EmailSettingsCard() {
     }
   }
 
-  const handleSendTest = async () => {
+  const handleSendTest = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     if (!testEmail) {
       toast.error('Vui lòng nhập địa chỉ email nhận thư thử nghiệm!')
       return
@@ -52,7 +53,7 @@ export function EmailSettingsCard() {
       const res = await notificationApi.sendTestEmail(testEmail)
       toast.success(res.data.message || `Đã gửi thư thử nghiệm tới ${testEmail}!`)
     } catch (err: any) {
-      const errMsg = err?.response?.data?.error || 'Gửi email thử nghiệm thất bại. Vui lòng kiểm tra tài khoản & Mật khẩu ứng dụng.'
+      const errMsg = err?.response?.data?.error || err?.response?.data?.detail || 'Gửi email thử nghiệm thất bại. Vui lòng kiểm tra tài khoản & Mật khẩu ứng dụng.'
       toast.error(errMsg)
     } finally {
       setIsSendingTest(false)
@@ -166,7 +167,7 @@ export function EmailSettingsCard() {
             Kiểm tra gửi Email thử nghiệm
           </h3>
           <p className="text-xs text-slate-500">Nhập địa chỉ email cá nhân để kiểm tra trực tiếp thông báo từ hệ thống.</p>
-          <div className="flex gap-2">
+          <form onSubmit={handleSendTest} className="flex gap-2">
             <input
               type="email"
               placeholder="nhan.email@example.com"
@@ -175,14 +176,14 @@ export function EmailSettingsCard() {
               className="flex-1 p-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50"
             />
             <button
-              onClick={handleSendTest}
+              type="submit"
               disabled={isSendingTest}
               className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2 cursor-pointer shrink-0"
             >
               {isSendingTest ? <Spinner className="w-4 h-4" /> : <Send className="w-4 h-4" />}
               Gửi Email Thử
             </button>
-          </div>
+          </form>
         </CardContent>
       </Card>
     </div>
