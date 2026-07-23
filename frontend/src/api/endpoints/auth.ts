@@ -8,4 +8,5 @@ export const authApi = {
   me: () => apiClient.get<User>('/auth/me/'),
   changePassword: (payload: ChangePasswordPayload) =>
     apiClient.post<{ detail: string }>('/auth/change-password/', payload),
+  updateProfile: (full_name: string) => apiClient.patch<User>('/auth/profile/', { full_name }),
 }

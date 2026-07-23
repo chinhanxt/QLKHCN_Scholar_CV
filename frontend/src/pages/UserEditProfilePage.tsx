@@ -62,7 +62,6 @@ export function UserEditProfilePage() {
       profile?.full_name ||
       [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||
       profile?.author_detail?.name ||
-      user?.username ||
       ''
     )
     setAcademicTitle(profile?.academic_title || '')
@@ -369,7 +368,7 @@ export function UserEditProfilePage() {
       <Card className="overflow-hidden border border-slate-200 bg-white p-6 shadow-xs space-y-6">
         <div className="border-b border-slate-100 pb-3">
           <h2 className="text-base font-bold text-slate-900">
-            Lý lịch khoa học (NAFOSTED)
+            Thông tin cá nhân
           </h2>
         </div>
 

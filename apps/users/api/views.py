@@ -77,6 +77,25 @@ class AuthViewSet(GenericViewSet):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 
+    @action(detail=False, methods=["patch"], url_path="profile")
+    def update_profile(self, request):
+        user = request.user
+        full_name = request.data.get("full_name") or request.data.get("display_name")
+        if full_name is not None:
+            full_name = str(full_name).strip()
+            names = full_name.split(" ", 1) if full_name else ["", ""]
+            user.first_name = names[0]
+            user.last_name = names[1] if len(names) > 1 else ""
+            user.save(update_fields=["first_name", "last_name"])
+
+            scholar_profile = getattr(user, "scholar_profile", None)
+            if scholar_profile:
+                scholar_profile.full_name = full_name
+                scholar_profile.save(update_fields=["full_name"])
+
+        serializer = UserSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=["post"], url_path="change-password")
     def change_password(self, request):
         serializer = ChangePasswordSerializer(data=request.data, context={"request": request})

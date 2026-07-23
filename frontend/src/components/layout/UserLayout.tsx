@@ -126,18 +126,17 @@ function UserSidebar({ isCollapsed, onToggle }: UserSidebarProps) {
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e6f0f7] text-[#005b9a] font-bold text-sm"
               title={user.email}
             >
-              {user.username ? user.username.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+              {user.email.charAt(0).toUpperCase()}
             </div>
             <div
               className={cn(
                 'leading-tight min-w-0 transition-all duration-300 origin-left overflow-hidden',
-                isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[120px]'
+                isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[130px]'
               )}
             >
-              <div className="text-xs font-bold text-slate-800 truncate">
-                {user.username || user.email.split('@')[0]}
+              <div className="text-xs font-semibold text-slate-800 truncate" title={user.email}>
+                {user.email}
               </div>
-              <div className="text-[10px] text-slate-400 truncate">{user.email}</div>
             </div>
             <button
               onClick={logout}

@@ -27,6 +27,16 @@ export function UserProfilePage() {
   const { data: profile, isLoading } = useMyProfile()
   const user = useAuthStore((s) => s.user)
 
+  // Publications list sorted by citations count descending (Must be called before any early return)
+  const sortedPublications = useMemo(() => {
+    const list = profile?.publications?.length
+      ? [...profile.publications]
+      : profile?.author_detail?.publications
+      ? [...profile.author_detail.publications]
+      : []
+    return list.sort((a: any, b: any) => (Number(b.citations) || 0) - (Number(a.citations) || 0))
+  }, [profile])
+
   if (isLoading) {
     return (
       <div className="flex h-96 w-full items-center justify-center">
@@ -50,24 +60,13 @@ export function UserProfilePage() {
     profile?.full_name ||
     [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||
     profile?.author_detail?.name ||
-    user?.username ||
-    'Nhà Khoa Học'
+    'Chưa cập nhật'
 
   const academicTitle = profile?.academic_title || 'Chưa cập nhật'
   const position = profile?.position || 'Chưa cập nhật'
   const department = profile?.department || 'Chưa cập nhật'
   const email = user?.email || profile?.user_email || 'Chưa cập nhật'
   const affiliation = profile?.institution || profile?.author_detail?.affiliation || 'Chưa cập nhật'
-
-  // Publications list sorted by citations count descending
-  const sortedPublications = useMemo(() => {
-    const list = profile?.publications?.length
-      ? [...profile.publications]
-      : profile?.author_detail?.publications
-      ? [...profile.author_detail.publications]
-      : []
-    return list.sort((a: any, b: any) => (Number(b.citations) || 0) - (Number(a.citations) || 0))
-  }, [profile])
 
   const publicationsCount = sortedPublications.length
   const topPublicationsPreview = sortedPublications.slice(0, 4)
@@ -78,9 +77,6 @@ export function UserProfilePage() {
       <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Hồ sơ cá nhân</h1>
-          <p className="text-xs text-slate-500">
-            Thông tin lý lịch khoa học NAFOSTED & Đồng bộ dữ liệu công trình nghiên cứu
-          </p>
         </div>
         <Button
           onClick={() => navigate('/user/edit-profile')}

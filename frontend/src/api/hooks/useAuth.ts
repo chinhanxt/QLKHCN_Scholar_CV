@@ -37,3 +37,14 @@ export function useChangePassword() {
       authApi.changePassword(payload).then((r) => r.data),
   })
 }
+
+export function useUpdateProfile() {
+  const setUser = useAuthStore((s) => s.setUser)
+  return useMutation({
+    mutationFn: async (fullName: string) => {
+      const { data } = await authApi.updateProfile(fullName)
+      setUser(data)
+      return data
+    },
+  })
+}

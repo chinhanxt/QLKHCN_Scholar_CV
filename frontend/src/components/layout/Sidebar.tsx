@@ -22,7 +22,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
-import { fullName } from '@/lib/utils'
 import { useAdminProfiles } from '@/api/hooks/useUserPortal'
 
 const OTHER_TOOLS = [
@@ -341,14 +340,13 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
         <div className="flex flex-col border-t border-slate-200 bg-slate-50/50 transition-all duration-300 shrink-0 p-3 items-center">
           <div className="flex items-center gap-2.5 w-full justify-start overflow-hidden">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e6f0f7] text-[#005b9a] font-bold text-sm" title={user.email}>
-              {user.username.charAt(0).toUpperCase()}
+              {user.email.charAt(0).toUpperCase()}
             </div>
             <div className={cn(
               "leading-tight min-w-0 transition-all duration-300 origin-left overflow-hidden",
-              isCollapsed ? "opacity-0 max-w-0 pointer-events-none" : "opacity-100 max-w-[120px]"
+              isCollapsed ? "opacity-0 max-w-0 pointer-events-none" : "opacity-100 max-w-[130px]"
             )}>
-              <div className="text-xs font-bold text-slate-800 truncate">{fullName(user) || user.username}</div>
-              <div className="text-[10px] text-slate-400 truncate">{user.email}</div>
+              <div className="text-xs font-semibold text-slate-800 truncate" title={user.email}>{user.email}</div>
             </div>
             <button 
               onClick={logout}
