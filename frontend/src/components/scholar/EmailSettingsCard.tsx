@@ -35,7 +35,7 @@ export function EmailSettingsCard() {
       const res = await notificationApi.saveEmailSettings(form)
       toast.success(res.data.message || 'Đã lưu cấu hình Email SMTP thành công!')
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Lưu cấu hình Email thất bại.')
+      toast.error(err?.response?.data?.error || err?.response?.data?.detail || 'Lưu cấu hình Email thất bại.')
     } finally {
       setIsSaving(false)
     }
