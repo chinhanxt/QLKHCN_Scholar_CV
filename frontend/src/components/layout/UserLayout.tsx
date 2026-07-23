@@ -35,11 +35,11 @@ function UserSidebar({ isCollapsed, onToggle }: UserSidebarProps) {
     <aside
       className={cn(
         'sticky top-0 h-screen flex shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-all duration-300 z-30',
-        isCollapsed ? 'w-16 overflow-visible' : 'w-64 overflow-x-hidden'
+        isCollapsed ? 'w-16 overflow-visible' : 'w-64 overflow-visible'
       )}
     >
       {/* Branding Header */}
-      <div className="flex h-14 items-center border-b border-slate-200 px-4 shrink-0 overflow-hidden relative">
+      <div className="flex h-14 items-center border-b border-slate-200 px-4 shrink-0 relative">
         <div
           className={cn(
             'flex items-center gap-2 transition-all duration-300 origin-left',
@@ -121,8 +121,8 @@ function UserSidebar({ isCollapsed, onToggle }: UserSidebarProps) {
 
       {/* User Info Footer */}
       {user && (
-        <div className="flex flex-col border-t border-slate-200 bg-slate-50/50 transition-all duration-300 shrink-0 p-3 items-center">
-          <div className="flex items-center gap-2.5 w-full justify-start overflow-hidden">
+        <div className="flex flex-col border-t border-slate-200 bg-slate-50/50 transition-all duration-300 shrink-0 p-3 items-center relative">
+          <div className="flex items-center gap-2 w-full justify-start relative">
             <div
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e6f0f7] text-[#005b9a] font-bold text-sm"
               title={user.email}
@@ -141,7 +141,7 @@ function UserSidebar({ isCollapsed, onToggle }: UserSidebarProps) {
             </div>
 
             {/* Notification Bell next to email */}
-            <div className={cn('transition-all duration-300', isCollapsed ? 'opacity-0 pointer-events-none w-0' : 'opacity-100')}>
+            <div className={cn('transition-all duration-300 relative', isCollapsed ? 'opacity-0 pointer-events-none w-0' : 'opacity-100')}>
               <NotificationBell direction="up" />
             </div>
 
