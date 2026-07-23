@@ -45,7 +45,7 @@ export function LoginPage() {
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   if (isAuthenticated) {
-    const defaultTarget = user?.is_staff || user?.is_superuser ? '/' : '/portal'
+    const defaultTarget = user?.is_staff || user?.is_superuser ? '/' : '/user/profile'
     return <Navigate to={defaultTarget} replace />
   }
 
@@ -55,7 +55,7 @@ export function LoginPage() {
         toast.success('Đăng nhập thành công!', {
           description: 'Chào mừng bạn trở lại hệ thống Edu Ecosystem.',
         })
-        const defaultTarget = loggedInUser?.is_staff || loggedInUser?.is_superuser ? '/' : '/portal'
+        const defaultTarget = loggedInUser?.is_staff || loggedInUser?.is_superuser ? '/' : '/user/profile'
         const to = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? defaultTarget
         navigate(to, { replace: true })
       },

@@ -945,6 +945,95 @@ class UserScholarProfileViewSet(ViewSet):
 
         return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=["patch"], url_path="profile/update-academic")
+    def update_academic(self, request: Request) -> Response:
+        """
+        Cập nhật thông tin lý lịch khoa học của người dùng (Họ tên, Học hàm/Học vị, Chức vụ, Bộ môn, Cơ quan).
+        """
+        profile = self._get_or_create_profile(request.user)
+        for field in ["full_name", "academic_title", "position", "department", "institution"]:
+            if field in request.data:
+                setattr(profile, field, request.data[field])
+
+        if "full_name" in request.data and request.data["full_name"]:
+            full_name_val = str(request.data["full_name"]).strip()
+            names = full_name_val.split(" ", 1)
+            request.user.first_name = names[0]
+            if len(names) > 1:
+                request.user.last_name = names[1]
+            else:
+                request.user.last_name = ""
+            request.user.save(update_fields=["first_name", "last_name"])
+
+        profile.save()
+        return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="profile/quick-preview")
+    def quick_preview(self, request: Request) -> Response:
+        """
+        Quét nhanh thông tin cơ bản của tác giả từ Google Scholar qua Tor/Proxy.
+        """
+        scholar_id = request.data.get("scholar_id")
+        if not scholar_id:
+            scholar_url = request.data.get("scholar_url", "")
+            match = re_search(r"user=([a-zA-Z0-9_-]{10,16})", scholar_url)
+            if match:
+                scholar_id = match.group(1)
+
+        if not scholar_id:
+            return Response({"error": "Vui lòng cung cấp Scholar ID hoặc URL hợp lệ."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. First check local DB
+        local_author = AuthorProfile.objects.filter(scholar_id__iexact=scholar_id).first()
+        if local_author:
+            return Response({
+                "found": True,
+                "scholar_id": local_author.scholar_id,
+                "name": local_author.name,
+                "affiliation": local_author.affiliation or "",
+                "email_domain": local_author.email_domain or "",
+                "citedby": local_author.citedby or 0,
+                "hindex": local_author.hindex or 0,
+                "i10index": local_author.i10index or 0,
+                "interests": local_author.interests or [],
+                "source": "database"
+            })
+
+        # 2. Try live scraping using scholarly / Tor
+        try:
+            from apps.scholar.scholarly._scholarly import scholarly
+            search_query = scholarly.search_author_id(scholar_id)
+            if search_query:
+                author_dict = scholarly.fill(search_query, sections=['basics'])
+                name = author_dict.get('name', '')
+                affiliation = author_dict.get('affiliation', '')
+                citedby = author_dict.get('citedby', 0)
+                hindex = author_dict.get('hindex', 0)
+                i10index = author_dict.get('i10index', 0)
+                interests = author_dict.get('interests', [])
+                email_domain = author_dict.get('email_domain', '')
+
+                return Response({
+                    "found": True,
+                    "scholar_id": scholar_id,
+                    "name": name,
+                    "affiliation": affiliation,
+                    "email_domain": email_domain,
+                    "citedby": citedby,
+                    "hindex": hindex,
+                    "i10index": i10index,
+                    "interests": interests,
+                    "source": "live_scholar"
+                })
+        except Exception as e:
+            logger.warning(f"Quick preview live scrape failed for {scholar_id}: {e}")
+
+        return Response({
+            "found": False,
+            "scholar_id": scholar_id,
+            "message": "Không tìm thấy dữ liệu trên Google Scholar hoặc ID không tồn tại. Vui lòng kiểm tra lại đường dẫn."
+        })
+
 
 class AdminScholarApprovalViewSet(ModelViewSet):
     """

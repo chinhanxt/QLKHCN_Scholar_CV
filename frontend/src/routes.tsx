@@ -13,19 +13,23 @@ import { ScimagoCrawlerPage } from '@/pages/ScimagoCrawlerPage'
 import { ClarivateCrawlerPage } from '@/pages/ClarivateCrawlerPage'
 import { ScoreIntegratorPage } from '@/pages/ScoreIntegratorPage'
 import { ProfileManagerPage } from '@/pages/ProfileManagerPage'
+import { ScholarRequestsPage } from '@/pages/ScholarRequestsPage'
 import { UnifiedCrawlerPage } from '@/pages/UnifiedCrawlerPage'
 import { ScholarAutoSchedulerPage } from '@/pages/ScholarAutoSchedulerPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { DatabasePage } from '@/pages/DatabasePage'
 import { HelpPage } from '@/pages/HelpPage'
-import { UserPortalPage } from '@/pages/UserPortalPage'
+import { UserProfilePage } from '@/pages/UserProfilePage'
+import { UserScholarPage } from '@/pages/UserScholarPage'
+import { UserEditProfilePage } from '@/pages/UserEditProfilePage'
+import { UserSettingsPage } from '@/pages/UserSettingsPage'
 
 import { useAuthStore } from '@/stores/auth.store'
 
 function FallbackRedirect() {
   const user = useAuthStore((s) => s.user)
   const isAdmin = user?.is_staff || user?.is_superuser
-  return <Navigate to={isAdmin ? '/' : '/portal'} replace />
+  return <Navigate to={isAdmin ? '/' : '/user/profile'} replace />
 }
 
 export const router = createBrowserRouter([
@@ -38,9 +42,18 @@ export const router = createBrowserRouter([
         element: <RequireUser />,
         children: [
           {
+            path: '/user',
             element: <UserLayout />,
-            children: [{ path: '/portal', element: <UserPortalPage /> }],
+            children: [
+              { path: '', element: <Navigate to="/user/profile" replace /> },
+              { path: 'portal', element: <Navigate to="/user/profile" replace /> },
+              { path: 'profile', element: <UserProfilePage /> },
+              { path: 'scholar', element: <UserScholarPage /> },
+              { path: 'edit-profile', element: <UserEditProfilePage /> },
+              { path: 'settings', element: <UserSettingsPage /> },
+            ],
           },
+          { path: '/portal', element: <Navigate to="/user/profile" replace /> },
         ],
       },
       // Admin Protected Routes
@@ -59,6 +72,7 @@ export const router = createBrowserRouter([
               { path: '/scholar/clarivate', element: <ClarivateCrawlerPage /> },
               { path: '/scholar/integrator', element: <ScoreIntegratorPage /> },
               { path: '/scholar/profiles', element: <ProfileManagerPage /> },
+              { path: '/scholar/requests', element: <ScholarRequestsPage /> },
               { path: '/users', element: <UsersPage /> },
               { path: '/settings', element: <SettingsPage /> },
               { path: '/database', element: <DatabasePage /> },

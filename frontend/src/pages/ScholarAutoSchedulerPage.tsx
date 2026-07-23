@@ -25,7 +25,8 @@ import {
   Download,
   Trash2,
   Check,
-  ExternalLink
+  ExternalLink,
+  SlidersHorizontal,
 } from 'lucide-react'
 
 export interface AutoSchedulerLogEntry {
@@ -481,28 +482,17 @@ export function ScholarAutoSchedulerPage() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* 1. Top Section: Schedule Config & Quick Actions */}
       <Card className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-md space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="font-bold text-slate-800 text-base sm:text-lg flex items-center gap-2">
-                <Settings className="w-5 h-5 text-[#005b9a]" />
-                <span>Cấu Hình Lịch Auto-Scan Tự Động</span>
-              </h2>
-              <label className="relative inline-flex items-center cursor-pointer ml-2">
-                <input
-                  type="checkbox"
-                  checked={config.is_active ?? true}
-                  onChange={(e) => handleToggleActive(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#005b9a]"></div>
-                <span className="ml-2 text-xs font-bold text-slate-700">Kích hoạt</span>
-              </label>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Thiết lập chu kỳ, mốc giờ & hạn ngạch quét tự động ngầm xoay vòng dữ liệu tác giả trong CSDL
-            </p>
-          </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.is_active ?? true}
+              onChange={(e) => handleToggleActive(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#005b9a]"></div>
+            <span className="ml-2 text-xs font-bold text-slate-700">Kích hoạt Lịch Auto-Scan</span>
+          </label>
 
           <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
             <button
@@ -681,7 +671,7 @@ export function ScholarAutoSchedulerPage() {
       {/* Floating Schedule Config Modal */}
       {isScheduleModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 w-full max-w-3xl shadow-2xl overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-3xl border border-slate-200 w-full max-w-5xl shadow-2xl overflow-hidden animate-scale-in flex flex-col">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
@@ -700,7 +690,7 @@ export function ScholarAutoSchedulerPage() {
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
+            <div className="p-6 space-y-5">
               {/* 3 Mode Radio Bar */}
               <div className="grid grid-cols-3 gap-3 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200/70">
                 <button
@@ -782,9 +772,9 @@ export function ScholarAutoSchedulerPage() {
                 </button>
               </div>
 
-              {/* Calendar & Analog Clock Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Calendar Widget */}
+              {/* 3-Column Balanced Grid: Calendar | Clock | Throttling Config */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* 1. Calendar Widget */}
                 <div className="bg-slate-50/60 rounded-2xl p-4 border border-slate-200/80 space-y-3 flex flex-col justify-between">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -793,8 +783,8 @@ export function ScholarAutoSchedulerPage() {
                     </label>
                     <span className="text-[10px] font-mono font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
                       {(config.frequency_type || 'WEEKLY') === 'WEEKLY' && `Lặp lại: ${WEEKDAYS.find(w => w.value === (config.preferred_weekday ?? 0))?.label}`}
-                      {config.frequency_type === 'MONTHLY' && `Lặp lại: Ngày ${config.preferred_day_of_month ?? 1} hằng tháng`}
-                      {config.frequency_type === 'DAILY' && 'Lặp lại hằng ngày'}
+                      {config.frequency_type === 'MONTHLY' && `Lặp lại: Ngày ${config.preferred_day_of_month ?? 1}`}
+                      {config.frequency_type === 'DAILY' && 'Hằng ngày'}
                     </span>
                   </div>
 
@@ -948,7 +938,7 @@ export function ScholarAutoSchedulerPage() {
                   )}
                 </div>
 
-                {/* Analog Clock & Digital Time Picker Widget */}
+                {/* 2. Analog Clock & Digital Time Picker Widget */}
                 <div className="bg-slate-50/60 rounded-2xl p-4 border border-slate-200/80 space-y-3 flex flex-col justify-between">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -1063,38 +1053,59 @@ export function ScholarAutoSchedulerPage() {
                     })()}
                   </div>
                 </div>
-              </div>
 
-              {/* Throttling Inputs Grid */}
-              <div className="grid grid-cols-3 gap-3 text-xs">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                  <label className="block text-slate-600 font-semibold text-[11px]">CV/Giờ</label>
-                  <input
-                    type="number"
-                    value={config.batch_size_per_hour ?? 8}
-                    onChange={(e) => setConfig({ ...config, batch_size_per_hour: parseInt(e.target.value) || 8 })}
-                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#4F46E5] bg-white font-mono font-bold text-slate-800"
-                  />
-                </div>
+                {/* 3. Throttling & Delay Config Widget (Right Column) */}
+                <div className="bg-slate-50/60 rounded-2xl p-4 border border-slate-200/80 space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-4 h-4 text-[#4F46E5]" />
+                      <span>Hạn Ngạch & Delay</span>
+                    </label>
+                    <span className="text-[10px] font-mono font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                      Tốc độ quét
+                    </span>
+                  </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                  <label className="block text-slate-600 font-semibold text-[11px]">Delay Min (s)</label>
-                  <input
-                    type="number"
-                    value={config.delay_min_seconds ?? 8}
-                    onChange={(e) => setConfig({ ...config, delay_min_seconds: parseInt(e.target.value) || 8 })}
-                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#4F46E5] bg-white font-mono font-bold text-slate-800"
-                  />
-                </div>
+                  <div className="space-y-3 my-auto">
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1 shadow-3xs">
+                      <label className="block text-slate-700 font-bold text-[11px] flex items-center justify-between">
+                        <span>Hạn ngạch (CV/Giờ)</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Sản lượng</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={config.batch_size_per_hour ?? 8}
+                        onChange={(e) => setConfig({ ...config, batch_size_per_hour: parseInt(e.target.value) || 8 })}
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#4F46E5] bg-slate-50/50 font-mono font-bold text-slate-800 text-xs"
+                      />
+                    </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                  <label className="block text-slate-600 font-semibold text-[11px]">Delay Max (s)</label>
-                  <input
-                    type="number"
-                    value={config.delay_max_seconds ?? 15}
-                    onChange={(e) => setConfig({ ...config, delay_max_seconds: parseInt(e.target.value) || 15 })}
-                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#4F46E5] bg-white font-mono font-bold text-slate-800"
-                  />
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1 shadow-3xs">
+                      <label className="block text-slate-700 font-bold text-[11px] flex items-center justify-between">
+                        <span>Delay Min (Giây)</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Min Delay</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={config.delay_min_seconds ?? 8}
+                        onChange={(e) => setConfig({ ...config, delay_min_seconds: parseInt(e.target.value) || 8 })}
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#4F46E5] bg-slate-50/50 font-mono font-bold text-slate-800 text-xs"
+                      />
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1 shadow-3xs">
+                      <label className="block text-slate-700 font-bold text-[11px] flex items-center justify-between">
+                        <span>Delay Max (Giây)</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Max Delay</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={config.delay_max_seconds ?? 15}
+                        onChange={(e) => setConfig({ ...config, delay_max_seconds: parseInt(e.target.value) || 15 })}
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#4F46E5] bg-slate-50/50 font-mono font-bold text-slate-800 text-xs"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

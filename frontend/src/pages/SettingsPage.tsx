@@ -67,8 +67,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 max-w-4xl">
-
+    <div className="space-y-6 max-w-7xl mx-auto">
       {isLoading ? (
         <Card className="border-slate-100 shadow-sm bg-white">
           <CardContent className="p-12 flex justify-center items-center">
@@ -76,159 +75,164 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-6">
-          {/* Anti-Blocking Suite Card */}
-          <AntiBlockSettingsCard />
-
-          <form onSubmit={handleSave} className="space-y-6">
-            {/* Proxy Configuration Card */}
-          <Card className="border-slate-200 shadow-sm bg-white">
-            <CardContent className="p-6 space-y-6">
-              <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2 border-b border-slate-100 pb-3">
-                <Settings className="h-4.5 w-4.5 text-[#005b9a]" />
-                Cấu hình Proxy & IP (Độ tin cậy cao)
-              </h2>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Loại Proxy</label>
-                  <select
-                    value={proxyMode}
-                    onChange={(e) => setProxyMode(e.target.value)}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#005b9a] cursor-pointer font-medium w-full"
-                  >
-                    <option value="DIRECT">Không sử dụng (None / Direct)</option>
-                    <option value="SCRAPERAPI">ScraperAPI Service</option>
-                    <option value="FREE_PROXIES">Free Proxies Pool</option>
-                    <option value="TOR">Tor Network</option>
-                    <option value="SINGLEPROXY">Single Proxy (HTTP/HTTPS)</option>
-                    <option value="LUMINATI">Luminati Service</option>
-                  </select>
-                </div>
-
-                {/* Retries */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Số lần thử lại khi lỗi HTTP</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={retries}
-                    onChange={(e) => setRetries(Number(e.target.value))}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full font-medium"
-                  />
-                </div>
-              </div>
-
-              {/* Conditional Inputs */}
-              {proxyMode === 'SCRAPERAPI' && (
-                <div className="space-y-4 pt-2 border-t border-slate-50 animate-in fade-in-50 duration-200">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase">ScraperAPI Key</label>
-                    <input
-                      type="text"
-                      placeholder="Nhập ScraperAPI Key của bạn..."
-                      value={scraperApiKey}
-                      onChange={(e) => setScraperApiKey(e.target.value)}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full font-mono"
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-
-              {proxyMode === 'SINGLEPROXY' && (
-                <div className="grid gap-4 md:grid-cols-2 pt-2 border-t border-slate-50 animate-in fade-in-50 duration-200">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase">HTTP Proxy URL</label>
-                    <input
-                      type="text"
-                      placeholder="http://username:password@ip:port"
-                      value={httpProxy}
-                      onChange={(e) => setHttpProxy(e.target.value)}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full font-mono"
-                      required
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase">HTTPS Proxy URL</label>
-                    <input
-                      type="text"
-                      placeholder="https://username:password@ip:port"
-                      value={httpsProxy}
-                      onChange={(e) => setHttpsProxy(e.target.value)}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full font-mono"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {proxyMode === 'LUMINATI' && (
-                <div className="grid gap-4 md:grid-cols-3 pt-2 border-t border-slate-50 animate-in fade-in-50 duration-200">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Luminati User</label>
-                    <input
-                      type="text"
-                      value={luminatiUser}
-                      onChange={(e) => setLuminatiUser(e.target.value)}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full"
-                      required
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Luminati Password</label>
-                    <input
-                      type="password"
-                      value={luminatiPassword}
-                      onChange={(e) => setLuminatiPassword(e.target.value)}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full"
-                      required
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Luminati Port</label>
-                    <input
-                      type="number"
-                      value={luminatiPort}
-                      onChange={(e) => setLuminatiPort(Number(e.target.value))}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full"
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-100 text-xs text-amber-700 flex gap-2">
-                <ShieldAlert className="h-4.5 w-4.5 shrink-0 text-amber-500" />
-                <div className="leading-normal">
-                  <span className="font-bold">Lưu ý bảo mật:</span> Khi thay đổi cấu hình Proxy, Celery background worker sẽ sử dụng cài đặt mới để thực hiện cào thông tin Google Scholar và các trang liên kết. Đảm bảo thông tin Proxy chính xác để tránh bị chặn IP.
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Form Actions */}
-          <div className="flex gap-3 justify-end">
-            <button
-              type="button"
-              onClick={loadSettings}
-              disabled={isSaving}
-              className="flex items-center justify-center gap-1.5 rounded-lg py-2 px-4 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-xs cursor-pointer transition-colors shadow-3xs disabled:opacity-50"
-            >
-              <RefreshCw className="h-4 w-4" />
-              <span>Hủy thay đổi</span>
-            </button>
-
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="flex items-center justify-center gap-1.5 rounded-lg py-2 px-5 bg-[#005b9a] hover:bg-[#004677] text-white font-bold text-xs cursor-pointer transition-colors shadow-xs disabled:opacity-50"
-            >
-              {isSaving ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-              <span>Lưu cấu hình</span>
-            </button>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column (col-span-7): Anti-Blocking Suite Card */}
+          <div className="lg:col-span-7 space-y-6">
+            <AntiBlockSettingsCard />
           </div>
-        </form>
+
+          {/* Right Column (col-span-5): System Proxy Configuration */}
+          <div className="lg:col-span-5 space-y-6">
+            <form onSubmit={handleSave} className="space-y-6">
+              {/* Proxy Configuration Card */}
+              <Card className="border-slate-200 shadow-sm bg-white">
+                <CardContent className="p-6 space-y-5">
+                  <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
+                    <Settings className="h-4.5 w-4.5 text-[#005b9a]" />
+                    Cấu hình Proxy & IP (Độ tin cậy cao)
+                  </h2>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Loại Proxy System</label>
+                      <select
+                        value={proxyMode}
+                        onChange={(e) => setProxyMode(e.target.value)}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#005b9a] cursor-pointer font-medium w-full"
+                      >
+                        <option value="DIRECT">Không sử dụng (None / Direct)</option>
+                        <option value="SCRAPERAPI">ScraperAPI Service</option>
+                        <option value="FREE_PROXIES">Free Proxies Pool</option>
+                        <option value="TOR">Tor Network</option>
+                        <option value="SINGLEPROXY">Single Proxy (HTTP/HTTPS)</option>
+                        <option value="LUMINATI">Luminati Service</option>
+                      </select>
+                    </div>
+
+                    {/* Retries */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Thử lại khi lỗi HTTP</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={retries}
+                        onChange={(e) => setRetries(Number(e.target.value))}
+                        className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Conditional Inputs */}
+                  {proxyMode === 'SCRAPERAPI' && (
+                    <div className="space-y-4 pt-2 border-t border-slate-100 animate-in fade-in-50 duration-200">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase">ScraperAPI Key</label>
+                        <input
+                          type="text"
+                          placeholder="Nhập ScraperAPI Key của bạn..."
+                          value={scraperApiKey}
+                          onChange={(e) => setScraperApiKey(e.target.value)}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full font-mono"
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {proxyMode === 'SINGLEPROXY' && (
+                    <div className="space-y-3 pt-2 border-t border-slate-100 animate-in fade-in-50 duration-200">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase">HTTP Proxy URL</label>
+                        <input
+                          type="text"
+                          placeholder="http://username:password@ip:port"
+                          value={httpProxy}
+                          onChange={(e) => setHttpProxy(e.target.value)}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full font-mono"
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase">HTTPS Proxy URL</label>
+                        <input
+                          type="text"
+                          placeholder="https://username:password@ip:port"
+                          value={httpsProxy}
+                          onChange={(e) => setHttpsProxy(e.target.value)}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full font-mono"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {proxyMode === 'LUMINATI' && (
+                    <div className="space-y-3 pt-2 border-t border-slate-100 animate-in fade-in-50 duration-200">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Luminati User</label>
+                        <input
+                          type="text"
+                          value={luminatiUser}
+                          onChange={(e) => setLuminatiUser(e.target.value)}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full"
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Luminati Password</label>
+                        <input
+                          type="password"
+                          value={luminatiPassword}
+                          onChange={(e) => setLuminatiPassword(e.target.value)}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full"
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Luminati Port</label>
+                        <input
+                          type="number"
+                          value={luminatiPort}
+                          onChange={(e) => setLuminatiPort(Number(e.target.value))}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#005b9a] w-full"
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-800 flex gap-2">
+                    <ShieldAlert className="h-4.5 w-4.5 shrink-0 text-amber-600 mt-0.5" />
+                    <div className="leading-relaxed text-[11px]">
+                      <span className="font-bold block text-amber-900 mb-0.5">Lưu ý bảo mật:</span> Khi thay đổi cấu hình Proxy, Celery worker sẽ tự động áp dụng cài đặt mới để cào dữ liệu Google Scholar. Đảm bảo proxy hoạt động tốt để tránh bị rào chắn CAPTCHA.
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Form Actions */}
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={loadSettings}
+                  disabled={isSaving}
+                  className="flex items-center justify-center gap-1.5 rounded-xl py-2 px-4 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs cursor-pointer transition-colors shadow-3xs disabled:opacity-50"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span>Hủy thay đổi</span>
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex items-center justify-center gap-1.5 rounded-xl py-2 px-5 bg-[#005b9a] hover:bg-[#004677] text-white font-bold text-xs cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+                >
+                  {isSaving ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                  <span>Lưu cấu hình hệ thống</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

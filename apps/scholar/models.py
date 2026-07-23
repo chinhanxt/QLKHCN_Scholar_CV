@@ -549,6 +549,13 @@ class ScholarProfile(BaseModel):
     h_index = models.IntegerField(_("H-Index"), default=0)
     i10_index = models.IntegerField(_("i10-Index"), default=0)
 
+    # NAFOSTED / Personal Academic Profile fields
+    full_name = models.CharField(_("Full Name"), max_length=255, blank=True, null=True)
+    academic_title = models.CharField(_("Academic Title"), max_length=100, blank=True, null=True)
+    position = models.CharField(_("Position"), max_length=255, blank=True, null=True)
+    department = models.CharField(_("Department"), max_length=255, blank=True, null=True)
+    institution = models.CharField(_("Institution"), max_length=255, blank=True, null=True)
+
     class Meta:
         db_table = "scholar_profiles"
         verbose_name = _("Scholar Profile")

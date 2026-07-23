@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  BookOpen,
-  Send,
-  Settings,
+  User,
   GraduationCap,
+  FileEdit,
+  Settings,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -23,28 +23,17 @@ function UserSidebar({ isCollapsed, onToggle }: UserSidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
 
-  const currentTab = new URLSearchParams(location.search).get('tab') || 'profile'
-
-  const NAV_SECTIONS = [
-    {
-      group: 'CÔNG CỤ',
-      items: [
-        { tab: 'profile', label: 'Hồ sơ Scholar & CV', icon: BookOpen },
-        { tab: 'submit', label: 'Cập nhật thông tin', icon: Send },
-      ],
-    },
-    {
-      group: 'HỆ THỐNG',
-      items: [
-        { tab: 'settings', label: 'Cài đặt tài khoản', icon: Settings },
-      ],
-    },
+  const menuItems = [
+    { label: 'Thông tin cá nhân', path: '/user/profile', icon: User },
+    { label: 'Hồ sơ Scholar chi tiết', path: '/user/scholar', icon: GraduationCap },
+    { label: 'Cập nhật thông tin', path: '/user/edit-profile', icon: FileEdit },
+    { label: 'Cài đặt tài khoản', path: '/user/settings', icon: Settings },
   ]
 
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-all duration-300',
+        'sticky top-0 h-screen flex shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-all duration-300 z-30',
         isCollapsed ? 'w-16 overflow-visible' : 'w-64 overflow-x-hidden'
       )}
     >
@@ -91,57 +80,42 @@ function UserSidebar({ isCollapsed, onToggle }: UserSidebarProps) {
       {/* Navigation Menu */}
       <nav
         className={cn(
-          'flex flex-1 flex-col gap-5 p-3 pt-4',
+          'flex flex-1 flex-col gap-1 p-3 pt-4',
           isCollapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden custom-scrollbar'
         )}
       >
-        {NAV_SECTIONS.map((section, idx) => (
-          <div key={idx}>
-            <div className="px-3 mb-2 flex items-center h-5 overflow-hidden">
-              <span
+        <div className="flex flex-col gap-1">
+          {menuItems.map(({ path, label, icon: Icon }) => {
+            const isActive = location.pathname === path
+
+            return (
+              <button
+                key={path}
+                onClick={() => navigate(path)}
                 className={cn(
-                  'text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap transition-all duration-300 origin-left',
-                  isCollapsed ? 'opacity-0 max-w-0' : 'opacity-100 max-w-[150px]'
+                  'flex items-center transition-all duration-300 rounded-lg text-sm font-medium w-full relative overflow-hidden group cursor-pointer',
+                  isCollapsed ? 'justify-center h-10 w-10 mx-auto px-0' : 'gap-3 px-3 py-2.5',
+                  isActive
+                    ? isCollapsed
+                      ? 'bg-[#e6f0f7] text-[#005b9a] shadow-sm'
+                      : 'bg-[#e6f0f7] text-[#005b9a] border-l-4 border-[#005b9a] shadow-sm font-semibold pl-[9.5px]'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 )}
+                title={isCollapsed ? label : undefined}
               >
-                {section.group}
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              {section.items.map(({ tab, label, icon: Icon }) => {
-                const isActive = currentTab === tab
-
-                return (
-                  <button
-                    key={tab}
-                    onClick={() => navigate(`/portal?tab=${tab}`)}
-                    className={cn(
-                      'flex items-center transition-all duration-300 rounded-lg text-sm font-medium w-full relative overflow-hidden group cursor-pointer',
-                      isCollapsed ? 'justify-center h-10 w-10 mx-auto px-0' : 'gap-3 px-3 py-2.5',
-                      isActive
-                        ? isCollapsed
-                          ? 'bg-[#e6f0f7] text-[#005b9a] shadow-sm'
-                          : 'bg-[#e6f0f7] text-[#005b9a] border-l-4 border-[#005b9a] shadow-sm font-semibold pl-[9.5px]'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                    )}
-                    title={isCollapsed ? label : undefined}
-                  >
-                    <Icon className="h-4.5 w-4.5 shrink-0 transition-colors" />
-                    <span
-                      className={cn(
-                        'transition-all duration-300 origin-left whitespace-nowrap overflow-hidden text-ellipsis',
-                        isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[180px]'
-                      )}
-                    >
-                      {label}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        ))}
+                <Icon className="h-4.5 w-4.5 shrink-0 transition-colors" />
+                <span
+                  className={cn(
+                    'transition-all duration-300 origin-left whitespace-nowrap overflow-hidden text-ellipsis',
+                    isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[180px]'
+                  )}
+                >
+                  {label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </nav>
 
       {/* User Info Footer */}
@@ -197,10 +171,10 @@ export function UserLayout() {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex min-h-screen bg-slate-50">
       <UserSidebar isCollapsed={isCollapsed} onToggle={() => setIsCollapsed(!isCollapsed)} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+      <div className="flex-1 min-w-0">
+        <main className="p-4 md:p-6">
           <Outlet />
         </main>
       </div>

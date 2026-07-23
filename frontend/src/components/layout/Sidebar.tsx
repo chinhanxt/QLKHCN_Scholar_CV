@@ -17,16 +17,19 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
-  Bot
+  Bot,
+  Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
 import { fullName } from '@/lib/utils'
+import { useAdminProfiles } from '@/api/hooks/useUserPortal'
 
 const OTHER_TOOLS = [
-  { to: '/scholar/scraper', label: 'Google Scholar', icon: GraduationCap },
-  { to: '/scholar/auto-scheduler', label: 'Cập nhật tự động', icon: Bot },
-  { to: '/scholar/profiles', label: 'Hồ sơ', icon: FolderHeart },
+  { to: '/scholar/scraper', label: 'Google Scholar', icon: GraduationCap, hasBadge: false },
+  { to: '/scholar/auto-scheduler', label: 'Cập nhật tự động', icon: Bot, hasBadge: false },
+  { to: '/scholar/profiles', label: 'Hồ sơ', icon: FolderHeart, hasBadge: false },
+  { to: '/scholar/requests', label: 'Yêu cầu & Thông báo', icon: Bell, hasBadge: true },
 ]
 
 const SYSTEM_NAV = [
@@ -45,9 +48,10 @@ interface SidebarLinkProps {
   icon: React.ComponentType<{ className?: string }>
   end?: boolean
   isCollapsed: boolean
+  badgeCount?: number
 }
 
-function SidebarLink({ to, label, icon: Icon, end, isCollapsed }: SidebarLinkProps) {
+function SidebarLink({ to, label, icon: Icon, end, isCollapsed, badgeCount }: SidebarLinkProps) {
   return (
     <NavLink
       to={to}
@@ -67,17 +71,29 @@ function SidebarLink({ to, label, icon: Icon, end, isCollapsed }: SidebarLinkPro
       }
       title={isCollapsed ? label : undefined}
     >
-      <Icon className="h-4.5 w-4.5 shrink-0 transition-colors" />
+      <div className="relative flex items-center justify-center shrink-0">
+        <Icon className="h-4.5 w-4.5 shrink-0 transition-colors" />
+        {isCollapsed && badgeCount !== undefined && badgeCount > 0 && (
+          <span className="absolute -top-1.5 -right-2 flex h-3.5 min-w-[14px] px-1 items-center justify-center rounded-full bg-blue-600 text-[9px] font-extrabold text-white shadow-xs animate-pulse">
+            {badgeCount}
+          </span>
+        )}
+      </div>
       <span
         className={cn(
-          "transition-all duration-300 origin-left whitespace-nowrap overflow-hidden text-ellipsis",
+          "transition-all duration-300 origin-left whitespace-nowrap overflow-hidden text-ellipsis flex-1",
           isCollapsed 
             ? "opacity-0 max-w-0 pointer-events-none" 
-            : "opacity-100 max-w-[180px]"
+            : "opacity-100 max-w-[150px]"
         )}
       >
         {label}
       </span>
+      {!isCollapsed && badgeCount !== undefined && badgeCount > 0 && (
+        <span className="ml-auto px-2 py-0.5 text-[11px] font-extrabold rounded-full bg-blue-600 text-white shadow-xs shrink-0 animate-pulse">
+          {badgeCount}
+        </span>
+      )}
     </NavLink>
   )
 }
@@ -126,6 +142,9 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const logout = useAuthStore((s) => s.logout)
   const location = useLocation()
 
+  const { data: adminProfiles } = useAdminProfiles()
+  const pendingCount = adminProfiles?.filter((p) => p.status === 'PENDING').length || 0
+
   const isCrawlActive = ['/scholar/unified', '/scholar/clarivate', '/scholar/scimago', '/scholar/bioxbio', '/scholar/integrator'].some(
     path => location.pathname === path
   )
@@ -139,7 +158,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
 
   return (
     <aside className={cn(
-      "flex shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-all duration-300",
+      "sticky top-0 h-screen flex shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-all duration-300 z-30",
       isCollapsed ? "w-16 overflow-visible" : "w-64 overflow-x-hidden"
     )}>
       {/* Branding Header */}
@@ -211,14 +230,15 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
           </div>
 
           <div className="flex flex-col gap-1">
-            {/* Flat Nav links: Google Scholar, Cập nhật tự động, Hồ sơ */}
-            {OTHER_TOOLS.map(({ to, label, icon }) => (
+            {/* Flat Nav links: Google Scholar, Cập nhật tự động, Hồ sơ, Yêu cầu & Thông báo */}
+            {OTHER_TOOLS.map(({ to, label, icon, hasBadge }) => (
               <SidebarLink
                 key={to}
                 to={to}
                 label={label}
                 icon={icon}
                 isCollapsed={isCollapsed}
+                badgeCount={hasBadge ? pendingCount : undefined}
               />
             ))}
 

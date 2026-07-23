@@ -14,7 +14,7 @@ export function RequireAdmin() {
   }
 
   if (!user || (!user.is_staff && !user.is_superuser)) {
-    return <Navigate to="/portal" replace />
+    return <Navigate to="/user/profile" replace />
   }
 
   return <Outlet />
