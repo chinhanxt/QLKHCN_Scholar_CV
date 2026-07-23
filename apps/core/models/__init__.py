@@ -1,15 +1,14 @@
 from .base import BaseModel
 from .notification import Notification, NotificationCategory, NotificationType
-from .soft_delete import AllObjectsManager
-from .soft_delete import SoftDeleteManager
-from .soft_delete import SoftDeleteModel
+from .soft_delete import AllObjectsManager, SoftDeleteManager, SoftDeleteModel
 
 __all__ = [
-    "BaseModel",
-    "SoftDeleteModel",
-    "SoftDeleteManager",
     "AllObjectsManager",
+    "BaseModel",
     "Notification",
-    "NotificationType",
     "NotificationCategory",
+    "NotificationType",
+    "SoftDeleteManager",
+    "SoftDeleteModel",
 ]
+
