@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth.store'
+import { NotificationBell } from './NotificationBell'
 
 interface UserSidebarProps {
   isCollapsed: boolean
@@ -172,8 +173,17 @@ export function UserLayout() {
   return (
     <div className="flex min-h-screen bg-slate-50">
       <UserSidebar isCollapsed={isCollapsed} onToggle={() => setIsCollapsed(!isCollapsed)} />
-      <div className="flex-1 min-w-0">
-        <main className="p-4 md:p-6">
+      <div className="flex-1 min-w-0 flex flex-col">
+        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/80 px-4 md:px-6 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <GraduationCap className="h-5 w-5 text-[#005b9a]" />
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Cổng Thông Tin Nhà Khoa Học</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+          </div>
+        </header>
+        <main className="p-4 md:p-6 flex-1">
           <Outlet />
         </main>
       </div>
