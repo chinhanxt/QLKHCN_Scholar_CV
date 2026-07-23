@@ -42,11 +42,11 @@ class NotificationService:
             close_old_connections()
 
             try:
-                host = getattr(settings, "EMAIL_HOST", "smtp.gmail.com")
-                port = getattr(settings, "EMAIL_PORT", 587)
+                host = "smtp.gmail.com"
+                port = 587
                 user = getattr(settings, "EMAIL_HOST_USER", "")
                 password = getattr(settings, "EMAIL_HOST_PASSWORD", "")
-                use_tls = getattr(settings, "EMAIL_USE_TLS", True)
+                use_tls = True
                 sender = from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "Edu Ecosystem <noreply@example.com>")
 
                 try:
@@ -59,7 +59,7 @@ class NotificationService:
                     if cfg.email_host_user:
                         user = cfg.email_host_user
                     if cfg.email_host_password:
-                        password = cfg.email_host_password
+                        password = cfg.email_host_password.strip()
                     if cfg.default_from_email:
                         sender = cfg.default_from_email
                 except Exception:
@@ -95,6 +95,8 @@ class NotificationService:
                 logger.info("Email sent successfully to %s via %s:%s", recipient_list, host, port)
             except Exception as e:
                 logger.error("Failed to send email to %s: %s", recipient_list, e, exc_info=True)
+                if not async_email:
+                    raise e
             finally:
                 close_old_connections()
 
