@@ -270,30 +270,30 @@ class ScholarProfileSerializer(serializers.ModelSerializer):
             "total_citations",
             "h_index",
             "i10_index",
+            "full_name",
+            "academic_title",
+            "position",
+            "department",
+            "institution",
             "publications",
             "author_detail",
         ]
 
     def get_author_detail(self, obj):
         scholar_id = (obj.scholar_id or "").strip()
-        if scholar_id:
-            author = AuthorProfile.objects.filter(scholar_id__iexact=scholar_id).prefetch_related("publications").first()
-            if not author:
-                author = AuthorProfile.objects.filter(scholar_id__icontains=scholar_id).prefetch_related("publications").first()
-            if not author:
-                for a in AuthorProfile.objects.all().prefetch_related("publications"):
-                    if scholar_id in a.scholar_id or a.scholar_id in scholar_id:
-                        author = a
-                        break
-            if author:
-                return AuthorProfileDetailSerializer(author).data
+        if not scholar_id:
+            return None
 
-        if obj.user:
-            username = (obj.user.username or "").strip()
-            if username:
-                author = AuthorProfile.objects.filter(name__icontains=username).prefetch_related("publications").first()
-                if author:
-                    return AuthorProfileDetailSerializer(author).data
+        author = AuthorProfile.objects.filter(scholar_id__iexact=scholar_id).prefetch_related("publications").first()
+        if not author:
+            author = AuthorProfile.objects.filter(scholar_id__icontains=scholar_id).prefetch_related("publications").first()
+        if not author:
+            for a in AuthorProfile.objects.all().prefetch_related("publications"):
+                if scholar_id in a.scholar_id or a.scholar_id in scholar_id:
+                    author = a
+                    break
+        if author:
+            return AuthorProfileDetailSerializer(author).data
 
         return None
 
