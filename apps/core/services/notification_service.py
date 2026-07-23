@@ -217,10 +217,16 @@ class NotificationService:
     def send_test_email(cls, recipient_email: str, smtp_override: dict[str, Any] | None = None) -> None:
         """Send a test email to verify SMTP configuration."""
         from django.utils import timezone
+        import uuid
+        now_local = timezone.localtime()
+        now_str = now_local.strftime("%H:%M:%S")
+        code = str(uuid.uuid4())[:4].upper()
+        subject = f"[Edu Ecosystem] Xác nhận Email SMTP - {now_str} (#{code})"
+
         cls.send_email_async(
-            subject="[Edu Ecosystem] Thư thử nghiệm cấu hình Email SMTP",
+            subject=subject,
             recipient_list=[recipient_email],
             template_name="emails/test_email.html",
-            context={"timestamp": str(timezone.now()), "user_email": recipient_email},
+            context={"timestamp": now_local.strftime("%d/%m/%Y %H:%M:%S"), "user_email": recipient_email},
             async_email=False,
         )
