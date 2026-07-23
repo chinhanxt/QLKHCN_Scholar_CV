@@ -5,6 +5,7 @@ from apps.scholar.api.views import (
     AutoScanConfigView, TriggerAuthorsScanView,
     AntiBlockConfigView, RotateTorView,
     UserScholarProfileViewSet, AdminScholarApprovalViewSet,
+    EmailSettingsView, TestEmailView,
 )
 
 app_name = "scholar_auto_scan"
@@ -21,6 +22,8 @@ urlpatterns = [
     path('auto-scan/trigger-authors/', TriggerAuthorsScanView.as_view(), name='trigger-authors'),
     path('anti-block/config/', AntiBlockConfigView.as_view(), name='anti-block-config'),
     path('anti-block/rotate-tor/', RotateTorView.as_view(), name='rotate-tor'),
+    path('crawlers/email-settings/', EmailSettingsView.as_view(), name='email-settings'),
+    path('crawlers/test-email/', TestEmailView.as_view(), name='test-email'),
 ] + router.urls
 
 

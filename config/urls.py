@@ -12,6 +12,7 @@ urlpatterns = [
     # Django Admin
     path(settings.ADMIN_URL, admin.site.urls),
     # API
+    path("api/v1/core/", include("apps.core.api.urls")),
     path("api/", include("config.api_router")),
     # API Documentation
     path("api/v1/schema/", SpectacularAPIView.as_view(), name="api-schema"),

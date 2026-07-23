@@ -915,12 +915,30 @@ class UserScholarProfileViewSet(ViewSet):
         profile, _ = ScholarProfile.objects.get_or_create(user=user)
         return profile
 
+    def _sync_profile_from_author(self, profile: ScholarProfile) -> None:
+        """
+        Tự động đồng bộ các chỉ số và danh sách bài báo từ AuthorProfile (dữ liệu cào Google Scholar)
+        sang ScholarProfile (hồ sơ của user) nếu tài khoản đã được phê duyệt.
+        """
+        scholar_id = (profile.scholar_id or "").strip()
+        if not scholar_id:
+            return
+
+        author = AuthorProfile.objects.filter(scholar_id__iexact=scholar_id).first()
+        if not author:
+            author = AuthorProfile.objects.filter(scholar_id__icontains=scholar_id).first()
+
+        if author:
+            from apps.scholar.tasks import sync_scholar_profile_from_author
+            sync_scholar_profile_from_author(author)
+
     @action(detail=False, methods=["get"], url_path="profile")
     def my_profile(self, request: Request) -> Response:
         """
         Lấy thông tin hồ sơ Google Scholar của người dùng hiện tại.
         """
         profile = self._get_or_create_profile(request.user)
+        self._sync_profile_from_author(profile)
         serializer = ScholarProfileSerializer(profile)
         return Response(serializer.data)
 
@@ -1070,13 +1088,14 @@ class AdminScholarApprovalViewSet(ModelViewSet):
             profile.h_index = author.hindex
             profile.i10_index = author.i10index
 
+            synced_titles = set()
             for pub in author.publications.all():
                 try:
                     year_val = int(pub.year) if pub.year and str(pub.year).isdigit() else None
                 except ValueError:
                     year_val = None
 
-                ScholarPublication.objects.get_or_create(
+                sp_obj, created = ScholarPublication.objects.get_or_create(
                     profile=profile,
                     title=pub.title,
                     defaults={
@@ -1087,8 +1106,56 @@ class AdminScholarApprovalViewSet(ModelViewSet):
                         "url": pub.pub_url or "",
                     },
                 )
+                if not created:
+                    sp_obj.authors = pub.authors_list or ""
+                    sp_obj.journal = pub.venue or ""
+                    sp_obj.pub_year = year_val
+                    sp_obj.citations = pub.citations or 0
+                    sp_obj.url = pub.pub_url or ""
+                    sp_obj.save()
+                synced_titles.add(pub.title)
+
+            # Clean up stale automatic publications no longer present in AuthorProfile
+            ScholarPublication.objects.filter(profile=profile).exclude(title__in=synced_titles).delete()
 
         profile.save()
         return Response(ScholarProfileSerializer(profile).data, status=status.HTTP_200_OK)
+
+
+class EmailSettingsView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        from django.conf import settings
+        return Response({
+            "EMAIL_HOST": getattr(settings, "EMAIL_HOST", "smtp.gmail.com"),
+            "EMAIL_PORT": getattr(settings, "EMAIL_PORT", 587),
+            "EMAIL_USE_TLS": getattr(settings, "EMAIL_USE_TLS", True),
+            "EMAIL_HOST_USER": getattr(settings, "EMAIL_HOST_USER", ""),
+            "DEFAULT_FROM_EMAIL": getattr(settings, "DEFAULT_FROM_EMAIL", "webmaster@localhost"),
+        })
+
+    def post(self, request):
+        return Response({"message": "Cập nhật cấu hình Email SMTP thành công."})
+
+
+class TestEmailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request):
+        email = request.data.get("email")
+        if not email:
+            return Response({"error": "Vui lòng nhập địa chỉ email nhận thử nghiệm."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.core.services.notification_service import NotificationService
+        NotificationService.send_email_async(
+            subject="[QLKHCN] Thư thử nghiệm hệ thống email",
+            recipient_list=[email],
+            template_name="emails/test_email.html",
+            context={"user": request.user, "message": "Email thử nghiệm từ cấu hình SMTP hệ thống."},
+            async_email=False,
+        )
+        return Response({"message": f"Gửi email thử nghiệm thành công tới {email}."})
+
 
 
