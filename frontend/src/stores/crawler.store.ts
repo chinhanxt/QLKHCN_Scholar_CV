@@ -68,6 +68,9 @@ interface CrawlerStoreState {
   removeFromScholarQueue: (id: string) => void
   setSelectedQueueId: (id: string | null) => void
   clearScholarQueue: () => void
+  setActiveTaskIds: (
+    taskIds: string[] | ((prev: string[]) => string[])
+  ) => void
 }
 
 const initialTaskState: CrawlerTaskState = {
@@ -177,6 +180,17 @@ export const useCrawlerStore = create<CrawlerStoreState>((set) => ({
         queue: [],
         activeTaskIds: [],
         selectedQueueId: null,
+      },
+    })),
+
+  setActiveTaskIds: (taskIds) =>
+    set((prev) => ({
+      scholarQueue: {
+        ...prev.scholarQueue,
+        activeTaskIds:
+          typeof taskIds === 'function'
+            ? taskIds(prev.scholarQueue.activeTaskIds)
+            : taskIds,
       },
     })),
 }))

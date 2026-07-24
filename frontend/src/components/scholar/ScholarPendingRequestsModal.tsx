@@ -71,7 +71,7 @@ export function ScholarPendingRequestsModal({
   const existingScholarIds = useMemo(() => {
     const set = new Set<string>()
     if (dbAuthors) {
-      dbAuthors.forEach((author) => {
+      dbAuthors.forEach((author: any) => {
         if (author.scholar_id) {
           set.add(author.scholar_id.trim().toLowerCase())
         }

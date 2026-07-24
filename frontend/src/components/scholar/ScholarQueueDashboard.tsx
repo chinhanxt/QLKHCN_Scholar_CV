@@ -1,4 +1,3 @@
-import React from 'react'
 import { useCrawlerStore } from '@/stores/crawler.store'
 import {
   Layers,

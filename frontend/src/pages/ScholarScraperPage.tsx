@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { scholarApi } from '@/api/endpoints/scholar'
 import type { AuthorCandidate, AuthorProfileDetail, PublicationDetail } from '@/api/endpoints/scholar'
 import { Card } from '@/components/ui/card'
@@ -9,6 +9,9 @@ import { cn } from '@/lib/utils'
 import { useCrawlerStore } from '@/stores/crawler.store'
 import { PublicationDetailPanel } from '@/components/scholar/PublicationDetailPanel'
 import { PublicationTableList } from '@/components/scholar/PublicationTableList'
+import { ScholarPendingRequestsModal } from '@/components/scholar/ScholarPendingRequestsModal'
+import { ScholarQueueDashboard } from '@/components/scholar/ScholarQueueDashboard'
+import { useAdminProfiles } from '@/api/hooks/useUserPortal'
 import { 
   Search, 
   TrendingUp, 
@@ -99,6 +102,179 @@ export function ScholarScraperPage() {
     wos: 'N/A',
     doi: ''
   })
+
+  // Pending Requests & Batch Queue State
+  const [isPendingRequestsModalOpen, setIsPendingRequestsModalOpen] = useState(false)
+  const { data: adminProfiles } = useAdminProfiles()
+  const pendingCount = useMemo(() => {
+    if (!adminProfiles) return 0
+    return adminProfiles.filter((p) => {
+      const extractedId =
+        p.scholar_id || (p.scholar_url ? p.scholar_url.match(/user=([a-zA-Z0-9_-]+)/)?.[1] : null)
+      if (!extractedId) return false
+      return (
+        p.status === 'PENDING' ||
+        Boolean(p.submitted_at) ||
+        (p.status !== 'DRAFT' && Boolean(p.scholar_url || p.scholar_id))
+      )
+    }).length
+  }, [adminProfiles])
+
+  // Scholar Batch Queue Store
+  const scholarQueue = useCrawlerStore((state) => state.scholarQueue)
+  const updateScholarQueueItem = useCrawlerStore((state) => state.updateScholarQueueItem)
+  const setActiveTaskIds = useCrawlerStore((state) => state.setActiveTaskIds)
+
+  // Auto-Queue Dispatcher & Batch Task Polling
+  const dispatchingIdsRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const { queue, maxConcurrency } = scholarQueue
+
+    const runningCount = queue.filter((item) => item.status === 'RUNNING').length
+    if (runningCount < maxConcurrency) {
+      const nextItem = queue.find(
+        (item) => item.status === 'PENDING' && !dispatchingIdsRef.current.has(item.id)
+      )
+
+      if (nextItem) {
+        dispatchingIdsRef.current.add(nextItem.id)
+        updateScholarQueueItem(nextItem.id, {
+          status: 'RUNNING',
+          progress: 5,
+          consoleLogs: [
+            ...(nextItem.consoleLogs || []),
+            `[System] Kích hoạt cào tự động cho Scholar ID: ${nextItem.scholarId}`,
+          ],
+        })
+
+        scholarApi
+          .scrapeAuthor(nextItem.scholarId, 0)
+          .then((res) => {
+            const taskId = res.data.task_id
+            updateScholarQueueItem(nextItem.id, {
+              taskId,
+              consoleLogs: [
+                ...(nextItem.consoleLogs || []),
+                `[System] Tác vụ Celery đã khởi tạo thành công (Task ID: ${taskId})`,
+              ],
+            })
+            setActiveTaskIds((prev) => (prev.includes(taskId) ? prev : [...prev, taskId]))
+          })
+          .catch((err: any) => {
+            const errorMsg = err?.message || 'Lỗi không xác định khi khởi tạo cào'
+            updateScholarQueueItem(nextItem.id, {
+              status: 'FAILURE',
+              consoleLogs: [
+                ...(nextItem.consoleLogs || []),
+                `[System] Lỗi khởi tạo tác vụ: ${errorMsg}`,
+              ],
+            })
+          })
+          .finally(() => {
+            dispatchingIdsRef.current.delete(nextItem.id)
+          })
+      }
+    }
+  }, [
+    scholarQueue.queue,
+    scholarQueue.activeTaskIds,
+    scholarQueue.maxConcurrency,
+    updateScholarQueueItem,
+    setActiveTaskIds,
+  ])
+
+  // Poll status for active tasks in scholarQueue
+  useEffect(() => {
+    const runningItemsWithTaskId = scholarQueue.queue.filter(
+      (item) => item.status === 'RUNNING' && item.taskId
+    )
+
+    if (runningItemsWithTaskId.length === 0) return
+
+    const pollInterval = setInterval(() => {
+      runningItemsWithTaskId.forEach(async (item) => {
+        if (!item.taskId) return
+        try {
+          const res = await scholarApi.getTaskStatus(item.taskId).then((r) => r.data)
+
+          if (res.status === 'PROGRESS') {
+            const newProgress = res.progress || item.progress || 5
+            const currentLogs = item.consoleLogs || []
+            const lastLog = currentLogs[currentLogs.length - 1]
+            const updatedLogs =
+              res.message && lastLog !== res.message ? [...currentLogs, res.message] : currentLogs
+
+            updateScholarQueueItem(item.id, {
+              progress: newProgress,
+              consoleLogs: updatedLogs,
+            })
+          } else if (res.status === 'SUCCESS') {
+            const currentLogs = item.consoleLogs || []
+            const updatedLogs = [
+              ...currentLogs,
+              `>>> HOÀN THÀNH: Cào tự động thành công cho tác giả ${item.scholarId}`,
+            ]
+
+            updateScholarQueueItem(item.id, {
+              status: 'SUCCESS',
+              progress: 100,
+              consoleLogs: updatedLogs,
+              resultData: res.result,
+            })
+
+            setActiveTaskIds((prev) => prev.filter((id) => id !== item.taskId))
+
+            if (scholarQueue.selectedQueueId === item.id) {
+              const scId = res.result?.author?.scholar_id || item.scholarId
+              if (scId) {
+                loadProfile(scId)
+              }
+            }
+          } else if (res.status === 'FAILURE') {
+            const currentLogs = item.consoleLogs || []
+            const err = res.message || 'Lỗi cào tác giả.'
+            const updatedLogs = [...currentLogs, `>>> LỖI: ${err}`]
+
+            updateScholarQueueItem(item.id, {
+              status: 'FAILURE',
+              consoleLogs: updatedLogs,
+            })
+
+            setActiveTaskIds((prev) => prev.filter((id) => id !== item.taskId))
+          }
+        } catch (err) {
+          console.error(`Lỗi polling task ${item.taskId} của queue item ${item.id}:`, err)
+        }
+      })
+    }, 1200)
+
+    return () => clearInterval(pollInterval)
+  }, [
+    scholarQueue.queue,
+    scholarQueue.selectedQueueId,
+    updateScholarQueueItem,
+    setActiveTaskIds,
+  ])
+
+  // Sync selected queue item data & logs to main display
+  useEffect(() => {
+    if (!scholarQueue.selectedQueueId) return
+    const selectedItem = scholarQueue.queue.find((i) => i.id === scholarQueue.selectedQueueId)
+    if (!selectedItem) return
+
+    if (selectedItem.consoleLogs && selectedItem.consoleLogs.length > 0) {
+      setTaskState('scholar', { consoleLogs: selectedItem.consoleLogs })
+    }
+
+    if (selectedItem.status === 'SUCCESS') {
+      if (selectedItem.resultData?.author) {
+        setProfile(selectedItem.resultData.author)
+      } else if (selectedItem.scholarId && profile?.scholar_id !== selectedItem.scholarId) {
+        loadProfile(selectedItem.scholarId)
+      }
+    }
+  }, [scholarQueue.selectedQueueId, scholarQueue.queue])
 
   const lastNotifiedTaskId = useRef<string | null>(null)
 
@@ -1112,6 +1288,9 @@ export function ScholarScraperPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-16 text-[#0F172A] font-sans antialiased custom-scrollbar">
       
+      {/* Scholar Queue Dashboard */}
+      <ScholarQueueDashboard className="mb-6" />
+      
       {/* 1. Dashboard Controls Bar & Workflow (Sleek and Clean) */}
       <div className="mb-6 flex flex-col gap-4">
         
@@ -1207,6 +1386,14 @@ export function ScholarScraperPage() {
                   <span>Tìm kiếm</span>
                 </>
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsPendingRequestsModalOpen(true)}
+              className="w-full sm:w-auto shrink-0 px-4 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-sm border border-indigo-200 shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
+            >
+              <span>📋 Xem yêu cầu hồ sơ ({pendingCount})</span>
             </button>
           </div>
 
@@ -2226,6 +2413,12 @@ export function ScholarScraperPage() {
           </div>
         </div>
       )}
+
+      {/* Pending Requests Batch Crawl Selection Modal */}
+      <ScholarPendingRequestsModal
+        open={isPendingRequestsModalOpen}
+        onClose={() => setIsPendingRequestsModalOpen(false)}
+      />
 
     </div>
   )
