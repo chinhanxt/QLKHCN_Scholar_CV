@@ -26,6 +26,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Dialog } from '@/components/ui/dialog'
 import { PublicationTableList } from '@/components/scholar/PublicationTableList'
 import { PublicationDetailPanel } from '@/components/scholar/PublicationDetailPanel'
+import { ScholarGuide } from '@/components/ScholarGuide'
 
 const submitSchema = z.object({
   scholar_url: z
@@ -49,6 +50,7 @@ export function UserPortalPage() {
 
   const { data: profile, isLoading } = useMyProfile()
   const submitProfile = useSubmitScholarProfile()
+  const [isEditingScholarUrl, setIsEditingScholarUrl] = useState(false)
 
   // Interactive UI State for Profile Tab
   const [selectedPublication, setSelectedPublication] = useState<PublicationDetail | null>(null)
@@ -115,7 +117,12 @@ export function UserPortalPage() {
   const onSubmitScholarUrl = (values: SubmitValues) => {
     submitProfile.mutate(values, {
       onSuccess: () => {
-        toast.success('Đã gửi thông tin liên kết Google Scholar thành công!')
+        toast.success(
+          profile?.status === 'APPROVED' || profile?.scholar_url
+            ? 'Đã gửi yêu cầu cập nhật hồ sơ Google Scholar thành công!'
+            : 'Đã gửi thông tin liên kết Google Scholar thành công!'
+        )
+        setIsEditingScholarUrl(false)
         setActiveTab('submit')
       },
       onError: (err) => toast.error(getApiErrorMessage(err, 'Gửi thông tin thất bại')),
@@ -695,7 +702,8 @@ export function UserPortalPage() {
             <span className="text-xs font-semibold text-slate-700">Trạng thái hồ sơ hiện tại:</span>
             {profile?.status === 'PENDING' && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                <Clock className="h-3.5 w-3.5" /> Đang chờ duyệt
+                <Clock className="h-3.5 w-3.5" />{' '}
+                {profile?.request_type === 'UPDATE' ? 'Đang chờ duyệt cập nhật' : 'Đang chờ duyệt hồ sơ mới'}
               </span>
             )}
             {profile?.status === 'APPROVED' && (
@@ -730,7 +738,8 @@ export function UserPortalPage() {
                 id="scholar_url"
                 placeholder="vd: https://scholar.google.com/citations?user=AHHDABDaaaaJ"
                 {...register('scholar_url')}
-                className="h-11 rounded-xl text-sm font-mono"
+                disabled={(profile?.status === 'PENDING' || profile?.status === 'APPROVED') && !isEditingScholarUrl}
+                className="h-11 rounded-xl text-sm font-mono disabled:bg-slate-50 disabled:text-slate-600 disabled:border-slate-200"
               />
               {errors.scholar_url && <p className="text-xs text-red-600">{errors.scholar_url.message}</p>}
               <p className="text-[11px] text-slate-400">
@@ -738,14 +747,46 @@ export function UserPortalPage() {
               </p>
             </div>
 
-            <Button
-              type="submit"
-              disabled={submitProfile.isPending}
-              className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs cursor-pointer"
-            >
-              {submitProfile.isPending && <Spinner className="mr-2" />}
-              Gửi thông tin hồ sơ
-            </Button>
+            <ScholarGuide defaultOpen={false} className="mt-2" />
+
+            {profile?.scholar_url && (profile.status === 'PENDING' || profile.status === 'APPROVED') && !isEditingScholarUrl ? (
+              <Button
+                type="button"
+                onClick={() => setIsEditingScholarUrl(true)}
+                className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-xs cursor-pointer flex items-center justify-center gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                Yêu cầu cập nhật
+              </Button>
+            ) : isEditingScholarUrl ? (
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditingScholarUrl(false)}
+                  className="flex-1 h-11 text-xs font-semibold rounded-xl"
+                >
+                  Hủy
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submitProfile.isPending}
+                  className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs cursor-pointer"
+                >
+                  {submitProfile.isPending && <Spinner className="mr-2" />}
+                  Gửi yêu cầu cập nhật
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="submit"
+                disabled={submitProfile.isPending}
+                className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs cursor-pointer"
+              >
+                {submitProfile.isPending && <Spinner className="mr-2" />}
+                Gửi thông tin hồ sơ
+              </Button>
+            )}
           </form>
         </Card>
       )}

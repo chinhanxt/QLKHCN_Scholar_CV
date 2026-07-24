@@ -20,6 +20,8 @@ export interface ScholarProfile {
   scholar_id: string | null
   status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'
   status_display: string
+  request_type?: 'NEW' | 'UPDATE'
+  request_type_display?: string
   submitted_at: string | null
   approved_at: string | null
   total_citations: number
