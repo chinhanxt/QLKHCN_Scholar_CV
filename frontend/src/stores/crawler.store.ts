@@ -1,5 +1,23 @@
 import { create } from 'zustand'
 
+export interface QueueItemState {
+  id: string
+  scholarId: string
+  userEmail: string
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILURE'
+  progress: number
+  taskId: string | null
+  consoleLogs: string[]
+  resultData?: any
+}
+
+export interface ScholarBatchQueueState {
+  queue: QueueItemState[]
+  activeTaskIds: string[]
+  maxConcurrency: number
+  selectedQueueId: string | null
+}
+
 export interface SubTaskState {
   status: string
   progress: number
@@ -26,6 +44,7 @@ interface CrawlerStoreState {
   clarivate: CrawlerTaskState
   integrator: CrawlerTaskState
   unified: CrawlerTaskState
+  scholarQueue: ScholarBatchQueueState
 
   // Actions
   setTaskState: (
@@ -42,6 +61,13 @@ interface CrawlerStoreState {
   resetTask: (
     key: 'scholar' | 'bioxbio' | 'scimago' | 'clarivate' | 'integrator' | 'unified'
   ) => void
+
+  // Batch Queue Actions
+  addToScholarQueue: (items: QueueItemState[]) => void
+  updateScholarQueueItem: (id: string, updates: Partial<QueueItemState>) => void
+  removeFromScholarQueue: (id: string) => void
+  setSelectedQueueId: (id: string | null) => void
+  clearScholarQueue: () => void
 }
 
 const initialTaskState: CrawlerTaskState = {
@@ -51,6 +77,13 @@ const initialTaskState: CrawlerTaskState = {
   consoleLogs: [],
 }
 
+const initialScholarQueueState: ScholarBatchQueueState = {
+  queue: [],
+  activeTaskIds: [],
+  maxConcurrency: 2,
+  selectedQueueId: null,
+}
+
 export const useCrawlerStore = create<CrawlerStoreState>((set) => ({
   scholar: { ...initialTaskState },
   bioxbio: { ...initialTaskState },
@@ -58,6 +91,7 @@ export const useCrawlerStore = create<CrawlerStoreState>((set) => ({
   clarivate: { ...initialTaskState },
   integrator: { ...initialTaskState },
   unified: { ...initialTaskState },
+  scholarQueue: { ...initialScholarQueueState },
 
   setTaskState: (key, state) =>
     set((prev) => ({
@@ -97,4 +131,53 @@ export const useCrawlerStore = create<CrawlerStoreState>((set) => ({
         consoleLogs: [],
       },
     })),
+
+  addToScholarQueue: (items) =>
+    set((prev) => ({
+      scholarQueue: {
+        ...prev.scholarQueue,
+        queue: [...prev.scholarQueue.queue, ...items],
+      },
+    })),
+
+  updateScholarQueueItem: (id, updates) =>
+    set((prev) => ({
+      scholarQueue: {
+        ...prev.scholarQueue,
+        queue: prev.scholarQueue.queue.map((item) =>
+          item.id === id ? { ...item, ...updates } : item
+        ),
+      },
+    })),
+
+  removeFromScholarQueue: (id) =>
+    set((prev) => ({
+      scholarQueue: {
+        ...prev.scholarQueue,
+        queue: prev.scholarQueue.queue.filter((item) => item.id !== id),
+        selectedQueueId:
+          prev.scholarQueue.selectedQueueId === id
+            ? null
+            : prev.scholarQueue.selectedQueueId,
+      },
+    })),
+
+  setSelectedQueueId: (id) =>
+    set((prev) => ({
+      scholarQueue: {
+        ...prev.scholarQueue,
+        selectedQueueId: id,
+      },
+    })),
+
+  clearScholarQueue: () =>
+    set((prev) => ({
+      scholarQueue: {
+        ...prev.scholarQueue,
+        queue: [],
+        activeTaskIds: [],
+        selectedQueueId: null,
+      },
+    })),
 }))
+
