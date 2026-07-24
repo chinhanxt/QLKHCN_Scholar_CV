@@ -14,7 +14,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from apps.core.permissions import IsAdminUser
 from apps.scholar.models import (
     AuthorProfile, AutoScanConfig, AntiBlockConfig,
-    ScholarProfile, ScholarPublication, ProfileStatus,
+    ScholarProfile, ScholarPublication, ProfileStatus, RequestType,
 )
 from apps.scholar.scholarly.tor_helper import renew_tor_ip, get_tor_status
 from apps.scholar.tasks import scrape_author_cv_smart_task
@@ -951,6 +951,11 @@ class UserScholarProfileViewSet(ViewSet):
         serializer = ProfileSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        if profile.approved_at or (profile.status and profile.status != ProfileStatus.DRAFT) or profile.scholar_url:
+            profile.request_type = RequestType.UPDATE
+        else:
+            profile.request_type = RequestType.NEW
+
         url = serializer.validated_data["scholar_url"]
         match = re_search(r"user=([a-zA-Z0-9_-]+)", url)
         scholar_id = match.group(1) if match else None
@@ -1017,7 +1022,70 @@ class UserScholarProfileViewSet(ViewSet):
                 "source": "database"
             })
 
-        # 2. Try live scraping using scholarly / Tor
+        # 2. Fast direct live HTTP scrape from Google Scholar Web
+        try:
+            import requests
+            from bs4 import BeautifulSoup
+
+            url = f"https://scholar.google.com/citations?user={scholar_id}&hl=en"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
+            res = requests.get(url, headers=headers, timeout=8)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, 'html.parser')
+                name_el = soup.find('div', id='gsc_prf_in')
+                if name_el and name_el.text.strip():
+                    name = name_el.text.strip()
+                    aff_el = soup.find('div', class_='gsc_prf_il')
+                    affiliation = aff_el.text.strip() if aff_el else ""
+
+                    email_el = soup.find('div', id="gsc_prf_ivh", class_="gsc_prf_il")
+                    email_domain = ""
+                    if email_el and email_el.text:
+                        import re
+                        match = re.search(r'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', email_el.text)
+                        if match:
+                            email_domain = '@' + match.group(1).lstrip('@')
+
+                    indices = soup.find_all('td', class_='gsc_rsb_std')
+                    citedby = int(indices[0].text) if len(indices) > 0 and indices[0].text.isdigit() else 0
+                    hindex = int(indices[2].text) if len(indices) > 2 and indices[2].text.isdigit() else 0
+                    i10index = int(indices[4].text) if len(indices) > 4 and indices[4].text.isdigit() else 0
+
+                    interests = [a.text.strip() for a in soup.find_all('a', class_='gsc_prf_inta')]
+
+                    # Create or update AuthorProfile in database for future fast access
+                    AuthorProfile.objects.update_or_create(
+                        scholar_id=scholar_id,
+                        defaults={
+                            "name": name,
+                            "affiliation": affiliation,
+                            "email_domain": email_domain,
+                            "citedby": citedby,
+                            "hindex": hindex,
+                            "i10index": i10index,
+                            "interests": interests,
+                        }
+                    )
+
+                    return Response({
+                        "found": True,
+                        "scholar_id": scholar_id,
+                        "name": name,
+                        "affiliation": affiliation,
+                        "email_domain": email_domain,
+                        "citedby": citedby,
+                        "hindex": hindex,
+                        "i10index": i10index,
+                        "interests": interests,
+                        "source": "live_web"
+                    })
+        except Exception as e:
+            logger.warning(f"Quick preview direct live scrape failed for {scholar_id}: {e}")
+
+        # 3. Fallback to scholarly / Tor if direct fetch failed
         try:
             from apps.scholar.scholarly._scholarly import scholarly
             search_query = scholarly.search_author_id(scholar_id)
@@ -1031,6 +1099,19 @@ class UserScholarProfileViewSet(ViewSet):
                 interests = author_dict.get('interests', [])
                 email_domain = author_dict.get('email_domain', '')
 
+                AuthorProfile.objects.update_or_create(
+                    scholar_id=scholar_id,
+                    defaults={
+                        "name": name,
+                        "affiliation": affiliation,
+                        "email_domain": email_domain,
+                        "citedby": citedby,
+                        "hindex": hindex,
+                        "i10index": i10index,
+                        "interests": interests,
+                    }
+                )
+
                 return Response({
                     "found": True,
                     "scholar_id": scholar_id,
@@ -1041,10 +1122,10 @@ class UserScholarProfileViewSet(ViewSet):
                     "hindex": hindex,
                     "i10index": i10index,
                     "interests": interests,
-                    "source": "live_scholar"
+                    "source": "live_scholarly"
                 })
         except Exception as e:
-            logger.warning(f"Quick preview live scrape failed for {scholar_id}: {e}")
+            logger.warning(f"Quick preview scholarly scrape failed for {scholar_id}: {e}")
 
         return Response({
             "found": False,

@@ -1,7 +1,7 @@
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from rest_framework.test import APIClient, APIRequestFactory
+from rest_framework.test import APIClient, APIRequestFactory, APITestCase
 
 from apps.core.permissions import IsAdminUser
 from apps.core.permissions import IsProfileOwner
@@ -262,5 +262,25 @@ def test_user_portal_profile_submission_url_validation_failures():
     )
     assert res_missing_user.status_code == 400
     assert "user=ID" in str(res_missing_user.data["scholar_url"][0])
+
+
+class UserPortalTests(APITestCase):
+    def test_submit_profile_request_type(self):
+        """
+        Verify initial submit sets request_type to NEW, and subsequent submit sets request_type to UPDATE.
+        """
+        user = User.objects.create_user(email="testrequesttype@example.com", username="testrequesttype", password="password123")
+        self.client.force_authenticate(user=user)
+
+        # Initial submit -> request_type should be NEW
+        res = self.client.post("/api/v1/scholar/me/profile/submit/", {"scholar_url": "https://scholar.google.com/citations?user=SCHOLAR_USER_1"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["request_type"], "NEW")
+
+        # Re-submit after approval or initial submission -> request_type should be UPDATE
+        res2 = self.client.post("/api/v1/scholar/me/profile/submit/", {"scholar_url": "https://scholar.google.com/citations?user=SCHOLAR_USER_1"})
+        self.assertEqual(res2.status_code, 200)
+        self.assertEqual(res2.data["request_type"], "UPDATE")
+
 
 

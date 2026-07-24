@@ -549,6 +549,11 @@ class ProfileStatus(models.TextChoices):
     REJECTED = "REJECTED", _("Từ chối")
 
 
+class RequestType(models.TextChoices):
+    NEW = "NEW", _("Hồ sơ mới")
+    UPDATE = "UPDATE", _("Yêu cầu cập nhật")
+
+
 class ScholarProfile(BaseModel):
     """
     Scholar profile associated with a user for tracking academic publications.
@@ -570,6 +575,13 @@ class ScholarProfile(BaseModel):
         max_length=20,
         choices=ProfileStatus.choices,
         default=ProfileStatus.DRAFT,
+        db_index=True,
+    )
+    request_type = models.CharField(
+        _("Request Type"),
+        max_length=20,
+        choices=RequestType.choices,
+        default=RequestType.NEW,
         db_index=True,
     )
     submitted_at = models.DateTimeField(_("Submitted At"), blank=True, null=True)

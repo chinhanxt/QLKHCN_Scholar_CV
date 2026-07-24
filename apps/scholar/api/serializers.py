@@ -3,7 +3,7 @@ from rest_framework import serializers
 from apps.scholar.models import (
     AuthorProfile, Publication, Journal,
     BioxbioJournal, BioxbioRanking, ScimagoJournal, ScimagoRanking, ClarivateJournal,
-    AntiBlockConfig, ScholarProfile, ScholarPublication, ProfileStatus,
+    AntiBlockConfig, ScholarProfile, ScholarPublication, ProfileStatus, RequestType,
 )
 
 
@@ -254,6 +254,7 @@ class ScholarProfileSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source="user.email", read_only=True)
     publications = ScholarPublicationSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    request_type_display = serializers.CharField(source="get_request_type_display", read_only=True)
     author_detail = serializers.SerializerMethodField()
 
     class Meta:
@@ -265,6 +266,8 @@ class ScholarProfileSerializer(serializers.ModelSerializer):
             "scholar_id",
             "status",
             "status_display",
+            "request_type",
+            "request_type_display",
             "submitted_at",
             "approved_at",
             "total_citations",
