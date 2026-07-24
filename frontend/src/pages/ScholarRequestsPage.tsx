@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Search,
   FileText,
+  RefreshCw,
 } from 'lucide-react'
 import { useAdminProfiles, useApproveProfile } from '@/api/hooks/useUserPortal'
 import { useCrawlerStore, type QueueItemState } from '@/stores/crawler.store'
@@ -206,12 +207,18 @@ export function ScholarRequestsPage() {
                   </TD>
                   <TD className="py-3.5 px-4">
                     {p.status === 'PENDING' ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 border border-amber-200/80">
-                        <Clock className="h-3.5 w-3.5 text-amber-600" /> Đang chờ duyệt
-                      </span>
+                      p.request_type === 'UPDATE' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 border border-amber-200/80">
+                          <RefreshCw className="h-3.5 w-3.5 text-amber-600" /> Yêu cầu cập nhật
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 border border-blue-200/80">
+                          <Clock className="h-3.5 w-3.5 text-blue-600" /> Hồ sơ mới
+                        </span>
+                      )
                     ) : p.status === 'APPROVED' ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/80">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Đã duyệt & Gửi
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Đã phê duyệt
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 border border-slate-200">
@@ -232,12 +239,21 @@ export function ScholarRequestsPage() {
                         size="sm"
                         onClick={() => handleScanNewProfile(p)}
                         disabled={scanningId !== null}
-                        className="h-8 px-3.5 text-xs bg-[#005b9a] hover:bg-[#00487a] text-white font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 ml-auto shadow-2xs disabled:opacity-50"
+                        className={`h-8 px-3.5 text-xs text-white font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 ml-auto shadow-2xs disabled:opacity-50 ${
+                          p.request_type === 'UPDATE'
+                            ? 'bg-amber-600 hover:bg-amber-700'
+                            : 'bg-[#005b9a] hover:bg-[#00487a]'
+                        }`}
                       >
                         {scanningId === p.id ? (
                           <>
                             <Spinner className="h-3.5 w-3.5 text-white" />
                             <span>Đang kích hoạt...</span>
+                          </>
+                        ) : p.request_type === 'UPDATE' ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            <span>Quét cập nhật</span>
                           </>
                         ) : (
                           <>
