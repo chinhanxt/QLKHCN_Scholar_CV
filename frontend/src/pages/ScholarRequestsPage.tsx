@@ -5,8 +5,10 @@ import {
   CheckCircle2,
   ExternalLink,
   Search,
+  FileText,
 } from 'lucide-react'
 import { useAdminProfiles, useApproveProfile } from '@/api/hooks/useUserPortal'
+import { useCrawlerStore, type QueueItemState } from '@/stores/crawler.store'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,11 +17,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table'
 
 export function ScholarRequestsPage() {
-  const { data: profiles, isLoading, isError, error } = useAdminProfiles()
+  const { data: profiles, isLoading, isError, error, refetch } = useAdminProfiles()
   const approveProfile = useApproveProfile()
+  const addToScholarQueue = useCrawlerStore((state) => state.addToScholarQueue)
+  const scholarQueue = useCrawlerStore((state) => state.scholarQueue)
+
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all')
   const [search, setSearch] = useState('')
-  const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [scanningId, setScanningId] = useState<string | null>(null)
 
   // Bảng chỉ hiển thị các user thực sự ĐÃ GỬI YÊU CẦU (Bỏ qua các user chưa gửi / DRAFT không có URL)
   const submittedProfiles = useMemo(() => {
@@ -60,15 +65,57 @@ export function ScholarRequestsPage() {
     })
   }, [submittedProfiles, filter, search])
 
-  const handleApprove = async (profileId: string, email?: string) => {
-    setApprovingId(profileId)
+  // Helper to extract Scholar ID from profile object or URL
+  const getScholarIdFromProfile = (p: any): string | null => {
+    if (p.scholar_id && p.scholar_id.trim()) return p.scholar_id.trim()
+    if (p.scholar_url) {
+      const match = p.scholar_url.match(/user=([a-zA-Z0-9_-]{10,16})/)
+      if (match) return match[1]
+    }
+    return null
+  }
+
+  // Handler to approve profile and enqueue to scholar batch queue
+  const handleScanNewProfile = async (profile: any) => {
+    const scholarId = getScholarIdFromProfile(profile)
+    if (!scholarId) {
+      toast.error('Không tìm thấy Google Scholar ID hợp lệ từ đường dẫn của người dùng.')
+      return
+    }
+
+    const isAlreadyInQueue = scholarQueue.queue.some(
+      (item) => item.id === profile.id || (scholarId && item.scholarId === scholarId)
+    )
+    if (isAlreadyInQueue) {
+      toast.info(`Hồ sơ ${profile.user_email || 'này'} đã có trong hàng đợi cào ngầm!`)
+      return
+    }
+
+    setScanningId(profile.id)
     try {
-      await approveProfile.mutateAsync(profileId)
-      toast.success(`Đã duyệt và gửi hồ sơ cho người dùng ${email || ''} thành công!`)
+      // 1. Approve profile in database
+      await approveProfile.mutateAsync(profile.id)
+
+      // 2. Add queue item to scholarQueue
+      const queueItem: QueueItemState = {
+        id: profile.id || crypto.randomUUID(),
+        scholarId: scholarId,
+        userEmail: profile.user_email || profile.full_name || 'N/A',
+        status: 'PENDING',
+        progress: 0,
+        taskId: null,
+        consoleLogs: [],
+      }
+
+      addToScholarQueue([queueItem])
+
+      // 3. Confirmation toast & refetch status without navigating away
+      toast.success(`🚀 Đã thêm ${profile.user_email} vào hàng đợi cào ngầm!`)
+      refetch()
     } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Duyệt hồ sơ thất bại'))
+      toast.error(getApiErrorMessage(err, 'Không thể kích hoạt quét hồ sơ'))
     } finally {
-      setApprovingId(null)
+      setScanningId(null)
     }
   }
 
@@ -183,15 +230,26 @@ export function ScholarRequestsPage() {
                     {p.status === 'PENDING' ? (
                       <Button
                         size="sm"
-                        onClick={() => handleApprove(p.id, p.user_email)}
-                        disabled={approvingId !== null}
-                        className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg cursor-pointer flex items-center gap-1 ml-auto shadow-2xs"
+                        onClick={() => handleScanNewProfile(p)}
+                        disabled={scanningId !== null}
+                        className="h-8 px-3.5 text-xs bg-[#005b9a] hover:bg-[#00487a] text-white font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 ml-auto shadow-2xs disabled:opacity-50"
                       >
-                        {approvingId === p.id && <Spinner className="mr-1" />}
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Duyệt & Gửi cho User
+                        {scanningId === p.id ? (
+                          <>
+                            <Spinner className="h-3.5 w-3.5 text-white" />
+                            <span>Đang kích hoạt...</span>
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="h-3.5 w-3.5" />
+                            <span>Quét hồ sơ mới</span>
+                          </>
+                        )}
                       </Button>
                     ) : (
-                      <span className="text-xs text-emerald-600 font-semibold">✓ Đã duyệt</span>
+                      <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                        ✓ Đã duyệt & Quét
+                      </span>
                     )}
                   </TD>
                 </TR>
