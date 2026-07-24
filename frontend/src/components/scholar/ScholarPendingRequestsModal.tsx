@@ -5,11 +5,10 @@ import {
   CheckSquare,
   Square,
   Play,
-  Sparkles,
   ExternalLink,
-  Layers,
   Database,
   UserCheck,
+  FileText,
 } from 'lucide-react'
 import { Dialog } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -67,12 +66,12 @@ export function ScholarPendingRequestsModal({
     enabled: isModalOpen,
   })
 
-  // Set of scholar_ids existing in DB
+  // Set of scholar_ids existing in DB (must have publications or full scrape data)
   const existingScholarIds = useMemo(() => {
     const set = new Set<string>()
     if (dbAuthors) {
       dbAuthors.forEach((author: any) => {
-        if (author.scholar_id) {
+        if (author.scholar_id && author.scholar_id.trim()) {
           set.add(author.scholar_id.trim().toLowerCase())
         }
       })
@@ -80,19 +79,13 @@ export function ScholarPendingRequestsModal({
     return set
   }, [dbAuthors])
 
-  // Filter profiles that are pending or submitted with valid scholar_url/scholar_id
+  // Filter profiles that are strictly PENDING with valid scholar_url/scholar_id
   const pendingProfiles = useMemo(() => {
     if (!profiles) return []
     return profiles.filter((p: ScholarProfile) => {
       const extractedId = extractScholarId(p.scholar_url, p.scholar_id)
       if (!extractedId) return false
-
-      const isPendingOrSubmitted =
-        p.status === 'PENDING' ||
-        Boolean(p.submitted_at) ||
-        (p.status !== 'DRAFT' && Boolean(p.scholar_url || p.scholar_id))
-
-      return isPendingOrSubmitted
+      return p.status === 'PENDING'
     })
   }, [profiles])
 
@@ -182,7 +175,7 @@ export function ScholarPendingRequestsModal({
       className="max-w-3xl"
       title={
         <div className="flex items-center gap-2 text-slate-900">
-          <Layers className="h-5 w-5 text-indigo-600" />
+          <FileText className="h-5 w-5 text-slate-700" />
           <span>Chọn yêu cầu cào hàng loạt Google Scholar</span>
         </div>
       }
@@ -195,10 +188,10 @@ export function ScholarPendingRequestsModal({
               Tổng số yêu cầu: <strong className="text-slate-900">{profileItems.length}</strong>
             </span>
             <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-              <Sparkles className="h-4 w-4 text-emerald-500" /> Mới 100%: <strong>{newCount}</strong>
+              <FileText className="h-4 w-4 text-slate-600" /> Mới 100%: <strong>{newCount}</strong>
             </span>
             <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
-              <Database className="h-4 w-4 text-amber-500" /> Đã có trong DB: <strong>{existingCount}</strong>
+              <Database className="h-4 w-4 text-amber-500" /> Đã có trong cơ sở dữ liệu: <strong>{existingCount}</strong>
             </span>
           </div>
           <div className="text-xs text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200 font-medium">
@@ -313,7 +306,7 @@ export function ScholarPendingRequestsModal({
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                            <span>🟡</span> Đã có trong DB
+                            <span>🟡</span> Đã có trong cơ sở dữ liệu
                           </span>
                         )}
                       </td>

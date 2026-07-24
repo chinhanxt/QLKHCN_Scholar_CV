@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { scholarApi } from '@/api/endpoints/scholar'
 import type { AuthorCandidate, AuthorProfileDetail, PublicationDetail } from '@/api/endpoints/scholar'
 import { Card } from '@/components/ui/card'
-import { TerminalWindow } from '@/components/ui/TerminalWindow'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -14,15 +13,12 @@ import { ScholarQueueDashboard } from '@/components/scholar/ScholarQueueDashboar
 import { useAdminProfiles } from '@/api/hooks/useUserPortal'
 import { 
   Search, 
-  TrendingUp, 
   Download, 
   FileText,
   Edit,
-  CheckCircle2,
   BookOpen,
   Trash2,
   X,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
   GraduationCap
@@ -44,14 +40,11 @@ export function ScholarScraperPage() {
     const saved = localStorage.getItem('scholar_profile')
     return saved ? JSON.parse(saved) : null
   })
+  const profileCache = useRef<Map<string, AuthorProfileDetail>>(new Map())
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
   const [isL2Running, setIsL2Running] = useState(() => localStorage.getItem('scholar_isL2Running') === 'true')
   const [completedL2Authors, setCompletedL2Authors] = useState<string[]>(() => {
     const saved = localStorage.getItem('scholar_completedL2Authors')
-    return saved ? JSON.parse(saved) : []
-  })
-  const [dismissedBanners, setDismissedBanners] = useState<string[]>(() => {
-    const saved = localStorage.getItem('scholar_dismissedBanners')
     return saved ? JSON.parse(saved) : []
   })
   const [selectedPublication, setSelectedPublication] = useState<any | null>(null)
@@ -112,16 +105,20 @@ export function ScholarScraperPage() {
       const extractedId =
         p.scholar_id || (p.scholar_url ? p.scholar_url.match(/user=([a-zA-Z0-9_-]+)/)?.[1] : null)
       if (!extractedId) return false
-      return (
-        p.status === 'PENDING' ||
-        Boolean(p.submitted_at) ||
-        (p.status !== 'DRAFT' && Boolean(p.scholar_url || p.scholar_id))
-      )
+
+      const authorDetail = (p as any).author_detail
+      const pubCount = authorDetail?.publications?.length || authorDetail?.publication_count_cached || authorDetail?.publications_count || (p as any).publications?.length || 0
+      const hasScrapedAt = Boolean(authorDetail?.last_scraped_at) || Boolean((p as any).last_scraped_at)
+      const hasData = pubCount > 0 && hasScrapedAt
+
+      return p.status === 'PENDING' && !hasData
     }).length
   }, [adminProfiles])
 
   // Scholar Batch Queue Store
   const scholarQueue = useCrawlerStore((state) => state.scholarQueue)
+  const addToScholarQueue = useCrawlerStore((state) => state.addToScholarQueue)
+  const setSelectedQueueId = useCrawlerStore((state) => state.setSelectedQueueId)
   const updateScholarQueueItem = useCrawlerStore((state) => state.updateScholarQueueItem)
   const setActiveTaskIds = useCrawlerStore((state) => state.setActiveTaskIds)
 
@@ -149,7 +146,7 @@ export function ScholarScraperPage() {
         })
 
         scholarApi
-          .scrapeAuthor(nextItem.scholarId, 0)
+          .scrapeAuthor(nextItem.scholarId, 0, true)
           .then((res) => {
             const taskId = res.data.task_id
             updateScholarQueueItem(nextItem.id, {
@@ -225,11 +222,9 @@ export function ScholarScraperPage() {
 
             setActiveTaskIds((prev) => prev.filter((id) => id !== item.taskId))
 
-            if (scholarQueue.selectedQueueId === item.id) {
-              const scId = res.result?.author?.scholar_id || item.scholarId
-              if (scId) {
-                loadProfile(scId)
-              }
+            const scId = res.result?.author?.scholar_id || item.scholarId
+            if (scId) {
+              loadProfile(scId)
             }
           } else if (res.status === 'FAILURE') {
             const currentLogs = item.consoleLogs || []
@@ -267,12 +262,12 @@ export function ScholarScraperPage() {
       setTaskState('scholar', { consoleLogs: selectedItem.consoleLogs })
     }
 
-    if (selectedItem.status === 'SUCCESS') {
-      if (selectedItem.resultData?.author) {
-        setProfile(selectedItem.resultData.author)
-      } else if (selectedItem.scholarId && profile?.scholar_id !== selectedItem.scholarId) {
-        loadProfile(selectedItem.scholarId)
+    const scId = selectedItem.resultData?.author?.scholar_id || selectedItem.scholarId
+    if (scId) {
+      if (profileCache.current.has(scId)) {
+        setProfile(profileCache.current.get(scId)!)
       }
+      loadProfile(scId)
     }
   }, [scholarQueue.selectedQueueId, scholarQueue.queue])
 
@@ -286,9 +281,7 @@ export function ScholarScraperPage() {
     localStorage.setItem('scholar_completedL2Authors', JSON.stringify(completedL2Authors))
   }, [completedL2Authors])
 
-  useEffect(() => {
-    localStorage.setItem('scholar_dismissedBanners', JSON.stringify(dismissedBanners))
-  }, [dismissedBanners])
+
 
   useEffect(() => {
     localStorage.setItem('scholar_authorInput', authorInput)
@@ -344,8 +337,7 @@ export function ScholarScraperPage() {
     }
   }, [selectedPublication])
   
-  // Scraper Task state from Zustand Store
-  const { taskId, taskStatus, progress, consoleLogs } = useCrawlerStore((state) => state.scholar)
+  const { taskId, taskStatus } = useCrawlerStore((state) => state.scholar)
   const setTaskState = useCrawlerStore((state) => state.setTaskState)
   const addConsoleLog = useCrawlerStore((state) => state.addConsoleLog)
   const clearLogs = useCrawlerStore((state) => state.clearLogs)
@@ -419,15 +411,24 @@ export function ScholarScraperPage() {
   }, [taskId, setTaskState, addConsoleLog, isL2Running])
 
   const loadProfile = async (scholarId: string) => {
-    if (!profile) {
+    if (!scholarId) return
+
+    if (profileCache.current.has(scholarId)) {
+      setProfile(profileCache.current.get(scholarId)!)
+      setIsLoadingProfile(false)
+    } else if (!profile || profile.scholar_id !== scholarId) {
       setIsLoadingProfile(true)
     }
+
     try {
       const p = await scholarApi.getAuthor(scholarId).then((r) => r.data)
-      setProfile(p)
-      setDeletedPublications([]) // Reset trash bin when loading a new profile
+      if (p) {
+        profileCache.current.set(scholarId, p)
+        setProfile(p)
+        setDeletedPublications([])
+      }
     } catch (err) {
-      toast.error('Không thể nạp hồ sơ chi tiết tác giả.')
+      console.error(`Lỗi loadProfile cho ${scholarId}:`, err)
     } finally {
       setIsLoadingProfile(false)
     }
@@ -469,21 +470,31 @@ export function ScholarScraperPage() {
     
     if (parsed.isId || searchMode === 'id') {
       const targetId = parsed.isId ? parsed.id : trimmedInput
-      try {
-        clearLogs('scholar')
-        addConsoleLog('scholar', '[System] Kích hoạt tiến trình cào Google Scholar...')
-        addConsoleLog('scholar', `[System] Google Scholar ID: ${targetId}`)
-        addConsoleLog('scholar', `[System] Chế độ: Cào lần 1 bằng Link/ID (Giới hạn: ${scrapeLimit === 0 ? 'Không giới hạn' : `${scrapeLimit} bài báo`})`)
-        addConsoleLog('scholar', '[System] Đang gửi tác vụ Celery...')
-        
-        setTaskState('scholar', { taskStatus: 'PENDING', progress: 5 })
-        const res = await scholarApi.scrapeAuthor(targetId, scrapeLimit).then((r) => r.data)
-        setTaskState('scholar', { taskId: res.task_id })
-      } catch (err: any) {
-        toast.error('Lỗi khởi chạy tác vụ cào.')
-        addConsoleLog('scholar', `[System] Lỗi: ${err.message}`)
-        setTaskState('scholar', { taskStatus: 'IDLE' })
+      
+      const existing = scholarQueue.queue.find((i) => i.scholarId === targetId)
+      if (existing) {
+        setSelectedQueueId(existing.id)
+        if (profileCache.current.has(targetId)) {
+          setProfile(profileCache.current.get(targetId)!)
+        }
+        loadProfile(targetId)
+        toast.info(`Hồ sơ ${targetId} đã có trong hàng đợi xử lý.`)
+        return
       }
+
+      const newItem = {
+        id: `q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        scholarId: targetId,
+        userEmail: '',
+        status: 'PENDING' as const,
+        progress: 0,
+        taskId: null,
+        consoleLogs: [`[System] Kích hoạt cào tự động tác giả ${targetId}...`],
+      }
+
+      addToScholarQueue([newItem])
+      setSelectedQueueId(newItem.id)
+      toast.success(`🚀 Đã thêm tác giả ${targetId} vào hàng đợi cào tự động!`)
     } else {
       setIsSearching(true)
       try {
@@ -503,43 +514,31 @@ export function ScholarScraperPage() {
   const triggerCandidateScrape = async (scholarId: string, name: string) => {
     setCandidates([])
     setSelectedPublication(null)
-    try {
-      clearLogs('scholar')
-      addConsoleLog('scholar', `[System] Khởi động tác vụ cào cho ứng viên: ${name}`)
-      addConsoleLog('scholar', `[System] Google Scholar ID: ${scholarId}`)
-      addConsoleLog('scholar', `[System] Chế độ: Cào lần 1 (Giới hạn: ${scrapeLimit === 0 ? 'Không giới hạn' : `${scrapeLimit} bài báo`})`)
-      
-      setTaskState('scholar', { taskStatus: 'PENDING', progress: 5 })
-      const res = await scholarApi.scrapeAuthor(scholarId, scrapeLimit).then((r) => r.data)
-      setTaskState('scholar', { taskId: res.task_id })
-    } catch (err: any) {
-      toast.error('Lỗi kích hoạt cào ứng viên.')
-      addConsoleLog('scholar', `[System] Lỗi: ${err.message}`)
-      setTaskState('scholar', { taskStatus: 'IDLE' })
+
+    const existing = scholarQueue.queue.find((i) => i.scholarId === scholarId)
+    if (existing) {
+      setSelectedQueueId(existing.id)
+      loadProfile(scholarId)
+      toast.info(`Hồ sơ ${name} (${scholarId}) đã có trong hàng đợi.`)
+      return
     }
+
+    const newItem = {
+      id: `q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      scholarId,
+      userEmail: name,
+      status: 'PENDING' as const,
+      progress: 0,
+      taskId: null,
+      consoleLogs: [`[System] Kích hoạt cào ứng viên tác giả ${name} (${scholarId})...`],
+    }
+
+    addToScholarQueue([newItem])
+    setSelectedQueueId(newItem.id)
+    toast.success(`🚀 Đã thêm ứng viên ${name} vào hàng đợi cào tự động!`)
   }
 
-  const triggerDetailedScrape = async () => {
-    if (!profile) return
-    try {
-      clearLogs('scholar')
-      addConsoleLog('scholar', `[System] Khởi động tác vụ cào CHI TIẾT (Quét lần 2) cho: ${profile.name}`)
-      addConsoleLog('scholar', `[System] Google Scholar ID: ${profile.scholar_id}`)
-      addConsoleLog('scholar', `[System] Chế độ: Quét chi tiết dựa trên danh sách lần 1 (Số lượng: ${profile.publications.length} bài)`)
-      
-      setIsL2Running(true)
-      setDismissedBanners((prev) => prev.filter((id) => id !== profile.scholar_id))
-      setTaskState('scholar', { taskStatus: 'PENDING', progress: 5 })
-      const res = await scholarApi.scrapeAuthor(profile.scholar_id, profile.publications.length, true).then((r) => r.data)
-      setTaskState('scholar', { taskId: res.task_id })
-      toast.info('Đang bắt đầu quét chi tiết (Lần 2)...')
-    } catch (err: any) {
-      toast.error('Lỗi kích hoạt quét chi tiết.')
-      addConsoleLog('scholar', `[System] Lỗi: ${err.message}`)
-      setTaskState('scholar', { taskStatus: 'IDLE' })
-      setIsL2Running(false)
-    }
-  }
+
 
   // Handle Export to Excel
   const handleExport = async () => {
@@ -973,40 +972,13 @@ export function ScholarScraperPage() {
   const recentCitationValues = citationValues.slice(-8)
   const maxRecentCites = Math.max(...recentCitationValues.map((v) => v.count), 1)
 
-  const activeStep: number = (() => {
-    if (profile) return 5
-    if (taskStatus === 'PENDING' || taskStatus === 'PROGRESS') return 3
-    if (candidates.length > 0) return 2
-    return 1
-  })()
 
-  const isScraping = taskStatus === 'PENDING' || taskStatus === 'PROGRESS'
 
-  const hasDetailedData = Boolean(
-    profile?.publications?.some(
-      (p) =>
-        (p.cites_per_year && Object.keys(p.cites_per_year).length > 0) ||
-        Boolean(p.cites_id) ||
-        Boolean(p.pub_url) ||
-        Boolean(p.description) ||
-        Boolean(p.volume) ||
-        Boolean(p.pages)
-    )
-  )
 
-  const isAuthorL2Completed = Boolean(
-    profile && (completedL2Authors.includes(profile.scholar_id) || hasDetailedData)
-  )
 
-  const isBannerDismissed = Boolean(
-    profile?.scholar_id && dismissedBanners.includes(profile.scholar_id)
-  )
 
-  const handleDismissBanner = () => {
-    if (profile?.scholar_id) {
-      setDismissedBanners((prev) => (prev.includes(profile.scholar_id) ? prev : [...prev, profile.scholar_id]))
-    }
-  }
+
+
 
   // Dynamic DOI generator
   const getDoi = (pub: any) => {
@@ -1288,60 +1260,10 @@ export function ScholarScraperPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-16 text-[#0F172A] font-sans antialiased custom-scrollbar">
       
-      {/* Scholar Queue Dashboard */}
-      <ScholarQueueDashboard className="mb-6" />
-      
-      {/* 1. Dashboard Controls Bar & Workflow (Sleek and Clean) */}
+      {/* 1. Dashboard Controls Bar & Workflow */}
       <div className="mb-6 flex flex-col gap-4">
         
-        {/* Stepper Banner */}
-        <div className="flex items-center justify-between bg-white border border-[#E5E7EB] rounded-2xl p-3 shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#DBEAFE] text-[#2563EB]">
-              <Sparkles className="h-3 w-3" />
-            </span>
-            <span className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Hệ thống đồng bộ Scholar</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs font-bold overflow-x-auto custom-scrollbar py-0.5">
-            {[
-              { id: 1, label: 'Nhập tên' },
-              { id: 2, label: 'Chọn Author' },
-              { id: 3, label: 'Crawl Celery' },
-              { id: 4, label: 'Theo dõi Logs' },
-              { id: 5, label: 'Xem Báo cáo' }
-            ].map((step, idx) => {
-              const isActive = activeStep === step.id || (step.id === 4 && activeStep === 3)
-              const isCompleted = activeStep > step.id
-              return (
-                <div key={step.id} className="flex items-center shrink-0">
-                  <div className={cn(
-                    "flex items-center gap-1.5 px-3 py-1 rounded-full border",
-                    isActive 
-                      ? "bg-[#DBEAFE] border-[#93C5FD] text-[#2563EB]" 
-                      : isCompleted
-                        ? "bg-emerald-50 border-emerald-100 text-[#22C55E]"
-                        : "bg-slate-50 border-transparent text-[#64748B]"
-                  )}>
-                    <span className={cn(
-                      "w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
-                      isActive
-                        ? "bg-[#2563EB] text-white"
-                        : isCompleted
-                          ? "bg-[#22C55E] text-white"
-                          : "bg-slate-200 text-slate-500"
-                    )}>
-                      {step.id}
-                    </span>
-                    <span>{step.label}</span>
-                  </div>
-                  {idx < 4 && <span className="mx-1 text-slate-350 select-none">/</span>}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Dynamic Toolbar for Crawler Actions */}
+        {/* Search & Scrape Toolbar (Placed at the VERY TOP) */}
         <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-sm flex flex-col gap-3.5">
           <label className="text-xs font-bold text-[#64748B] uppercase tracking-wider">
             Tìm kiếm hoặc Dán Link Google Scholar tác giả
@@ -1391,15 +1313,16 @@ export function ScholarScraperPage() {
             <button
               type="button"
               onClick={() => setIsPendingRequestsModalOpen(true)}
-              className="w-full sm:w-auto shrink-0 px-4 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-sm border border-indigo-200 shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
+              className="w-full sm:w-auto shrink-0 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm border border-slate-200 shadow-2xs flex items-center justify-center gap-2 cursor-pointer transition-all"
             >
-              <span>📋 Xem yêu cầu hồ sơ ({pendingCount})</span>
+              <FileText className="w-4 h-4 text-slate-600 shrink-0" />
+              <span>Danh sách yêu cầu chờ cào ({pendingCount})</span>
             </button>
           </div>
 
           {/* Sub Row: Scrape Limit Options */}
           <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-            <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Quét lần 1:</span>
+            <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Giới hạn số bài:</span>
             <div className="flex gap-1.5 flex-wrap">
               {[10, 50, 100, 0].map((val) => (
                 <button
@@ -1419,6 +1342,9 @@ export function ScholarScraperPage() {
             </div>
           </div>
         </div>
+
+        {/* Scholar Queue Progress Dashboard (Light Theme) */}
+        <ScholarQueueDashboard className="mt-1 mb-2" />
       </div>
 
       {/* 2. Candidates Author List */}
@@ -1477,30 +1403,14 @@ export function ScholarScraperPage() {
 
       {/* 3. Empty Onboarding State */}
       {!isLoadingProfile && !profile && candidates.length === 0 && (
-        <div className="flex flex-col items-center justify-center text-center py-20 bg-white border border-[#E5E7EB] rounded-3xl p-8 shadow-sm max-w-3xl mx-auto my-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#DBEAFE] text-[#2563EB] mb-4">
-            <BookOpen className="h-8 w-8" />
+        <div className="flex flex-col items-center justify-center text-center py-16 bg-white border border-[#E5E7EB] rounded-3xl p-8 shadow-sm max-w-xl mx-auto my-6">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F1F5F9] text-[#64748B] mb-4">
+            <BookOpen className="h-7 w-7" />
           </div>
-          <h2 className="text-xl font-bold text-[#0F172A]">Chưa nạp hồ sơ Google Scholar</h2>
-          <p className="text-sm text-[#64748B] max-w-md mt-2">
-            Vui lòng nhập tên nhà khoa học hoặc dán link hồ sơ Google Scholar ở thanh tìm kiếm phía trên để tải toàn bộ thông tin công bố và đối khớp chỉ số khoa học.
+          <h2 className="text-lg font-bold text-[#0F172A]">Dữ liệu trống</h2>
+          <p className="text-sm text-[#64748B] max-w-sm mt-1.5 leading-relaxed">
+            Vui lòng nhập tên nhà khoa học hoặc link hồ sơ Google Scholar ở thanh tìm kiếm phía trên để nạp dữ liệu.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 w-full max-w-lg text-left">
-            <div className="p-4 rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC]">
-              <h4 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-[#22C55E]" />
-                Tính năng so khớp chỉ số
-              </h4>
-              <p className="text-[11px] text-[#64748B] mt-1">Đồng bộ tự động thứ hạng tạp chí khoa học Scimago Q1/Q2/Q3/Q4, chỉ số IF từ Bioxbio, và danh mục WoS Core Collection.</p>
-            </div>
-            <div className="p-4 rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC]">
-              <h4 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
-                <FileText className="h-4 w-4 text-[#2563EB]" />
-                Báo cáo Excel Chuyên nghiệp
-              </h4>
-              <p className="text-[11px] text-[#64748B] mt-1">Xuất toàn bộ danh sách bài báo đã chuẩn hóa và dữ liệu phân hạng chỉ với một nút click phục vụ hồ sơ nghiên cứu.</p>
-            </div>
-          </div>
         </div>
       )}
 
@@ -1520,91 +1430,23 @@ export function ScholarScraperPage() {
       {/* 5. Main Dashboard Content (When Profile Loaded) */}
       {!isLoadingProfile && profile && (
         <div className="flex flex-col gap-6">
-          
-          {/* L2 Scrape Prompt / Completion Banner */}
-          {!isBannerDismissed && (!isAuthorL2Completed ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-3xs animate-fade-in relative">
-              <div className="flex gap-3 pr-6 sm:pr-0">
-                <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl shrink-0 flex items-center justify-center">
-                  <TrendingUp className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Cần quét chi tiết (Quét lần 2)</h4>
-                  <p className="text-xs text-amber-700 mt-0.5">Một số bài báo mới chỉ tải danh sách thô (Lần 1). Quét chi tiết để tải đầy đủ Tập, Số, Trang, Nhà xuất bản, Tóm tắt, Ngày xuất bản chi tiết và Lịch sử trích dẫn theo năm.</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end shrink-0">
-                <button
-                  onClick={triggerDetailedScrape}
-                  disabled={isScraping}
-                  className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs shrink-0 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
-                >
-                  {isScraping && isL2Running ? (
-                    <>
-                      <Spinner className="w-3.5 h-3.5 text-white animate-spin" />
-                      <span>Đang quét chi tiết (Lần 2)...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-3.5 h-3.5" />
-                      <span>Quét chi tiết (Lần 2)</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleDismissBanner}
-                  className="p-1.5 rounded-xl text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer shrink-0"
-                  title="Tắt thông báo"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-3xs animate-fade-in relative">
-              <div className="flex gap-3 items-center pr-6 sm:pr-0">
-                <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-xl shrink-0 flex items-center justify-center">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-2">
-                    <span>Đã quét xong Lần 1 và Lần 2</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-200 text-emerald-900 font-extrabold">100% Hoàn tất</span>
-                  </h4>
-                  <p className="text-xs text-emerald-700 mt-0.5">Hệ thống đã thu thập xong toàn bộ danh sách thô (Lần 1) và thông tin chi tiết bài báo kèm lịch sử trích dẫn theo năm (Lần 2).</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
-                <span className="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-300 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  Đã quét lần 1 & 2 xong
-                </span>
-                <button
-                  onClick={triggerDetailedScrape}
-                  disabled={isScraping}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                  title="Quét lại chi tiết Lần 2 nếu cần cập nhật"
-                >
-                  {isScraping && isL2Running ? (
-                    <Spinner className="w-3.5 h-3.5 text-emerald-700 animate-spin" />
-                  ) : (
-                    <Search className="w-3.5 h-3.5" />
-                  )}
-                  <span>Quét lại Lần 2</span>
-                </button>
-                <button
-                  onClick={handleDismissBanner}
-                  className="p-1.5 rounded-xl text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer shrink-0 ml-1"
-                  title="Tắt thông báo"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
 
           {/* Profile Header Card */}
           <Card className="border-[#E5E7EB] rounded-3xl shadow-sm bg-white overflow-hidden p-6 relative">
+            <button
+              type="button"
+              onClick={() => {
+                setProfile(null)
+                setSelectedQueueId(null)
+                setSelectedPublication(null)
+                localStorage.removeItem('scholar_profile')
+                toast.info('Đã đóng thông tin và danh sách hồ sơ.')
+              }}
+              className="absolute top-4 right-4 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all cursor-pointer z-10"
+              title="Tắt thông tin và danh sách hồ sơ"
+            >
+              <X className="h-5 w-5" />
+            </button>
             <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-6">
               
               {/* Circular avatar containing a simple GraduationCap icon */}
@@ -1802,29 +1644,7 @@ export function ScholarScraperPage() {
         </div>
       )}
 
-      {/* Floating Console box on top-right (Drawer panel) */}
-      {isScraping && (
-        <div className="fixed top-20 right-6 z-50 w-[350px] flex flex-col gap-3 p-4 bg-white/95 backdrop-blur-md border border-[#E5E7EB] rounded-2xl shadow-2xl transition-all duration-300 animate-slide-in-right">
-          <div className="flex flex-col gap-1.5 p-2 rounded-xl bg-[#F8FAFC] border border-[#E5E7EB]">
-            <div className="flex items-center justify-between text-[10px] font-bold text-[#64748B]">
-              <span>TIẾN TRÌNH ĐỒNG BỘ</span>
-              <span className="text-[#2563EB]">{progress}%</span>
-            </div>
-            <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-[#2563EB] h-full transition-all duration-350" style={{ width: `${progress}%` }}></div>
-            </div>
-          </div>
-          
-          <div className="h-fit">
-            <TerminalWindow 
-              title="Scholar Scraper Console"
-              logs={consoleLogs}
-              onClear={() => clearLogs('scholar')}
-              isRunning={taskStatus === 'PENDING' || taskStatus === 'PROGRESS'}
-            />
-          </div>
-        </div>
-      )}
+
 
       {/* ========================================== */}
       {/* DIALOG MODAL 1: EDIT AUTHOR PROFILE */}

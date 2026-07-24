@@ -46,12 +46,17 @@ export function ProfileManagerPage() {
     setIsLoading(true)
     try {
       const resData = await scholarApi.getAuthors().then((r) => r.data)
-      const authorsList = Array.isArray(resData) 
+      const rawList = Array.isArray(resData) 
         ? resData 
         : (resData && Array.isArray((resData as any).results)) 
           ? (resData as any).results 
           : []
-      setAuthors(authorsList)
+      // Only show authors that have scraped publications / data
+      const scrapedAuthors = rawList.filter((a: any) => {
+        const pubCount = a.publications?.length || a.publications_count || 0
+        return pubCount > 0 || Boolean(a.last_scraped_at) || a.last_scan_status === 'COMPLETED'
+      })
+      setAuthors(scrapedAuthors)
     } catch (err) {
       toast.error('Không thể lấy danh sách hồ sơ tác giả.')
     } finally {

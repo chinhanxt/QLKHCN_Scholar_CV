@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   Clock,
@@ -9,6 +10,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { useAdminProfiles, useApproveProfile } from '@/api/hooks/useUserPortal'
+import { scholarApi } from '@/api/endpoints/scholar'
 import { useCrawlerStore, type QueueItemState } from '@/stores/crawler.store'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { Button } from '@/components/ui/button'
@@ -22,6 +24,34 @@ export function ScholarRequestsPage() {
   const approveProfile = useApproveProfile()
   const addToScholarQueue = useCrawlerStore((state) => state.addToScholarQueue)
   const scholarQueue = useCrawlerStore((state) => state.scholarQueue)
+
+  // Fetch existing authors in DB to determine if profile author exists in DB
+  const { data: dbAuthors } = useQuery({
+    queryKey: ['scholar-authors-lookup'],
+    queryFn: async () => {
+      try {
+        const res = await scholarApi.getAuthors()
+        const data = res.data
+        if (Array.isArray(data)) return data
+        if (data && Array.isArray((data as any).results)) return (data as any).results
+        return []
+      } catch {
+        return []
+      }
+    },
+  })
+
+  const existingScholarIds = useMemo(() => {
+    const set = new Set<string>()
+    if (dbAuthors) {
+      dbAuthors.forEach((author: any) => {
+        if (author.scholar_id && author.scholar_id.trim()) {
+          set.add(author.scholar_id.trim().toLowerCase())
+        }
+      })
+    }
+    return set
+  }, [dbAuthors])
 
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all')
   const [search, setSearch] = useState('')
@@ -76,8 +106,18 @@ export function ScholarRequestsPage() {
     return null
   }
 
-  // Handler to approve profile and enqueue to scholar batch queue
-  const handleScanNewProfile = async (profile: any) => {
+  // Helper to check if profile has author data in DB
+  const hasProfileScrapedData = (p: any): boolean => {
+    if (p.author_detail) return true
+    const scId = getScholarIdFromProfile(p)?.toLowerCase()
+    if (scId && existingScholarIds.has(scId)) return true
+    if (p.publications && p.publications.length > 0) return true
+    if (p.total_citations && p.total_citations > 0) return true
+    return false
+  }
+
+  // Handler to trigger crawler tool ONLY for new unscraped requests
+  const handleTriggerToolScrape = (profile: any) => {
     const scholarId = getScholarIdFromProfile(profile)
     if (!scholarId) {
       toast.error('Không tìm thấy Google Scholar ID hợp lệ từ đường dẫn của người dùng.')
@@ -92,29 +132,29 @@ export function ScholarRequestsPage() {
       return
     }
 
+    const queueItem: QueueItemState = {
+      id: profile.id || crypto.randomUUID(),
+      scholarId: scholarId,
+      userEmail: profile.user_email || profile.full_name || 'N/A',
+      status: 'PENDING',
+      progress: 0,
+      taskId: null,
+      consoleLogs: [],
+    }
+
+    addToScholarQueue([queueItem])
+    toast.success(`🚀 Đã thêm ${profile.user_email} vào hàng đợi cào tự động!`)
+  }
+
+  // Handler to approve profile in DB when data is already available
+  const handleApproveProfile = async (profile: any) => {
     setScanningId(profile.id)
     try {
-      // 1. Approve profile in database
       await approveProfile.mutateAsync(profile.id)
-
-      // 2. Add queue item to scholarQueue
-      const queueItem: QueueItemState = {
-        id: profile.id || crypto.randomUUID(),
-        scholarId: scholarId,
-        userEmail: profile.user_email || profile.full_name || 'N/A',
-        status: 'PENDING',
-        progress: 0,
-        taskId: null,
-        consoleLogs: [],
-      }
-
-      addToScholarQueue([queueItem])
-
-      // 3. Confirmation toast & refetch status without navigating away
-      toast.success(`🚀 Đã thêm ${profile.user_email} vào hàng đợi cào ngầm!`)
+      toast.success(`✅ Đã phê duyệt yêu cầu của ${profile.user_email}!`)
       refetch()
     } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Không thể kích hoạt quét hồ sơ'))
+      toast.error(getApiErrorMessage(err, 'Không thể phê duyệt yêu cầu'))
     } finally {
       setScanningId(null)
     }
@@ -187,89 +227,101 @@ export function ScholarRequestsPage() {
               </TR>
             </THead>
             <TBody>
-              {filteredProfiles.map((p) => (
-                <TR key={p.id} className="hover:bg-slate-50/60 transition-colors border-b border-slate-100">
-                  <TD className="py-3.5 px-4 font-medium text-slate-900 text-sm">{p.user_email || 'User'}</TD>
-                  <TD className="py-3.5 px-4 text-xs font-mono text-slate-600">
-                    {p.scholar_url ? (
-                      <a
-                        href={p.scholar_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-700 hover:underline flex items-center gap-1 max-w-xs truncate"
-                      >
-                        {p.scholar_id ? `ID: ${p.scholar_id}` : p.scholar_url}
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    ) : (
-                      <span className="text-slate-400">Chưa cung cấp</span>
-                    )}
-                  </TD>
-                  <TD className="py-3.5 px-4">
-                    {p.status === 'PENDING' ? (
-                      p.request_type === 'UPDATE' ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 border border-amber-200/80">
-                          <RefreshCw className="h-3.5 w-3.5 text-amber-600" /> Yêu cầu cập nhật
+              {filteredProfiles.map((p) => {
+                const hasData = hasProfileScrapedData(p)
+                const pubCount = p.author_detail?.publications?.length || p.publications?.length || 0
+                const citesCount = p.author_detail?.citedby || p.total_citations || 0
+
+                return (
+                  <TR key={p.id} className="hover:bg-slate-50/60 transition-colors border-b border-slate-100">
+                    <TD className="py-3.5 px-4 font-medium text-slate-900 text-sm">{p.user_email || 'User'}</TD>
+                    <TD className="py-3.5 px-4 text-xs font-mono text-slate-600">
+                      {p.scholar_url ? (
+                        <a
+                          href={p.scholar_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-700 hover:underline flex items-center gap-1 max-w-xs truncate"
+                        >
+                          {p.scholar_id ? `ID: ${p.scholar_id}` : p.scholar_url}
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-400">Chưa cung cấp</span>
+                      )}
+                    </TD>
+                    <TD className="py-3.5 px-4">
+                      {p.status === 'PENDING' ? (
+                        p.request_type === 'UPDATE' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 border border-amber-200/80">
+                            <RefreshCw className="h-3.5 w-3.5 text-amber-600" /> Yêu cầu cập nhật
+                          </span>
+                        ) : hasData ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/80">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Đã có trong cơ sở dữ liệu
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 border border-blue-200/80">
+                            <Clock className="h-3.5 w-3.5 text-blue-600" /> Hồ sơ mới
+                          </span>
+                        )
+                      ) : p.status === 'APPROVED' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/80">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Đã phê duyệt
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 border border-blue-200/80">
-                          <Clock className="h-3.5 w-3.5 text-blue-600" /> Hồ sơ mới
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 border border-slate-200">
+                          Chưa gửi
                         </span>
-                      )
-                    ) : p.status === 'APPROVED' ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/80">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Đã phê duyệt
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 border border-slate-200">
-                        Chưa gửi
-                      </span>
-                    )}
-                  </TD>
-                  <TD className="py-3.5 px-4 text-xs text-slate-600">
-                    {p.status === 'APPROVED' ? (
-                      <span>{p.publications?.length || 0} bài báo (Citations: {p.total_citations}, h-index: {p.h_index})</span>
-                    ) : (
-                      <span className="text-slate-400">Chờ đồng bộ...</span>
-                    )}
-                  </TD>
-                  <TD className="py-3.5 px-4 text-right">
-                    {p.status === 'PENDING' ? (
-                      <Button
-                        size="sm"
-                        onClick={() => handleScanNewProfile(p)}
-                        disabled={scanningId !== null}
-                        className={`h-8 px-3.5 text-xs text-white font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 ml-auto shadow-2xs disabled:opacity-50 ${
-                          p.request_type === 'UPDATE'
-                            ? 'bg-amber-600 hover:bg-amber-700'
-                            : 'bg-[#005b9a] hover:bg-[#00487a]'
-                        }`}
-                      >
-                        {scanningId === p.id ? (
-                          <>
-                            <Spinner className="h-3.5 w-3.5 text-white" />
-                            <span>Đang kích hoạt...</span>
-                          </>
-                        ) : p.request_type === 'UPDATE' ? (
-                          <>
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            <span>Quét cập nhật</span>
-                          </>
+                      )}
+                    </TD>
+                    <TD className="py-3.5 px-4 text-xs text-slate-600">
+                      {hasData ? (
+                        <span className="font-medium text-slate-800">{pubCount} bài báo (Citations: {citesCount})</span>
+                      ) : (
+                        <span className="text-slate-400">Chưa có dữ liệu (Chờ quét)...</span>
+                      )}
+                    </TD>
+                    <TD className="py-3.5 px-4 text-right">
+                      {p.status === 'PENDING' ? (
+                        hasData ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleApproveProfile(p)}
+                            disabled={scanningId !== null}
+                            className="h-8 px-3.5 text-xs text-white font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 ml-auto shadow-2xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {scanningId === p.id ? (
+                              <>
+                                <Spinner className="h-3.5 w-3.5 text-white" />
+                                <span>Đang duyệt...</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <span>Duyệt</span>
+                              </>
+                            )}
+                          </Button>
                         ) : (
-                          <>
+                          <Button
+                            size="sm"
+                            onClick={() => handleTriggerToolScrape(p)}
+                            className="h-8 px-3.5 text-xs text-white font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 ml-auto shadow-2xs bg-[#005b9a] hover:bg-[#00487a]"
+                          >
                             <FileText className="h-3.5 w-3.5" />
                             <span>Quét hồ sơ mới</span>
-                          </>
-                        )}
-                      </Button>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                        ✓ Đã duyệt & Quét
-                      </span>
-                    )}
-                  </TD>
-                </TR>
-              ))}
+                          </Button>
+                        )
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                          ✓ Đã duyệt
+                        </span>
+                      )}
+                    </TD>
+                  </TR>
+                )
+              })}
               {filteredProfiles.length === 0 && (
                 <TR>
                   <TD colSpan={5} className="py-12 text-center text-slate-500 text-sm">

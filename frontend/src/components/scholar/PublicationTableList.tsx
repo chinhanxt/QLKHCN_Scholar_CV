@@ -71,13 +71,15 @@ export const PublicationTableList: React.FC<PublicationTableListProps> = ({
     setCurrentPage(1)
   }, [searchKeyword, yearFilter, quartileFilter, sortBy])
 
+  const safePubs = Array.isArray(publications) ? publications : []
+
   // Available years for dropdown
   const availableYears = Array.from(
-    new Set(publications.map(p => p.year).filter(y => y && y !== 'Không rõ'))
+    new Set(safePubs.map(p => p.year).filter(y => y && y !== 'Không rõ'))
   ).sort().reverse()
 
   // Filter logic
-  const filteredPubs = publications.filter(pub => {
+  const filteredPubs = safePubs.filter(pub => {
     const matchesKeyword = !searchKeyword.trim() ||
       pub.title.toLowerCase().includes(searchKeyword.toLowerCase()) ||
       pub.venue.toLowerCase().includes(searchKeyword.toLowerCase()) ||

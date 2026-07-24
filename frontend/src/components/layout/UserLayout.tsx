@@ -26,7 +26,7 @@ function UserSidebar({ isCollapsed, onToggle }: UserSidebarProps) {
 
   const menuItems = [
     { label: 'Thông tin cá nhân', path: '/user/profile', icon: User },
-    { label: 'Hồ sơ Scholar chi tiết', path: '/user/scholar', icon: GraduationCap },
+    { label: 'Hồ sơ Scholar', path: '/user/scholar', icon: GraduationCap },
     { label: 'Cập nhật thông tin', path: '/user/edit-profile', icon: FileEdit },
     { label: 'Cài đặt tài khoản', path: '/user/settings', icon: Settings },
   ]

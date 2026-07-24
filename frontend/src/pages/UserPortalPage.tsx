@@ -328,8 +328,8 @@ export function UserPortalPage() {
       const ExcelJSModule = await import('exceljs')
       const Workbook =
         ExcelJSModule.Workbook ||
-        (ExcelJSModule as any).default?.Workbook ||
-        (ExcelJSModule as any).default
+        (ExcelJSModule as unknown as { default: { Workbook: typeof ExcelJSModule.Workbook } }).default?.Workbook ||
+        (ExcelJSModule as unknown as { default: typeof ExcelJSModule.Workbook }).default
       const workbook = new Workbook()
 
       const sheet1 = workbook.addWorksheet('Tổng quan')
@@ -403,7 +403,7 @@ export function UserPortalPage() {
       anchor.click()
       window.URL.revokeObjectURL(url)
       toast.success('Đã xuất báo cáo Excel thành công!')
-    } catch (err) {
+    } catch {
       toast.error('Lỗi khi xuất file Excel!')
     }
   }
