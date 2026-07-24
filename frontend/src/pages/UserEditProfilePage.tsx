@@ -9,6 +9,7 @@ import {
   Save,
   ArrowLeft,
   Send,
+  FileText,
 } from 'lucide-react'
 import {
   useMyProfile,
@@ -24,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import { ScholarGuide } from '@/components/ScholarGuide'
 
 export function UserEditProfilePage() {
   const navigate = useNavigate()
@@ -34,6 +36,7 @@ export function UserEditProfilePage() {
 
   // Card 1: Google Scholar URL State & Anti-Spam Cooldown
   const [scholarUrl, setScholarUrl] = useState('')
+  const [isEditingScholarUrl, setIsEditingScholarUrl] = useState(false)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const quickPreviewMutation = useQuickPreviewScholar()
 
@@ -125,7 +128,12 @@ export function UserEditProfilePage() {
       { scholar_url: scholarUrl.trim() },
       {
         onSuccess: () => {
-          toast.success('Đã gửi yêu cầu phê duyệt kết nối Google Scholar thành công!')
+          toast.success(
+            profile?.status === 'APPROVED' || profile?.scholar_url
+              ? 'Đã gửi yêu cầu cập nhật hồ sơ Google Scholar thành công!'
+              : 'Đã gửi yêu cầu phê duyệt kết nối Google Scholar thành công!'
+          )
+          setIsEditingScholarUrl(false)
         },
         onError: (err) => {
           toast.error(getApiErrorMessage(err, 'Không thể gửi yêu cầu phê duyệt'))
@@ -215,7 +223,7 @@ export function UserEditProfilePage() {
           {profile?.status === 'PENDING' && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
               <Clock className="h-3.5 w-3.5 text-amber-600" />
-              Đang chờ duyệt
+              {profile?.request_type === 'UPDATE' ? 'Đang chờ duyệt cập nhật' : 'Đang chờ duyệt hồ sơ mới'}
             </span>
           )}
           {profile?.status === 'REJECTED' && (
@@ -245,13 +253,17 @@ export function UserEditProfilePage() {
                 placeholder="https://scholar.google.com/citations?user=vIowI28AAAAJ"
                 value={scholarUrl}
                 onChange={(e) => setScholarUrl(e.target.value)}
-                className="h-10 text-xs font-mono bg-slate-50/50 border-slate-300 focus:bg-white flex-1"
+                disabled={
+                  (profile?.status === 'PENDING' || profile?.status === 'APPROVED') &&
+                  !isEditingScholarUrl
+                }
+                className="h-10 text-xs font-mono bg-slate-50/50 border-slate-300 focus:bg-white flex-1 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-200"
               />
               <Button
                 type="button"
                 onClick={handleQuickCheck}
                 disabled={!extractedId || cooldownSeconds > 0 || quickPreviewMutation.isPending}
-                className="h-10 px-5 bg-[#005b9a] hover:bg-[#00487a] text-white font-semibold text-xs rounded-xl cursor-pointer shrink-0 disabled:opacity-50"
+                className="h-10 px-5 bg-[#005b9a] hover:bg-[#00487a] text-[#ffffff] font-semibold text-xs rounded-xl cursor-pointer shrink-0 disabled:opacity-50"
               >
                 {quickPreviewMutation.isPending ? (
                   <>
@@ -291,7 +303,7 @@ export function UserEditProfilePage() {
                     </div>
                   ) : quickPreviewMutation.data?.found ? (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2 text-xs animate-in fade-in duration-200">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 text-sm">{quickPreviewMutation.data.name}</span>
                         <span className="text-[10px] font-bold bg-blue-50 text-[#005b9a] px-2.5 py-0.5 rounded-md border border-blue-200">
                           {quickPreviewMutation.data.citedby} Trích dẫn | H-Index {quickPreviewMutation.data.hindex}
@@ -341,25 +353,75 @@ export function UserEditProfilePage() {
             </div>
           )}
 
+          {/* Scholar Visual Guide Section */}
+          <ScholarGuide
+            defaultOpen={false}
+            className="mt-3"
+          />
+
           {/* Action Submit Button */}
           <div className="flex justify-end pt-2">
-            <Button
-              type="submit"
-              disabled={!extractedId || submitScholarMutation.isPending}
-              className="bg-[#005b9a] hover:bg-[#00487a] text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer gap-2 disabled:opacity-40"
-            >
-              {submitScholarMutation.isPending ? (
-                <>
-                  <Spinner className="h-4 w-4 text-white" />
-                  Đang gửi yêu cầu...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Gửi yêu cầu phê duyệt
-                </>
-              )}
-            </Button>
+            {profile?.scholar_url && (profile.status === 'PENDING' || profile.status === 'APPROVED') && !isEditingScholarUrl ? (
+              <Button
+                type="button"
+                onClick={() => setIsEditingScholarUrl(true)}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                Yêu cầu cập nhật
+              </Button>
+            ) : isEditingScholarUrl ? (
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditingScholarUrl(false)
+                    if (profile?.scholar_url) {
+                      setScholarUrl(profile.scholar_url)
+                    }
+                  }}
+                  className="h-10 rounded-xl text-xs font-semibold px-4 cursor-pointer"
+                >
+                  Hủy
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!extractedId || submitScholarMutation.isPending}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer gap-2 disabled:opacity-40"
+                >
+                  {submitScholarMutation.isPending ? (
+                    <>
+                      <Spinner className="h-4 w-4 text-white" />
+                      Đang gửi yêu cầu...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Gửi yêu cầu cập nhật
+                    </>
+                  )}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="submit"
+                disabled={!extractedId || submitScholarMutation.isPending}
+                className="bg-[#005b9a] hover:bg-[#00487a] text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer gap-2 disabled:opacity-40"
+              >
+                {submitScholarMutation.isPending ? (
+                  <>
+                    <Spinner className="h-4 w-4 text-white" />
+                    Đang gửi yêu cầu...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Gửi yêu cầu phê duyệt
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </form>
       </Card>
