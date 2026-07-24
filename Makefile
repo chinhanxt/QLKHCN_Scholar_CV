@@ -26,10 +26,12 @@ front-install: ## Install frontend npm dependencies (run on the host)
 	cd frontend && npm install
 
 front: ## Run the React SPA locally on the host (Vite dev server :5173)
+	cd frontend && [ -d node_modules ] || npm install
 	cd frontend && npm run dev
 
 dev: up ## Start backend (Docker) + frontend (local Vite) in one command
 	@echo "Backend up on :8000 — starting frontend on :5173 (Ctrl-C stops frontend; backend keeps running, use 'make down' to stop it)"
+	cd frontend && [ -d node_modules ] || npm install
 	cd frontend && npm run dev
 
 down: ## Stop all containers
